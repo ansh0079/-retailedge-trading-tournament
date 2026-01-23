@@ -608,7 +608,7 @@
   <script src="./config.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script type="text/babel">
 
@@ -8145,6 +8145,12 @@ Be realistic and conservative. Base confidence on data quality.`;
         }
         if (!priceRef.current) return;
         if (!normalized || normalized.length === 0) return;
+
+        // Check if Lightweight Charts library is loaded
+        if (!window.LightweightCharts) {
+          console.error('❌ Lightweight Charts library not loaded');
+          return;
+        }
 
         // Cleanup previous charts
         try { chartsRef.current.price?.remove(); } catch {}
