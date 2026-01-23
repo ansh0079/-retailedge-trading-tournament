@@ -11,7 +11,7 @@
     "build:vendor": "node build/vendor.js",
     "build:app": "node build/build.js",
     "build:css": "tailwindcss -c tailwind.config.js -i ./src/input.css -o ./dist/tailwind.css --minify",
-    "build": "npm rebuild sqlite3 --build-from-source || echo 'Using pre-built dist files'"
+    "build": "python3 --version && npm rebuild sqlite3 --build-from-source || echo 'Using pre-built dist files'"
   },
   "dependencies": {
     "cors": "^2.8.5",

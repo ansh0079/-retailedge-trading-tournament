@@ -315,7 +315,9 @@ app.post('/api/tournament/start', async (req, res) => {
     
     // Spawn tournament process - make it detached so it can run independently
     // This ensures the tournament continues even if the frontend disconnects or modal closes
-    tournamentProcess = spawn('python', [
+    // Use python3 for Linux compatibility (Render) or python for Windows
+    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    tournamentProcess = spawn(pythonCmd, [
       'ultimate_trading_tournament.py',
       '--days', days.toString(),
       '--teams', teams.join(','),
