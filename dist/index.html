@@ -11158,29 +11158,37 @@ Be realistic and conservative. Base confidence on data quality.`;
             }
             
             if (activeTab === 'charts') {
-              console.log('📊 Charts tab activated, checking historical data...');
-              const needsPrimary = (!historicalData) || (historicalMeta.symbol !== stock.symbol) || (historicalMeta.timeframe !== chartTimeframe);
-              console.log('needsPrimary:', needsPrimary, { historicalData: !!historicalData, metaSymbol: historicalMeta.symbol, stockSymbol: stock.symbol, metaTimeframe: historicalMeta.timeframe, chartTimeframe });
-              
-              if (needsPrimary) {
-                console.log(`Fetching historical chart data for ${stock.symbol} (${chartTimeframe})...`);
-                const response = await fetch(`https://financialmodelingprep.com/stable/historical-chart/${chartTimeframe}?symbol=${stock.symbol}&apikey=${FMP_API_KEY}`);
-                console.log('Historical chart response status:', response.status);
-                
-                if (!response.ok) {
-                  const errorText = await response.text();
-                  console.error('Historical chart fetch failed:', response.status, errorText);
-                  throw new Error('Failed to fetch historical data');
+              try {
+                console.log('📊 Charts tab activated, checking historical data...');
+                const needsPrimary = (!historicalData) || (historicalMeta.symbol !== stock.symbol) || (historicalMeta.timeframe !== chartTimeframe);
+                console.log('needsPrimary:', needsPrimary, { historicalData: !!historicalData, metaSymbol: historicalMeta.symbol, stockSymbol: stock.symbol, metaTimeframe: historicalMeta.timeframe, chartTimeframe });
+
+                if (needsPrimary) {
+                  console.log(`Fetching historical chart data for ${stock.symbol} (${chartTimeframe})...`);
+                  const response = await fetch(`https://financialmodelingprep.com/stable/historical-chart/${chartTimeframe}?symbol=${stock.symbol}&apikey=${FMP_API_KEY}`);
+                  console.log('Historical chart response status:', response.status);
+
+                  if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Historical chart fetch failed:', response.status, errorText);
+                    setHistoricalData([]);
+                    setHistoricalMeta({ symbol: stock.symbol, timeframe: chartTimeframe });
+                    return;
+                  }
+
+                  const data = await response.json();
+                  console.log('Historical chart data received:', data.length, 'candles');
+                  const normalized = Array.isArray(data) ? data.slice(0, 400).reverse() : [];
+                  console.log('Normalized data:', normalized.length, 'candles');
+                  setHistoricalData(normalized);
+                  setHistoricalMeta({ symbol: stock.symbol, timeframe: chartTimeframe });
+                  console.log('✅ Historical data set successfully');
                 }
-                
-                const data = await response.json();
-                console.log('Historical chart data received:', data.length, 'candles');
-                const normalized = Array.isArray(data) ? data.slice(0, 400).reverse() : [];
-                console.log('Normalized data:', normalized.length, 'candles');
-                setHistoricalData(normalized);
-                setHistoricalMeta({ symbol: stock.symbol, timeframe: chartTimeframe });
-                console.log('✅ Historical data set successfully');
+              } catch (chartError) {
+                console.error('❌ Error loading charts:', chartError);
+                setHistoricalData([]);
               }
+            }
 
               const cmp = (comparisonSymbol || '').trim().toUpperCase();
               const needsCompare = cmp && ((comparisonMeta.symbol !== cmp) || (comparisonMeta.timeframe !== chartTimeframe));
