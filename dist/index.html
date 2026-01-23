@@ -11158,9 +11158,18 @@ Be realistic and conservative. Base confidence on data quality.`;
             }
             
             if (activeTab === 'financials' && !incomeStatement) {
-              const response = await fetch(`https://financialmodelingprep.com/stable/income-statement?symbol=${stock.symbol}&apikey=${FMP_API_KEY}`);
-              if (!response.ok) throw new Error('Failed to fetch financials');
-              setIncomeStatement(await response.json());
+              try {
+                const response = await fetch(`https://financialmodelingprep.com/stable/income-statement?symbol=${stock.symbol}&apikey=${FMP_API_KEY}`);
+                if (!response.ok) {
+                  console.error('Failed to fetch financials:', response.status);
+                  setIncomeStatement([]);
+                  return;
+                }
+                setIncomeStatement(await response.json());
+              } catch (error) {
+                console.error(`❌ Error fetching financials for ${stock.symbol}:`, error);
+                setIncomeStatement([]);
+              }
             }
             
             if (activeTab === 'charts') {
