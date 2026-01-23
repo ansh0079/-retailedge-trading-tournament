@@ -15,7 +15,8 @@
       "Bash(npm run build:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nSecurity: Remove all files containing API keys\n\n- Removed API key text files\n- Removed source HTML files with embedded keys\n- Updated .gitignore to exclude API key files\n- Keep only dist/ built files for deployment\n\nAPI keys must be set via environment variables only.\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git remote:*)",
-      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd pre-built dist files for deployment\n\n- Include dist/ folder with built assets\n- Update build script to use pre-built files\n- Required for Render deployment\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd pre-built dist files for deployment\n\n- Include dist/ folder with built assets\n- Update build script to use pre-built files\n- Required for Render deployment\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit:*)"
     ]
   }
 }
