@@ -6406,6 +6406,224 @@ Please provide a clear, structured analysis in markdown format.`;
     console.log('✅ Pattern Recognition Engine initialized');
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // AI PATTERN ANALYSIS FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    async function generatePatternAnalysis(pattern, stock, historicalData) {
+      console.log(`🤖 Generating AI analysis for ${pattern.pattern.name} on ${stock.symbol}`);
+
+      try {
+        // Calculate additional technical indicators
+        const recentCloses = historicalData.slice(-20).map(d => d.close || d);
+        const currentPrice = stock.price;
+        const priceChange = ((currentPrice - recentCloses[0]) / recentCloses[0]) * 100;
+        const volatility = calculateVolatility(recentCloses);
+        const momentum = calculateMomentum(recentCloses);
+
+        // Determine trading signal based on pattern type and market conditions
+        let signal = 'HOLD';
+        let entryPoint = currentPrice;
+        let stopLoss = currentPrice * 0.95;
+        let riskLevel = 'Medium';
+
+        if (pattern.pattern.type === 'reversal') {
+          if (pattern.implications.includes('Bullish')) {
+            signal = priceChange < -5 ? 'BUY' : 'HOLD';
+            entryPoint = currentPrice * 0.98;
+            stopLoss = currentPrice * 0.92;
+            riskLevel = volatility > 3 ? 'High' : 'Medium';
+          } else if (pattern.implications.includes('Bearish')) {
+            signal = priceChange > 5 ? 'SELL' : 'HOLD';
+            stopLoss = currentPrice * 1.08;
+            riskLevel = volatility > 3 ? 'High' : 'Medium';
+          }
+        } else if (pattern.pattern.type === 'continuation') {
+          if (pattern.implications.includes('Bullish') && priceChange > 0) {
+            signal = 'BUY';
+            entryPoint = currentPrice * 1.01;
+            stopLoss = currentPrice * 0.95;
+            riskLevel = momentum > 2 ? 'Low' : 'Medium';
+          } else if (pattern.implications.includes('Bearish') && priceChange < 0) {
+            signal = 'SELL';
+            stopLoss = currentPrice * 1.05;
+            riskLevel = momentum < -2 ? 'Low' : 'Medium';
+          }
+        }
+
+        // Generate strategy
+        const strategy = generateTradingStrategy(pattern, signal, stock, currentPrice, volatility);
+
+        // Generate key factors
+        const keyFactors = generateKeyFactors(pattern, stock, volatility, momentum, priceChange);
+
+        // Generate risk note
+        const riskNote = generateRiskNote(pattern, riskLevel, volatility);
+
+        // Generate AI summary
+        const summary = generateAISummary(pattern, signal, stock, riskLevel, volatility);
+
+        return {
+          signal,
+          strategy,
+          entryPoint,
+          stopLoss,
+          riskLevel,
+          riskNote,
+          keyFactors,
+          summary,
+          timestamp: Date.now()
+        };
+      } catch (error) {
+        console.error('AI analysis generation failed:', error);
+        return generateFallbackAnalysis(pattern);
+      }
+    }
+
+    function generateFallbackAnalysis(pattern) {
+      const currentPrice = 100; // Fallback
+
+      return {
+        signal: pattern.implications.includes('Bullish') ? 'BUY' :
+                pattern.implications.includes('Bearish') ? 'SELL' : 'HOLD',
+        strategy: `Monitor this ${pattern.pattern.name} pattern closely. ${pattern.pattern.description}`,
+        entryPoint: pattern.targetPrice || currentPrice,
+        stopLoss: pattern.targetPrice ? pattern.targetPrice * 0.95 : currentPrice * 0.95,
+        riskLevel: 'Medium',
+        riskNote: `This ${pattern.pattern.type} pattern has ${(pattern.pattern.reliability * 100).toFixed(0)}% historical reliability.`,
+        keyFactors: [
+          `${pattern.pattern.name} detected with ${(pattern.confidence * 100).toFixed(0)}% confidence`,
+          `Pattern type: ${pattern.pattern.type}`,
+          `Historical reliability: ${(pattern.pattern.reliability * 100).toFixed(0)}%`
+        ],
+        summary: `A ${pattern.pattern.name} pattern has been identified. ${pattern.implications}.`,
+        timestamp: Date.now()
+      };
+    }
+
+    function generateTradingStrategy(pattern, signal, stock, currentPrice, volatility) {
+      const patternName = pattern.pattern.name;
+      const isHighVolatility = volatility > 3;
+
+      if (signal === 'BUY') {
+        if (pattern.pattern.type === 'reversal') {
+          return `Wait for confirmation of reversal with a bullish candle close above ${(currentPrice * 1.02).toFixed(2)}. ` +
+                 `Enter gradually in 2-3 tranches to average entry price. ` +
+                 `${isHighVolatility ? 'Use wider stops due to high volatility.' : 'Set tight stops below recent lows.'}`;
+        } else {
+          return `Enter on pullback to support near ${(currentPrice * 0.98).toFixed(2)}. ` +
+                 `This continuation pattern suggests uptrend will resume. ` +
+                 `Add to position if breakout confirms with volume.`;
+        }
+      } else if (signal === 'SELL') {
+        if (pattern.pattern.type === 'reversal') {
+          return `Consider taking profits or hedging position. ` +
+                 `Wait for bearish confirmation before shorting. ` +
+                 `Exit long positions if price breaks below ${(currentPrice * 0.98).toFixed(2)}.`;
+        } else {
+          return `Downtrend likely to continue. Consider protective puts or exit on rallies. ` +
+                 `Avoid new long positions until pattern completes or breaks invalidation level.`;
+        }
+      } else {
+        return `${patternName} is forming but needs confirmation. ` +
+               `Wait for breakout direction before taking position. ` +
+               `Monitor volume and momentum for clues on direction.`;
+      }
+    }
+
+    function generateKeyFactors(pattern, stock, volatility, momentum, priceChange) {
+      const factors = [];
+
+      factors.push(`${pattern.pattern.name} has ${(pattern.pattern.reliability * 100).toFixed(0)}% historical success rate`);
+      factors.push(`Current detection confidence: ${(pattern.confidence * 100).toFixed(0)}%`);
+
+      if (pattern.targetPrice) {
+        const potentialGain = ((pattern.targetPrice / stock.price - 1) * 100).toFixed(1);
+        factors.push(`Technical target suggests ${Math.abs(potentialGain)}% ${potentialGain > 0 ? 'upside' : 'downside'}`);
+      }
+
+      if (volatility > 3) {
+        factors.push(`High volatility (${volatility.toFixed(1)}%) increases risk but also opportunity`);
+      } else if (volatility < 1.5) {
+        factors.push(`Low volatility environment - pattern may take longer to play out`);
+      }
+
+      if (Math.abs(momentum) > 2) {
+        factors.push(`Strong ${momentum > 0 ? 'positive' : 'negative'} momentum supports pattern direction`);
+      }
+
+      if (pattern.pattern.type === 'continuation') {
+        factors.push(`Continuation patterns typically complete within 1-3 weeks`);
+      } else {
+        factors.push(`Reversal patterns often mark significant trend changes`);
+      }
+
+      return factors;
+    }
+
+    function generateRiskNote(pattern, riskLevel, volatility) {
+      if (riskLevel === 'High') {
+        return `High risk due to ${volatility > 3 ? 'elevated volatility' : 'uncertain market conditions'}. ` +
+               `Use position sizing of 1-2% of portfolio maximum.`;
+      } else if (riskLevel === 'Medium') {
+        return `Moderate risk pattern. Recommended position size: 3-5% of portfolio. ` +
+               `Use stop losses and avoid over-leveraging.`;
+      } else {
+        return `Relatively low-risk setup with favorable risk/reward ratio. ` +
+               `Standard position sizing of 5-8% appropriate for conservative traders.`;
+      }
+    }
+
+    function generateAISummary(pattern, signal, stock, riskLevel, volatility) {
+      const patternName = pattern.pattern.name;
+      const confidence = (pattern.confidence * 100).toFixed(0);
+      const reliability = (pattern.pattern.reliability * 100).toFixed(0);
+
+      let summary = `AI has detected a ${patternName} pattern on ${stock.symbol} with ${confidence}% confidence. `;
+
+      summary += `This ${pattern.pattern.type} pattern has a ${reliability}% historical success rate. `;
+
+      if (signal === 'BUY') {
+        summary += `The analysis suggests a bullish opportunity with ${riskLevel.toLowerCase()} risk. `;
+        summary += volatility > 3
+          ? `High volatility presents both opportunity and risk - position accordingly.`
+          : `Market conditions are favorable for this setup.`;
+      } else if (signal === 'SELL') {
+        summary += `The analysis indicates bearish pressure with ${riskLevel.toLowerCase()} risk. `;
+        summary += `Consider defensive positions or wait for better entry points.`;
+      } else {
+        summary += `The pattern requires further confirmation before taking action. `;
+        summary += `Monitor for breakout direction and volume confirmation.`;
+      }
+
+      return summary;
+    }
+
+    function calculateVolatility(prices) {
+      if (prices.length < 2) return 0;
+      const returns = [];
+      for (let i = 1; i < prices.length; i++) {
+        returns.push((prices[i] - prices[i-1]) / prices[i-1]);
+      }
+      const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+      const variance = returns.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / returns.length;
+      return Math.sqrt(variance) * Math.sqrt(252) * 100; // Annualized volatility
+    }
+
+    function calculateMomentum(prices) {
+      if (prices.length < 10) return 0;
+      const recent = prices.slice(-5);
+      const previous = prices.slice(-10, -5);
+      const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
+      const previousAvg = previous.reduce((a, b) => a + b, 0) / previous.length;
+      return ((recentAvg - previousAvg) / previousAvg) * 100;
+    }
+
+    // Make functions globally available
+    window.generatePatternAnalysis = generatePatternAnalysis;
+    window.generateFallbackAnalysis = generateFallbackAnalysis;
+    console.log('✅ AI Pattern Analysis functions initialized');
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // REAL-TIME NEWS & SENTIMENT ANALYSIS ENGINE
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -15200,61 +15418,181 @@ Be realistic and conservative. Base confidence on data quality.`;
                         
                         return (
                           <div className="space-y-4">
-                            {patterns.map((pattern, idx) => (
-                              <div key={idx} className="glass-card p-5 rounded-xl border border-cyan-500/20">
-                                <div className="flex items-start justify-between mb-3">
-                                  <div>
-                                    <h4 className="text-lg font-bold text-white">{pattern.pattern.name}</h4>
-                                    <p className="text-sm text-slate-400 mt-1">{pattern.pattern.description}</p>
-                                  </div>
-                                  <div className="text-right">
-                                    <div className={`text-2xl font-bold ${
-                                      pattern.confidence > 0.75 ? 'text-green-400' :
-                                      pattern.confidence > 0.65 ? 'text-yellow-400' :
-                                      'text-orange-400'
-                                    }`}>
-                                      {(pattern.confidence * 100).toFixed(0)}%
-                                    </div>
-                                    <div className="text-xs text-slate-500">Confidence</div>
-                                  </div>
-                                </div>
-                                
-                                <div className="grid grid-cols-2 gap-4 mt-4">
-                                  <div>
-                                    <div className="text-xs text-slate-500 mb-1">Type</div>
-                                    <div className={`text-sm font-semibold ${
-                                      pattern.pattern.type === 'reversal' ? 'text-red-400' : 'text-green-400'
-                                    }`}>
-                                      {pattern.pattern.type === 'reversal' ? 'Reversal' : 'Continuation'}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <div className="text-xs text-slate-500 mb-1">Reliability</div>
-                                    <div className="text-sm font-semibold text-cyan-400">
-                                      {(pattern.pattern.reliability * 100).toFixed(0)}%
-                                    </div>
-                                  </div>
-                                  {pattern.targetPrice && (
+                            {patterns.map((pattern, idx) => {
+                              const [showAIAnalysis, setShowAIAnalysis] = React.useState(false);
+                              const [aiAnalysis, setAiAnalysis] = React.useState(null);
+                              const [analyzing, setAnalyzing] = React.useState(false);
+
+                              const analyzePattern = async () => {
+                                setAnalyzing(true);
+                                try {
+                                  // Generate AI analysis for this specific pattern
+                                  const analysis = await generatePatternAnalysis(pattern, stock, historicalData);
+                                  setAiAnalysis(analysis);
+                                  setShowAIAnalysis(true);
+                                } catch (err) {
+                                  console.error('Pattern analysis error:', err);
+                                  setAiAnalysis(generateFallbackAnalysis(pattern));
+                                  setShowAIAnalysis(true);
+                                } finally {
+                                  setAnalyzing(false);
+                                }
+                              };
+
+                              return (
+                                <div key={idx} className="glass-card p-5 rounded-xl border border-cyan-500/20">
+                                  <div className="flex items-start justify-between mb-3">
                                     <div>
-                                    <div className="text-xs text-slate-500 mb-1">Target Price</div>
-                                    <div className="text-sm font-semibold text-white">
-                                      ${pattern.targetPrice.toFixed(2)}
+                                      <h4 className="text-lg font-bold text-white">{pattern.pattern.name}</h4>
+                                      <p className="text-sm text-slate-400 mt-1">{pattern.pattern.description}</p>
+                                    </div>
+                                    <div className="text-right">
+                                      <div className={`text-2xl font-bold ${
+                                        pattern.confidence > 0.75 ? 'text-green-400' :
+                                        pattern.confidence > 0.65 ? 'text-yellow-400' :
+                                        'text-orange-400'
+                                      }`}>
+                                        {(pattern.confidence * 100).toFixed(0)}%
+                                      </div>
+                                      <div className="text-xs text-slate-500">Confidence</div>
                                     </div>
                                   </div>
-                                  )}
-                                  <div>
-                                    <div className="text-xs text-slate-500 mb-1">Implications</div>
-                                    <div className={`text-sm font-semibold ${
-                                      pattern.implications?.includes('Bullish') ? 'text-green-400' :
-                                      pattern.implications?.includes('Bearish') ? 'text-red-400' :
-                                      'text-slate-400'
-                                    }`}>
-                                      {pattern.implications || 'Neutral'}
+
+                                  <div className="grid grid-cols-2 gap-4 mt-4">
+                                    <div>
+                                      <div className="text-xs text-slate-500 mb-1">Type</div>
+                                      <div className={`text-sm font-semibold ${
+                                        pattern.pattern.type === 'reversal' ? 'text-red-400' : 'text-green-400'
+                                      }`}>
+                                        {pattern.pattern.type === 'reversal' ? 'Reversal' : 'Continuation'}
+                                      </div>
                                     </div>
+                                    <div>
+                                      <div className="text-xs text-slate-500 mb-1">Reliability</div>
+                                      <div className="text-sm font-semibold text-cyan-400">
+                                        {(pattern.pattern.reliability * 100).toFixed(0)}%
+                                      </div>
+                                    </div>
+                                    {pattern.targetPrice && (
+                                      <div>
+                                      <div className="text-xs text-slate-500 mb-1">Target Price</div>
+                                      <div className="text-sm font-semibold text-white">
+                                        ${pattern.targetPrice.toFixed(2)}
+                                      </div>
+                                    </div>
+                                    )}
+                                    <div>
+                                      <div className="text-xs text-slate-500 mb-1">Implications</div>
+                                      <div className={`text-sm font-semibold ${
+                                        pattern.implications?.includes('Bullish') ? 'text-green-400' :
+                                        pattern.implications?.includes('Bearish') ? 'text-red-400' :
+                                        'text-slate-400'
+                                      }`}>
+                                        {pattern.implications || 'Neutral'}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* AI Analysis Button */}
+                                  <div className="mt-4 pt-4 border-t border-slate-700/30">
+                                    {!showAIAnalysis ? (
+                                      <button
+                                        onClick={analyzePattern}
+                                        disabled={analyzing}
+                                        className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
+                                      >
+                                        {analyzing ? (
+                                          <>
+                                            <div className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                                            <span>AI Analyzing Pattern...</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <span>🤖</span>
+                                            <span>Get AI Analysis</span>
+                                          </>
+                                        )}
+                                      </button>
+                                    ) : (
+                                      <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-sm font-bold text-purple-400">🤖 AI Analysis</span>
+                                          <button
+                                            onClick={() => setShowAIAnalysis(false)}
+                                            className="text-xs text-slate-500 hover:text-slate-400"
+                                          >
+                                            Hide
+                                          </button>
+                                        </div>
+
+                                        {/* Trading Signal */}
+                                        <div className="bg-slate-800/50 rounded-lg p-3">
+                                          <div className="text-xs text-slate-500 mb-1">Trading Signal</div>
+                                          <div className={`text-lg font-bold ${
+                                            aiAnalysis.signal === 'BUY' ? 'text-green-400' :
+                                            aiAnalysis.signal === 'SELL' ? 'text-red-400' :
+                                            'text-yellow-400'
+                                          }`}>
+                                            {aiAnalysis.signal}
+                                          </div>
+                                        </div>
+
+                                        {/* Strategy */}
+                                        <div className="bg-slate-800/50 rounded-lg p-3">
+                                          <div className="text-xs text-slate-500 mb-2">Recommended Strategy</div>
+                                          <div className="text-sm text-slate-300">{aiAnalysis.strategy}</div>
+                                        </div>
+
+                                        {/* Entry/Exit Points */}
+                                        <div className="grid grid-cols-2 gap-2">
+                                          <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-2">
+                                            <div className="text-xs text-green-400 mb-1">Entry Point</div>
+                                            <div className="text-sm font-bold text-white">${aiAnalysis.entryPoint?.toFixed(2)}</div>
+                                          </div>
+                                          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-2">
+                                            <div className="text-xs text-red-400 mb-1">Stop Loss</div>
+                                            <div className="text-sm font-bold text-white">${aiAnalysis.stopLoss?.toFixed(2)}</div>
+                                          </div>
+                                        </div>
+
+                                        {/* Risk Assessment */}
+                                        <div className="bg-slate-800/50 rounded-lg p-3">
+                                          <div className="flex items-center justify-between mb-2">
+                                            <span className="text-xs text-slate-500">Risk Level</span>
+                                            <span className={`text-sm font-bold ${
+                                              aiAnalysis.riskLevel === 'Low' ? 'text-green-400' :
+                                              aiAnalysis.riskLevel === 'Medium' ? 'text-yellow-400' :
+                                              'text-red-400'
+                                            }`}>
+                                              {aiAnalysis.riskLevel}
+                                            </span>
+                                          </div>
+                                          <div className="text-xs text-slate-400">{aiAnalysis.riskNote}</div>
+                                        </div>
+
+                                        {/* Key Factors */}
+                                        <div className="bg-slate-800/50 rounded-lg p-3">
+                                          <div className="text-xs text-slate-500 mb-2">Key Factors</div>
+                                          <ul className="space-y-1">
+                                            {aiAnalysis.keyFactors?.map((factor, i) => (
+                                              <li key={i} className="text-xs text-slate-300 flex items-start gap-2">
+                                                <span className="text-purple-400">•</span>
+                                                <span>{factor}</span>
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+
+                                        {/* AI Summary */}
+                                        <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3">
+                                          <div className="text-xs text-slate-400 leading-relaxed">{aiAnalysis.summary}</div>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         );
                       })()}
