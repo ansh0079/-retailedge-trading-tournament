@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clear Cache - RetailEdge Pro</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 32px;
+        }
+        p {
+            color: #666;
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+        .status {
+            background: #f0f0f0;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .success {
+            color: #10b981;
+            font-weight: 600;
+        }
+        .count {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔄 RetailEdge Pro - Cache Manager</h1>
+        <p>This tool will clear your cached stock list and load the new expanded list of <span class="count">949+ stocks</span>.</p>
+        
+        <div class="status" id="status">
+            <p><strong>Current Status:</strong></p>
+            <p id="currentStatus">Checking...</p>
+        </div>
+
+        <button onclick="clearCache()">🗑️ Clear Cache & Load 949 Stocks</button>
+        <button onclick="goToApp()" style="background: #10b981; margin-top: 10px;">✅ Go to Application</button>
+    </div>
+
+    <script>
+        // Check current status on load
+        window.addEventListener('load', () => {
+            const saved = localStorage.getItem('curatedStocks');
+            const count = saved ? JSON.parse(saved).length : 0;
+            document.getElementById('currentStatus').innerHTML = `
+                <span style="font-size: 18px;">📊 Currently tracking: <span class="count">${count}</span> stocks</span>
+            `;
+        });
+
+        function clearCache() {
+            // Clear the curated stocks list
+            localStorage.removeItem('curatedStocks');
+            
+            // Clear other caches
+            localStorage.removeItem('stockCache');
+            localStorage.removeItem('socialCache');
+            localStorage.removeItem('newsCache');
+            
+            // Clear IndexedDB if it exists
+            if (window.indexedDB) {
+                indexedDB.deleteDatabase('RetailEdgeProDB');
+            }
+            
+            document.getElementById('status').innerHTML = `
+                <p class="success">✅ Cache cleared successfully!</p>
+                <p>The application will now load <span class="count">949+ stocks</span> on next visit.</p>
+                <p style="margin-top: 15px;">Click "Go to Application" below to reload with the new stock list.</p>
+            `;
+        }
+
+        function goToApp() {
+            window.location.href = 'http://localhost:3002';
+        }
+    </script>
+</body>
+</html>
