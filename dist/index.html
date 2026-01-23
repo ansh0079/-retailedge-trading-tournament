@@ -21245,13 +21245,14 @@ Be realistic and conservative. Base confidence on data quality.`;
 
           {/* Stock Modal */}
           {selectedStock && (
-            <ErrorBoundary>
-              <StockModal 
-                stock={selectedStock} 
-                onClose={() => setSelectedStock(null)} 
-                watchlist={watchlist} 
-                toggleWatchlist={toggleWatchlist} 
-                detailedDataLoading={detailedDataLoading} 
+            <ErrorBoundary key={selectedStock.symbol}>
+              <StockModal
+                key={selectedStock.symbol}
+                stock={selectedStock}
+                onClose={() => setSelectedStock(null)}
+                watchlist={watchlist}
+                toggleWatchlist={toggleWatchlist}
+                detailedDataLoading={detailedDataLoading}
                 sectorAverages={sectorAverages}
                 portfolio={portfolio}
                 stocks={stocks}
