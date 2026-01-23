@@ -5640,6 +5640,60 @@ Please provide a clear, structured analysis in markdown format.`;
             type: 'reversal',
             reliability: 0.65,
             description: 'Potential trend reversal'
+          },
+          SYMMETRICAL_TRIANGLE: {
+            name: 'Symmetrical Triangle',
+            type: 'continuation',
+            reliability: 0.68,
+            description: 'Neutral pattern - breakout direction determines trend'
+          },
+          PENNANT: {
+            name: 'Pennant',
+            type: 'continuation',
+            reliability: 0.72,
+            description: 'Brief consolidation during strong trend'
+          },
+          TRIPLE_TOP: {
+            name: 'Triple Top',
+            type: 'reversal',
+            reliability: 0.75,
+            description: 'Strong bearish reversal signal'
+          },
+          TRIPLE_BOTTOM: {
+            name: 'Triple Bottom',
+            type: 'reversal',
+            reliability: 0.75,
+            description: 'Strong bullish reversal signal'
+          },
+          RISING_WEDGE: {
+            name: 'Rising Wedge',
+            type: 'reversal',
+            reliability: 0.70,
+            description: 'Bearish reversal - rising with declining volume'
+          },
+          FALLING_WEDGE: {
+            name: 'Falling Wedge',
+            type: 'reversal',
+            reliability: 0.70,
+            description: 'Bullish reversal - falling with declining volume'
+          },
+          ROUNDING_BOTTOM: {
+            name: 'Rounding Bottom',
+            type: 'reversal',
+            reliability: 0.73,
+            description: 'Gradual bullish reversal (saucer pattern)'
+          },
+          RECTANGLE: {
+            name: 'Rectangle',
+            type: 'continuation',
+            reliability: 0.65,
+            description: 'Consolidation range - awaiting breakout'
+          },
+          INVERSE_HEAD_SHOULDERS: {
+            name: 'Inverse Head and Shoulders',
+            type: 'reversal',
+            reliability: 0.85,
+            description: 'Strong bullish reversal signal'
           }
         };
       }
@@ -5672,7 +5726,67 @@ Please provide a clear, structured analysis in markdown format.`;
           const db = this.detectDoubleBottom(lows, closes);
           if (db) detected.push(db);
         }
-        
+
+        if (!patternTypes || patternTypes.includes('TRIPLE_TOP')) {
+          const tt = this.detectTripleTop(highs, closes);
+          if (tt) detected.push(tt);
+        }
+
+        if (!patternTypes || patternTypes.includes('TRIPLE_BOTTOM')) {
+          const tb = this.detectTripleBottom(lows, closes);
+          if (tb) detected.push(tb);
+        }
+
+        if (!patternTypes || patternTypes.includes('SYMMETRICAL_TRIANGLE')) {
+          const st = this.detectSymmetricalTriangle(highs, lows, closes);
+          if (st) detected.push(st);
+        }
+
+        if (!patternTypes || patternTypes.includes('ASCENDING_TRIANGLE')) {
+          const at = this.detectAscendingTriangle(highs, lows, closes);
+          if (at) detected.push(at);
+        }
+
+        if (!patternTypes || patternTypes.includes('DESCENDING_TRIANGLE')) {
+          const dt = this.detectDescendingTriangle(highs, lows, closes);
+          if (dt) detected.push(dt);
+        }
+
+        if (!patternTypes || patternTypes.includes('RISING_WEDGE')) {
+          const rw = this.detectRisingWedge(highs, lows, closes);
+          if (rw) detected.push(rw);
+        }
+
+        if (!patternTypes || patternTypes.includes('FALLING_WEDGE')) {
+          const fw = this.detectFallingWedge(highs, lows, closes);
+          if (fw) detected.push(fw);
+        }
+
+        if (!patternTypes || patternTypes.includes('PENNANT')) {
+          const pennant = this.detectPennant(highs, lows, closes);
+          if (pennant) detected.push(pennant);
+        }
+
+        if (!patternTypes || patternTypes.includes('RECTANGLE')) {
+          const rect = this.detectRectangle(highs, lows, closes);
+          if (rect) detected.push(rect);
+        }
+
+        if (!patternTypes || patternTypes.includes('ROUNDING_BOTTOM')) {
+          const rb = this.detectRoundingBottom(lows, closes);
+          if (rb) detected.push(rb);
+        }
+
+        if (!patternTypes || patternTypes.includes('INVERSE_HEAD_SHOULDERS')) {
+          const ihs = this.detectInverseHeadAndShoulders(highs, lows, closes);
+          if (ihs) detected.push(ihs);
+        }
+
+        if (!patternTypes || patternTypes.includes('FLAG')) {
+          const flag = this.detectFlag(highs, lows, closes);
+          if (flag) detected.push(flag);
+        }
+
         return detected.sort((a, b) => b.confidence - a.confidence);
       }
 
@@ -5896,6 +6010,393 @@ Please provide a clear, structured analysis in markdown format.`;
         const avgTrough = (troughs[0].value + troughs[1].value) / 2;
         const resistance = Math.max(...closes.slice(troughs[0].index, troughs[1].index));
         return resistance + (resistance - avgTrough);
+      }
+
+      detectTripleTop(highs, closes) {
+        const window = 30;
+        if (highs.length < window) return null;
+
+        const recentHighs = highs.slice(-window);
+        const peaks = this.findLocalPeaks(recentHighs, 3);
+
+        if (peaks.length >= 3) {
+          const [first, second, third] = peaks.slice(-3);
+          const avgPrice = (first.value + second.value + third.value) / 3;
+          const maxDiff = Math.max(
+            Math.abs(first.value - avgPrice),
+            Math.abs(second.value - avgPrice),
+            Math.abs(third.value - avgPrice)
+          ) / avgPrice;
+
+          if (maxDiff < 0.03) {
+            return {
+              type: 'TRIPLE_TOP',
+              pattern: this.patterns.TRIPLE_TOP,
+              peaks: [first, second, third],
+              confidence: 0.75 * (1 - maxDiff),
+              implications: 'Strong bearish reversal',
+              targetPrice: avgPrice - (avgPrice - Math.min(...closes.slice(-window))) * 1.5
+            };
+          }
+        }
+        return null;
+      }
+
+      detectTripleBottom(lows, closes) {
+        const window = 30;
+        if (lows.length < window) return null;
+
+        const recentLows = lows.slice(-window);
+        const troughs = this.findLocalTroughs(recentLows, 3);
+
+        if (troughs.length >= 3) {
+          const [first, second, third] = troughs.slice(-3);
+          const avgPrice = (first.value + second.value + third.value) / 3;
+          const maxDiff = Math.max(
+            Math.abs(first.value - avgPrice),
+            Math.abs(second.value - avgPrice),
+            Math.abs(third.value - avgPrice)
+          ) / avgPrice;
+
+          if (maxDiff < 0.03) {
+            return {
+              type: 'TRIPLE_BOTTOM',
+              pattern: this.patterns.TRIPLE_BOTTOM,
+              troughs: [first, second, third],
+              confidence: 0.75 * (1 - maxDiff),
+              implications: 'Strong bullish reversal',
+              targetPrice: avgPrice + (Math.max(...closes.slice(-window)) - avgPrice) * 1.5
+            };
+          }
+        }
+        return null;
+      }
+
+      detectSymmetricalTriangle(highs, lows, closes) {
+        const window = 25;
+        if (highs.length < window) return null;
+
+        const recentHighs = highs.slice(-window);
+        const recentLows = lows.slice(-window);
+
+        // Calculate trendlines
+        const highTrend = this.calculateTrendline(recentHighs);
+        const lowTrend = this.calculateTrendline(recentLows);
+
+        // Check if lines are converging at similar rates
+        const convergenceRate = Math.abs(highTrend.slope + lowTrend.slope) / 2;
+
+        if (convergenceRate < 0.5 && highTrend.slope < 0 && lowTrend.slope > 0) {
+          const apex = this.findApex(highTrend, lowTrend);
+          return {
+            type: 'SYMMETRICAL_TRIANGLE',
+            pattern: this.patterns.SYMMETRICAL_TRIANGLE,
+            confidence: 0.68,
+            apex: apex,
+            implications: 'Breakout imminent - direction uncertain',
+            targetPrice: null // Depends on breakout direction
+          };
+        }
+        return null;
+      }
+
+      detectAscendingTriangle(highs, lows, closes) {
+        const window = 25;
+        if (highs.length < window) return null;
+
+        const recentHighs = highs.slice(-window);
+        const recentLows = lows.slice(-window);
+
+        const highTrend = this.calculateTrendline(recentHighs);
+        const lowTrend = this.calculateTrendline(recentLows);
+
+        // Flat resistance, rising support
+        if (Math.abs(highTrend.slope) < 0.2 && lowTrend.slope > 0.3) {
+          const resistance = Math.max(...recentHighs);
+          const breakoutTarget = resistance + (resistance - Math.min(...recentLows)) * 0.8;
+
+          return {
+            type: 'ASCENDING_TRIANGLE',
+            pattern: this.patterns.ASCENDING_TRIANGLE,
+            confidence: 0.75,
+            resistance: resistance,
+            implications: 'Bullish breakout expected',
+            targetPrice: breakoutTarget
+          };
+        }
+        return null;
+      }
+
+      detectDescendingTriangle(highs, lows, closes) {
+        const window = 25;
+        if (highs.length < window) return null;
+
+        const recentHighs = highs.slice(-window);
+        const recentLows = lows.slice(-window);
+
+        const highTrend = this.calculateTrendline(recentHighs);
+        const lowTrend = this.calculateTrendline(recentLows);
+
+        // Falling resistance, flat support
+        if (highTrend.slope < -0.3 && Math.abs(lowTrend.slope) < 0.2) {
+          const support = Math.min(...recentLows);
+          const breakdownTarget = support - (Math.max(...recentHighs) - support) * 0.8;
+
+          return {
+            type: 'DESCENDING_TRIANGLE',
+            pattern: this.patterns.DESCENDING_TRIANGLE,
+            confidence: 0.75,
+            support: support,
+            implications: 'Bearish breakdown expected',
+            targetPrice: breakdownTarget
+          };
+        }
+        return null;
+      }
+
+      detectRisingWedge(highs, lows, closes) {
+        const window = 25;
+        if (highs.length < window) return null;
+
+        const recentHighs = highs.slice(-window);
+        const recentLows = lows.slice(-window);
+
+        const highTrend = this.calculateTrendline(recentHighs);
+        const lowTrend = this.calculateTrendline(recentLows);
+
+        // Both rising, but converging
+        if (highTrend.slope > 0 && lowTrend.slope > 0 && lowTrend.slope > highTrend.slope) {
+          return {
+            type: 'RISING_WEDGE',
+            pattern: this.patterns.RISING_WEDGE,
+            confidence: 0.70,
+            implications: 'Bearish reversal - momentum weakening',
+            targetPrice: closes[closes.length - 1] * 0.92 // 8% decline expected
+          };
+        }
+        return null;
+      }
+
+      detectFallingWedge(highs, lows, closes) {
+        const window = 25;
+        if (highs.length < window) return null;
+
+        const recentHighs = highs.slice(-window);
+        const recentLows = lows.slice(-window);
+
+        const highTrend = this.calculateTrendline(recentHighs);
+        const lowTrend = this.calculateTrendline(recentLows);
+
+        // Both falling, but converging
+        if (highTrend.slope < 0 && lowTrend.slope < 0 && highTrend.slope > lowTrend.slope) {
+          return {
+            type: 'FALLING_WEDGE',
+            pattern: this.patterns.FALLING_WEDGE,
+            confidence: 0.70,
+            implications: 'Bullish reversal - selling pressure exhausting',
+            targetPrice: closes[closes.length - 1] * 1.08 // 8% rally expected
+          };
+        }
+        return null;
+      }
+
+      detectPennant(highs, lows, closes) {
+        const window = 20;
+        if (highs.length < window) return null;
+
+        const recentHighs = highs.slice(-window);
+        const recentLows = lows.slice(-window);
+
+        // Check for strong prior move
+        const priorMove = closes.slice(-window - 10, -window);
+        const moveStrength = Math.abs(priorMove[priorMove.length - 1] - priorMove[0]) / priorMove[0];
+
+        if (moveStrength > 0.05) { // At least 5% prior move
+          const range = Math.max(...recentHighs) - Math.min(...recentLows);
+          const priceLevel = closes[closes.length - 1];
+          const consolidationRatio = range / priceLevel;
+
+          if (consolidationRatio < 0.05) { // Tight consolidation
+            const priorTrend = priorMove[priorMove.length - 1] > priorMove[0] ? 'bullish' : 'bearish';
+
+            return {
+              type: 'PENNANT',
+              pattern: this.patterns.PENNANT,
+              confidence: 0.72,
+              implications: `${priorTrend === 'bullish' ? 'Bullish' : 'Bearish'} continuation expected`,
+              targetPrice: priorTrend === 'bullish'
+                ? closes[closes.length - 1] * 1.05
+                : closes[closes.length - 1] * 0.95
+            };
+          }
+        }
+        return null;
+      }
+
+      detectRectangle(highs, lows, closes) {
+        const window = 20;
+        if (highs.length < window) return null;
+
+        const recentHighs = highs.slice(-window);
+        const recentLows = lows.slice(-window);
+
+        const resistance = Math.max(...recentHighs);
+        const support = Math.min(...recentLows);
+        const range = resistance - support;
+        const priceLevel = closes[closes.length - 1];
+
+        // Check if price has been bouncing within range
+        const withinRange = closes.slice(-window).every(c =>
+          c >= support * 0.98 && c <= resistance * 1.02
+        );
+
+        if (withinRange && range / priceLevel > 0.03 && range / priceLevel < 0.10) {
+          return {
+            type: 'RECTANGLE',
+            pattern: this.patterns.RECTANGLE,
+            confidence: 0.65,
+            support: support,
+            resistance: resistance,
+            implications: 'Consolidation - breakout pending',
+            targetPrice: null // Depends on breakout direction
+          };
+        }
+        return null;
+      }
+
+      detectRoundingBottom(lows, closes) {
+        const window = 30;
+        if (lows.length < window) return null;
+
+        const recentLows = lows.slice(-window);
+        const mid = Math.floor(window / 2);
+
+        // Check for U-shape: declining then rising
+        const leftSide = recentLows.slice(0, mid);
+        const rightSide = recentLows.slice(mid);
+
+        const leftTrend = this.calculateTrendline(leftSide);
+        const rightTrend = this.calculateTrendline(rightSide);
+
+        if (leftTrend.slope < -0.1 && rightTrend.slope > 0.1) {
+          const bottom = Math.min(...recentLows);
+          const depth = (closes[closes.length - window] - bottom) / bottom;
+
+          return {
+            type: 'ROUNDING_BOTTOM',
+            pattern: this.patterns.ROUNDING_BOTTOM,
+            confidence: 0.73,
+            depth: depth,
+            implications: 'Gradual bullish reversal',
+            targetPrice: closes[closes.length - 1] + (closes[closes.length - 1] - bottom)
+          };
+        }
+        return null;
+      }
+
+      detectInverseHeadAndShoulders(highs, lows, closes) {
+        const window = 30;
+        if (lows.length < window) return null;
+
+        const recentLows = lows.slice(-window);
+        const pivotPoints = this.findPivotPoints(recentLows.map(l => -l), 5); // Invert to find lows
+
+        if (pivotPoints.length >= 5) {
+          const [leftShoulder, head, rightShoulder] = this.extractHSPattern(pivotPoints);
+
+          if (this.validateHSStructure(leftShoulder, head, rightShoulder)) {
+            const neckline = Math.max(...closes.slice(-window, -window + 10));
+
+            return {
+              type: 'INVERSE_HEAD_SHOULDERS',
+              pattern: this.patterns.INVERSE_HEAD_SHOULDERS,
+              confidence: this.calculateHSConfidence(leftShoulder, head, rightShoulder),
+              neckline: neckline,
+              implications: 'Strong bullish reversal',
+              targetPrice: neckline + (neckline - Math.min(...recentLows))
+            };
+          }
+        }
+        return null;
+      }
+
+      detectFlag(highs, lows, closes) {
+        const window = 15;
+        if (highs.length < window) return null;
+
+        // Check for strong prior move
+        const priorWindow = 10;
+        const priorMove = closes.slice(-window - priorWindow, -window);
+        const moveStrength = Math.abs(priorMove[priorMove.length - 1] - priorMove[0]) / priorMove[0];
+
+        if (moveStrength > 0.08) { // At least 8% prior move
+          const recentCloses = closes.slice(-window);
+          const trendline = this.calculateTrendline(recentCloses);
+
+          // Flag should move counter to prior trend with slight slope
+          const priorTrend = priorMove[priorMove.length - 1] > priorMove[0] ? 'up' : 'down';
+          const flagSlope = trendline.slope;
+
+          if ((priorTrend === 'up' && flagSlope < 0 && flagSlope > -0.5) ||
+              (priorTrend === 'down' && flagSlope > 0 && flagSlope < 0.5)) {
+            return {
+              type: 'FLAG',
+              pattern: this.patterns.FLAG,
+              confidence: 0.70,
+              implications: `${priorTrend === 'up' ? 'Bullish' : 'Bearish'} continuation`,
+              targetPrice: priorTrend === 'up'
+                ? closes[closes.length - 1] + (priorMove[priorMove.length - 1] - priorMove[0])
+                : closes[closes.length - 1] - (priorMove[0] - priorMove[priorMove.length - 1])
+            };
+          }
+        }
+        return null;
+      }
+
+      // Trendline calculation helper
+      calculateTrendline(data) {
+        const n = data.length;
+        let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+
+        for (let i = 0; i < n; i++) {
+          sumX += i;
+          sumY += data[i];
+          sumXY += i * data[i];
+          sumXX += i * i;
+        }
+
+        const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+        const intercept = (sumY - slope * sumX) / n;
+
+        return { slope, intercept };
+      }
+
+      findApex(highTrend, lowTrend) {
+        // Find where trendlines intersect
+        const x = (lowTrend.intercept - highTrend.intercept) / (highTrend.slope - lowTrend.slope);
+        return { x, y: highTrend.slope * x + highTrend.intercept };
+      }
+
+      extractHSPattern(pivots) {
+        if (pivots.length < 3) return [null, null, null];
+        const sorted = [...pivots].sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+        return [
+          { height: Math.abs(sorted[1].value), index: sorted[1].index },
+          { height: Math.abs(sorted[0].value), index: sorted[0].index },
+          { height: Math.abs(sorted[2].value), index: sorted[2].index }
+        ];
+      }
+
+      validateHSStructure(left, head, right) {
+        if (!left || !head || !right) return false;
+        // Head should be higher and shoulders similar
+        return head.height > left.height &&
+               head.height > right.height &&
+               Math.abs(left.height - right.height) / left.height < 0.2;
+      }
+
+      calculateNeckline(lows, pivots) {
+        return Math.min(...lows.slice(pivots[0].index, pivots[pivots.length - 1].index));
       }
     }
 
