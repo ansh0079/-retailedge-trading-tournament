@@ -4,14 +4,14 @@
   "description": "CORS proxy server for RetailEdge Pro social sentiment APIs",
   "main": "proxy-server.js",
   "scripts": {
-    "start": "node tournament-server.js",
+    "start": "node proxy-server.js",
     "proxy": "node proxy-server.js",
     "dev": "nodemon proxy-server.js",
     "tournament": "node tournament-server.js",
     "build:vendor": "node build/vendor.js",
     "build:app": "node build/build.js",
     "build:css": "tailwindcss -c tailwind.config.js -i ./src/input.css -o ./dist/tailwind.css --minify",
-    "build": "npm run build:vendor && npm run build:app && npm run build:css"
+    "build": "echo 'Using pre-built dist files'"
   },
   "dependencies": {
     "cors": "^2.8.5",

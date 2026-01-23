@@ -19,6 +19,3 @@ server.log
 *API_KEYS*.md
 set-api-keys*.ps1
 set-api-keys*.bat
-
-# Dist files - will be rebuilt on deployment
-dist/
