@@ -1,0 +1,24 @@
+node_modules/
+*.log
+.env
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.backup
+.venv/
+__pycache__/
+tournament_checkpoints/
+tournament_results/
+server.log
+
+# API key files
+*API keys*.txt
+*API_KEYS*.md
+set-api-keys*.ps1
+set-api-keys*.bat
+
+# Dist files - will be rebuilt on deployment
+dist/

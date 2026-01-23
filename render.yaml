@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: retailedge-proxy
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: node proxy-server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3002
+    healthCheckPath: /

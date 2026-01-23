@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(ls:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nInitial commit - RetailEdge Pro Trading Tournament\n\nAdded complete trading tournament application with AI analysis.\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nSecurity: Remove hardcoded API keys from server files\n\n- Removed hardcoded fallback API keys from proxy-server.js\n- Removed hardcoded fallback API keys from api-service.js\n- Added validation warnings when keys are not set\n- API keys must now be set via environment variables only\n\nThis ensures API keys are not exposed in the repository.\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nUpdate deployment guide with security notes\n\n- Updated environment variables section to reference .env file\n- Added security improvements documentation\n- Added all API key environment variables to guide\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd quick deployment guide\n\nQuick reference for deploying to Render in 3 steps.\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(npm run build:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nSecurity: Remove all files containing API keys\n\n- Removed API key text files\n- Removed source HTML files with embedded keys\n- Updated .gitignore to exclude API key files\n- Keep only dist/ built files for deployment\n\nAPI keys must be set via environment variables only.\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git remote:*)"
+    ]
+  }
+}
