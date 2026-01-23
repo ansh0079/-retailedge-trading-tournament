@@ -9515,7 +9515,7 @@ Be realistic and conservative. Base confidence on data quality.`;
         addLog(`📊 Watchlist: ${watchlist.length} stocks`, 'info');
         
         try {
-          const response = await fetch('http://localhost:3002/api/tournament/start', {
+          const response = await fetch('${API_BASE_URL}/api/tournament/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -9551,8 +9551,8 @@ Be realistic and conservative. Base confidence on data quality.`;
         
         // If experimentId is 'current', use the current status endpoint
         const statusUrl = experimentId === 'current' 
-          ? 'http://localhost:3002/api/tournament/status/current'
-          : `http://localhost:3002/api/tournament/status/${experimentId}`;
+          ? '${API_BASE_URL}/api/tournament/status/current'
+          : `${API_BASE_URL}/api/tournament/status/${experimentId}`;
         
         pollIntervalRef.current = setInterval(async () => {
           try {
@@ -9625,7 +9625,7 @@ Be realistic and conservative. Base confidence on data quality.`;
       
       const loadTournamentResults = async () => {
         try {
-          const response = await fetch('http://localhost:3002/api/tournament/results');
+          const response = await fetch('${API_BASE_URL}/api/tournament/results');
           if (response.ok) {
             const data = await response.json();
             if (data.results) {
@@ -9645,7 +9645,7 @@ Be realistic and conservative. Base confidence on data quality.`;
         // Check if tournament is currently running on the server when modal opens
         const checkRunningTournament = async () => {
           try {
-            const response = await fetch('http://localhost:3002/api/tournament/status/current');
+            const response = await fetch('${API_BASE_URL}/api/tournament/status/current');
             if (response.ok) {
               const data = await response.json();
               if (data.status === 'running') {
@@ -9664,7 +9664,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                   console.log('📋 Polling current tournament status');
                   const pollCurrentStatus = setInterval(async () => {
                     try {
-                      const statusResponse = await fetch('http://localhost:3002/api/tournament/status/current');
+                      const statusResponse = await fetch('${API_BASE_URL}/api/tournament/status/current');
                       if (statusResponse.ok) {
                         const statusData = await statusResponse.json();
                         if (statusData.status === 'running') {
@@ -18301,7 +18301,7 @@ Be realistic and conservative. Base confidence on data quality.`;
       useEffect(() => {
         const checkTournamentStatus = async () => {
           try {
-            const response = await fetch('http://localhost:3002/api/tournament/status/current');
+            const response = await fetch('${API_BASE_URL}/api/tournament/status/current');
             if (response.ok) {
               const data = await response.json();
               const isRunning = data.status === 'running';
@@ -18343,7 +18343,7 @@ Be realistic and conservative. Base confidence on data quality.`;
         setTournamentError(null);
         
         try {
-          const response = await fetch('http://localhost:3002/api/tournament/results');
+          const response = await fetch('${API_BASE_URL}/api/tournament/results');
           if (!response.ok) {
             throw new Error(`Failed to load: ${response.status}`);
           }
