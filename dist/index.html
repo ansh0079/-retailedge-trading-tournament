@@ -11226,8 +11226,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                   setComparisonLoading(false);
                 }
               }
-            }
-            
+
             if (activeTab === 'technicals' && !technicalData) {
               const [sma50, sma200, ema20, rsi, stdDev, adx, ratingsSnap, ratingsHist] = await Promise.all([
                 fetch(`https://financialmodelingprep.com/stable/technical-indicators/sma?symbol=${stock.symbol}&periodLength=50&timeframe=1day&apikey=${FMP_API_KEY}`).then(r => r.json()).catch(() => []),
