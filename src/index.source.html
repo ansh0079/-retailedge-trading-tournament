@@ -10223,7 +10223,10 @@ Be realistic and conservative. Base confidence on data quality.`;
       // Use all available stocks instead of just watchlist
       const availableStocks = useMemo(() => {
         // If stocks prop is provided, use it; otherwise fallback to DEMO_STOCKS or watchlist
+        console.log('🎯 AI Tournament stocks prop length:', stocks?.length || 0);
+        console.log('🎯 DEMO_STOCKS length:', DEMO_STOCKS?.length || 0);
         const sourceStocks = stocks.length > 0 ? stocks : (typeof DEMO_STOCKS !== 'undefined' ? DEMO_STOCKS : []);
+        console.log('🎯 AI Tournament using stocks:', sourceStocks.length, 'stocks');
         return sourceStocks;
       }, [stocks]);
 
