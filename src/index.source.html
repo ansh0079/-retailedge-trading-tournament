@@ -11587,6 +11587,13 @@ Be realistic and conservative. Base confidence on data quality.`;
 
     function StockModal({ stock, onClose, watchlist, toggleWatchlist, detailedDataLoading, sectorAverages, portfolio, stocks, setShowWatchlistOnly, openStockModal }) {
       const [activeTab, setActiveTab] = useState('overview');
+
+      // Wrap onClose to log when modal is closed
+      const handleModalClose = () => {
+        console.log('🚪 Modal closing - handleModalClose called');
+        console.trace('Modal close stack trace');
+        onClose();
+      };
       const [showAllFactors, setShowAllFactors] = useState(false);
       const [showExplainScore, setShowExplainScore] = useState(false);
       const [insiderData, setInsiderData] = useState(null);
@@ -12206,16 +12213,16 @@ Be realistic and conservative. Base confidence on data quality.`;
       }, [stock?.symbol]);
 
       return (
-        <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-overlay" onClick={handleModalClose}>
           <div id="stock-modal-content" className="glass-elevated rounded-2xl max-w-6xl w-full mx-auto my-8 animate-slide-up max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-start justify-between p-6 border-b border-slate-700/30 flex-shrink-0">
               <div>
                 <div className="flex items-center gap-4 mb-2">
                   <h2 className="text-3xl font-bold text-white">{stock.symbol}</h2>
-                  <DataFreshnessIndicator 
-                    timestamp={stock.fetchedAt || stock.timestamp} 
-                    type="stock" 
+                  <DataFreshnessIndicator
+                    timestamp={stock.fetchedAt || stock.timestamp}
+                    type="stock"
                   />
                   <span className="chip bg-slate-700 text-slate-300">{stock.sector || 'Unknown'}</span>
                   <span className="chip bg-slate-700 text-slate-300">{stock.industry || 'Unknown'}</span>
@@ -12225,13 +12232,23 @@ Be realistic and conservative. Base confidence on data quality.`;
                   <span className="text-slate-400">{stock.companyName || stock.name || '—'}</span>
                 </div>
               </div>
-              <button onClick={onClose} className="text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
+              <button onClick={handleModalClose} className="text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
             </div>
 
             {/* Tabs */}
             <div className="flex gap-2 px-6 pt-4 border-b border-slate-700/30 overflow-x-auto flex-shrink-0">
               {['overview', 'simplified', 'ai-analysis', 'news-sentiment', 'sentiment-leaderboard', 'fundamentals', 'charts', 'technicals', 'analyst-ratings', 'insider', 'earnings', 'financials', 'watchlist'].map(tab => (
-                <button type="button" key={tab} onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveTab(tab); }} className={`tab-btn ${activeTab === tab ? 'active' : ''}`}>
+                <button
+                  type="button"
+                  key={tab}
+                  onClick={(e) => {
+                    console.log(`🔘 Tab clicked: ${tab}`);
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log(`✅ Setting active tab to: ${tab}`);
+                    setActiveTab(tab);
+                  }}
+                  className={`tab-btn ${activeTab === tab ? 'active' : ''}`}>
                   {tab === 'simplified' ? '💡 Simplified' :
                    tab === 'ai-analysis' ? '🤖 AI Analysis' :
                    tab === 'news-sentiment' ? '📰 News & Sentiment' :
