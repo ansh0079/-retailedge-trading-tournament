@@ -10368,7 +10368,7 @@ Be realistic and conservative. Base confidence on data quality.`;
       
       const loadTournamentResults = async () => {
         try {
-          const response = await fetch('${API_BASE_URL}/api/tournament/results');
+          const response = await fetch(`${API_BASE_URL}/api/tournament/results`);
           if (response.ok) {
             const data = await response.json();
             if (data.results) {
@@ -10464,7 +10464,7 @@ Be realistic and conservative. Base confidence on data quality.`;
 
       const checkRunningTournament = async () => {
           try {
-            const response = await fetch('${API_BASE_URL}/api/tournament/status/current');
+            const response = await fetch(`${API_BASE_URL}/api/tournament/status/current`);
             if (response.ok) {
               const data = await response.json();
               if (data.status === 'running') {
@@ -10483,7 +10483,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                   console.log('📋 Polling current tournament status');
                   const pollCurrentStatus = setInterval(async () => {
                     try {
-                      const statusResponse = await fetch('${API_BASE_URL}/api/tournament/status/current');
+                      const statusResponse = await fetch(`${API_BASE_URL}/api/tournament/status/current`);
                       if (statusResponse.ok) {
                         const statusData = await statusResponse.json();
                         if (statusData.status === 'running') {
@@ -10527,10 +10527,11 @@ Be realistic and conservative. Base confidence on data quality.`;
             }
           }
         };
-        
+
+      useEffect(() => {
         // Always check for running tournament when modal opens
         checkRunningTournament();
-        
+
         return () => {
           // Only cleanup polling, NOT the tournament
           // This cleanup runs when component unmounts (modal closes)
@@ -19320,7 +19321,7 @@ Be realistic and conservative. Base confidence on data quality.`;
       useEffect(() => {
         const checkTournamentStatus = async () => {
           try {
-            const response = await fetch('${API_BASE_URL}/api/tournament/status/current');
+            const response = await fetch(`${API_BASE_URL}/api/tournament/status/current`);
             if (response.ok) {
               const data = await response.json();
               const isRunning = data.status === 'running';
@@ -19362,7 +19363,7 @@ Be realistic and conservative. Base confidence on data quality.`;
         setTournamentError(null);
         
         try {
-          const response = await fetch('${API_BASE_URL}/api/tournament/results');
+          const response = await fetch(`${API_BASE_URL}/api/tournament/results`);
           if (!response.ok) {
             throw new Error(`Failed to load: ${response.status}`);
           }

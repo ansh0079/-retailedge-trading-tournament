@@ -18,7 +18,11 @@
       "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd pre-built dist files for deployment\n\n- Include dist/ folder with built assets\n- Update build script to use pre-built files\n- Required for Render deployment\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git commit:*)",
       "Bash(findstr:*)",
-      "Bash(npm start)"
+      "Bash(npm start)",
+      "Bash(node:*)",
+      "Bash(curl:*)",
+      "Bash(npm run build:app:*)",
+      "Bash(awk:*)"
     ]
   }
 }
