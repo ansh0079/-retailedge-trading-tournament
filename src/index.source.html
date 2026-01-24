@@ -10222,10 +10222,36 @@ Be realistic and conservative. Base confidence on data quality.`;
 
       // Use all available stocks instead of just watchlist
       const availableStocks = useMemo(() => {
-        // If stocks prop is provided, use it; otherwise fallback to DEMO_STOCKS or watchlist
+        // If stocks prop is provided, use it; otherwise fallback to curatedStocks or DEMO_STOCKS
         console.log('🎯 AI Tournament stocks prop length:', stocks?.length || 0);
         console.log('🎯 DEMO_STOCKS length:', DEMO_STOCKS?.length || 0);
-        const sourceStocks = stocks.length > 0 ? stocks : (typeof DEMO_STOCKS !== 'undefined' ? DEMO_STOCKS : []);
+        
+        let sourceStocks = [];
+        
+        // Priority 1: Use stocks prop if available
+        if (stocks && stocks.length > 0) {
+          sourceStocks = stocks;
+        } 
+        // Priority 2: Try to get all symbols from curatedStocks in localStorage
+        else {
+          try {
+            const saved = localStorage.getItem('curatedStocks');
+            if (saved) {
+              const symbols = JSON.parse(saved);
+              console.log('🎯 Loaded from curatedStocks:', symbols.length, 'symbols');
+              // Convert symbols to stock objects
+              sourceStocks = symbols.map(symbol => ({ symbol, name: symbol }));
+            }
+          } catch (e) {
+            console.warn('Failed to load curatedStocks:', e);
+          }
+        }
+        
+        // Priority 3: Fallback to DEMO_STOCKS if nothing else
+        if (sourceStocks.length === 0 && typeof DEMO_STOCKS !== 'undefined') {
+          sourceStocks = DEMO_STOCKS;
+        }
+        
         console.log('🎯 AI Tournament using stocks:', sourceStocks.length, 'stocks');
         return sourceStocks;
       }, [stocks]);
@@ -17901,22 +17927,47 @@ Be realistic and conservative. Base confidence on data quality.`;
             'YTD', 'BETA', 'NEUTRAL', 'INC.', 'MONGODB', 'REVENUE', 'EARNINGS', 'PE',
             'MARKET', 'CAP', 'SECTOR', 'INDUSTRY', 'DIVIDEND', 'YIELD'
           ]);
-          
+
+          // Company name to ticker mapping
+          const nameToTicker = {
+            'NVIDIA': 'NVDA', 'APPLE': 'AAPL', 'MICROSOFT': 'MSFT',
+            'AMAZON': 'AMZN', 'GOOGLE': 'GOOGL', 'ALPHABET': 'GOOGL', 'TESLA': 'TSLA',
+            'META': 'META', 'FACEBOOK': 'META', 'NETFLIX': 'NFLX',
+            'GAMESTOP': 'GME', 'COINBASE': 'COIN', 'PALANTIR': 'PLTR',
+            'WALMART': 'WMT', 'DISNEY': 'DIS', 'MCDONALDS': 'MCD',
+            'STARBUCKS': 'SBUX', 'INTEL': 'INTC',
+            'BOEING': 'BA', 'FORD': 'F', 'GENERALMOTORS': 'GM',
+            'CHEVRON': 'CVX', 'EXXON': 'XOM', 'EXXONMOBIL': 'XOM',
+            'CITIGROUP': 'C', 'JPMORGAN': 'JPM', 'JPMORGANCHASE': 'JPM',
+            'BANKOFAMERICA': 'BAC', 'WELLSFARGO': 'WFC',
+            'CISCO': 'CSCO', 'ORACLE': 'ORCL', 'SALESFORCE': 'CRM',
+            'FEDEX': 'FDX', 'CORNING': 'GLW', 'MOTOROLA': 'MSI',
+            'VERTEX': 'VRTX', 'CINTAS': 'CTAS', 'AUTODESK': 'ADSK',
+            'GILEAD': 'GILD', 'GILEADSCIENCES': 'GILD',
+            'FISERV': 'FI', 'FISV', 'ADOBE': 'ADBE',
+            'QUALCOMM': 'QCOM', 'MICROCHIP': 'MCHP',
+            'PAYCHEX': 'PAYX', 'VERISIGN': 'VRSN'
+          };
+
           // Clean and split the text by common delimiters
           const symbols = text
             .replace(/[,;\s\n\r\t]+/g, ',') // Replace delimiters with comma
             .split(',')
-            .map(s => cleanSymbol(s.trim())) // Clean exchange suffixes
-            .filter(s => s && 
-                    s.length > 0 && 
-                    s.length <= 10 && 
+            .map(s => {
+              const cleaned = cleanSymbol(s.trim()).toUpperCase();
+              // Check if it's a company name and convert to ticker
+              return nameToTicker[cleaned] || cleaned;
+            })
+            .filter(s => s &&
+                    s.length > 0 &&
+                    s.length <= 5 &&  // Ticker symbols are typically 1-5 characters (changed from 10)
                     /^[A-Z]+$/.test(s) &&
                     !headerWords.has(s)); // Validate symbols and filter headers
-          
+
           if (symbols.length === 0) {
             throw new Error('No valid symbols found');
           }
-          
+
           this.addGroup(groupName, symbols);
           return { success: true, count: symbols.length, symbols };
         } catch (error) {
