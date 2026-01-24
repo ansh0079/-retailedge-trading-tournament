@@ -10566,7 +10566,7 @@ Be realistic and conservative. Base confidence on data quality.`;
               {['overview', 'leaderboard', 'logs', 'settings'].map(tab => (
                 <button
                   key={tab}
-                  onClick={() => setActiveTab(tab)}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveTab(tab); }}
                   className={`px-6 py-3 font-medium capitalize transition ${activeTab === tab
                     ? 'text-purple-400 border-b-2 border-purple-400 bg-slate-700/50'
                     : 'text-slate-400 hover:text-white hover:bg-slate-700/30'
@@ -12230,7 +12230,7 @@ Be realistic and conservative. Base confidence on data quality.`;
             {/* Tabs */}
             <div className="flex gap-2 px-6 pt-4 border-b border-slate-700/30 overflow-x-auto flex-shrink-0">
               {['overview', 'simplified', 'ai-analysis', 'news-sentiment', 'sentiment-leaderboard', 'fundamentals', 'charts', 'patterns', 'technicals', 'analyst-ratings', 'insider', 'earnings', 'financials', 'watchlist'].map(tab => (
-                <button key={tab} onClick={(e) => { e.stopPropagation(); setActiveTab(tab); }} className={`tab-btn ${activeTab === tab ? 'active' : ''}`}>
+                <button key={tab} onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveTab(tab); }} className={`tab-btn ${activeTab === tab ? 'active' : ''}`}>
                   {tab === 'simplified' ? '💡 Simplified' :
                    tab === 'ai-analysis' ? '🤖 AI Analysis' :
                    tab === 'news-sentiment' ? '📰 News & Sentiment' :
