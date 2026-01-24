@@ -10565,6 +10565,7 @@ Be realistic and conservative. Base confidence on data quality.`;
             <div className="flex border-b border-slate-700 bg-slate-800/50">
               {['overview', 'leaderboard', 'logs', 'settings'].map(tab => (
                 <button
+                  type="button"
                   key={tab}
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveTab(tab); }}
                   className={`px-6 py-3 font-medium capitalize transition ${activeTab === tab
@@ -12230,7 +12231,7 @@ Be realistic and conservative. Base confidence on data quality.`;
             {/* Tabs */}
             <div className="flex gap-2 px-6 pt-4 border-b border-slate-700/30 overflow-x-auto flex-shrink-0">
               {['overview', 'simplified', 'ai-analysis', 'news-sentiment', 'sentiment-leaderboard', 'fundamentals', 'charts', 'technicals', 'analyst-ratings', 'insider', 'earnings', 'financials', 'watchlist'].map(tab => (
-                <button key={tab} onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveTab(tab); }} className={`tab-btn ${activeTab === tab ? 'active' : ''}`}>
+                <button type="button" key={tab} onClick={(e) => { e.preventDefault(); e.stopPropagation(); setActiveTab(tab); }} className={`tab-btn ${activeTab === tab ? 'active' : ''}`}>
                   {tab === 'simplified' ? '💡 Simplified' :
                    tab === 'ai-analysis' ? '🤖 AI Analysis' :
                    tab === 'news-sentiment' ? '📰 News & Sentiment' :
