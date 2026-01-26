@@ -19685,6 +19685,16 @@ Be realistic and conservative. Base confidence on data quality.`;
         }
       }, [loadMarketStatus]);
 
+      // ===== LOAD MARKET STATUS ON MOUNT AND PERIODICALLY =====
+      useEffect(() => {
+        // Load immediately on mount
+        loadMarketStatus();
+        
+        // Refresh every 30 seconds to keep market status updated
+        const interval = setInterval(loadMarketStatus, 30000);
+        return () => clearInterval(interval);
+      }, [loadMarketStatus]);
+
       // ===== AUTO-REFRESH LOGS WHEN MODAL IS OPEN =====
       useEffect(() => {
         if (showTournamentLogs) {
@@ -22693,3 +22703,4 @@ Be realistic and conservative. Base confidence on data quality.`;
   </script>
 </body>
 </html>
+
