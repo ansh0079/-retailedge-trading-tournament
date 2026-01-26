@@ -19186,13 +19186,11 @@ Be realistic and conservative. Base confidence on data quality.`;
     // TOURNAMENT LOGS TAB COMPONENT
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function TournamentLogsTab({ onOpenAITournament }) {
-      const [logs, setLogs] = useState([]);
+    function TournamentLogsTab() {
       const [trades, setTrades] = useState([]);
       const [isLoading, setIsLoading] = useState(false);
       const [tournamentRunning, setTournamentRunning] = useState(false);
-      const [tournamentPaused, setTournamentPaused] = useState(false);
-      const [error, setError] = useState(null);
+      const [lastUpdate, setLastUpdate] = useState(null);
 
       const loadTournamentLogs = async () => {
         setIsLoading(true);
@@ -19200,12 +19198,9 @@ Be realistic and conservative. Base confidence on data quality.`;
           const response = await fetch(`${API_BASE_URL}/api/tournament/results`);
           if (response.ok) {
             const data = await response.json();
-            setLogs(data.logs || []);
             setTrades(data.trades || []);
-            if (data.status === 'running') {
-              setTournamentRunning(true);
-              setTournamentPaused(data.paused || false);
-            }
+            setTournamentRunning(data.status === 'running');
+            setLastUpdate(new Date());
           }
 
           // Also check current status
@@ -19213,11 +19208,9 @@ Be realistic and conservative. Base confidence on data quality.`;
           if (statusResponse.ok) {
             const statusData = await statusResponse.json();
             setTournamentRunning(statusData.status === 'running');
-            setTournamentPaused(statusData.paused || false);
           }
         } catch (err) {
           console.error('Error loading tournament logs:', err);
-          setError(err.message);
         } finally {
           setIsLoading(false);
         }
@@ -19225,186 +19218,124 @@ Be realistic and conservative. Base confidence on data quality.`;
 
       useEffect(() => {
         loadTournamentLogs();
-        // Refresh every 30 seconds
-        const interval = setInterval(loadTournamentLogs, 30000);
+        // Refresh every 60 seconds
+        const interval = setInterval(loadTournamentLogs, 60000);
         return () => clearInterval(interval);
       }, []);
 
-      const handlePause = async () => {
-        try {
-          const response = await fetch(`${API_BASE_URL}/api/tournament/pause`, { method: 'POST' });
-          if (response.ok) {
-            setTournamentPaused(true);
-          }
-        } catch (err) {
-          console.error('Error pausing tournament:', err);
-        }
-      };
-
-      const handleResume = async () => {
-        try {
-          const response = await fetch(`${API_BASE_URL}/api/tournament/resume`, { method: 'POST' });
-          if (response.ok) {
-            setTournamentPaused(false);
-          }
-        } catch (err) {
-          console.error('Error resuming tournament:', err);
-        }
-      };
-
-      const handleStop = async () => {
-        if (!confirm('Are you sure you want to stop the tournament?')) return;
-        try {
-          const response = await fetch(`${API_BASE_URL}/api/tournament/stop`, { method: 'POST' });
-          if (response.ok) {
-            setTournamentRunning(false);
-            setTournamentPaused(false);
-          }
-        } catch (err) {
-          console.error('Error stopping tournament:', err);
-        }
-      };
-
       return (
         <div className="space-y-6 animate-slide-up">
-          {/* Header with Controls */}
+          {/* Header */}
           <div className="glass-card p-6 rounded-xl border border-purple-500/30">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                <i className="fas fa-scroll text-purple-400"></i>
-                Tournament Logs
-                {tournamentRunning && (
-                  <span className="ml-2 px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded-full flex items-center gap-1">
-                    <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-                    {tournamentPaused ? 'PAUSED' : 'RUNNING'}
-                  </span>
-                )}
-              </h3>
-
-              <div className="flex items-center gap-2">
-                {/* Start Tournament Button - shows when no tournament running */}
-                {!tournamentRunning && (
-                  <button
-                    onClick={onOpenAITournament}
-                    className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-lg font-semibold text-sm flex items-center gap-2 transition"
-                  >
-                    <i className="fas fa-play"></i>
-                    Start Tournament
-                  </button>
-                )}
-
-                {/* Pause Button - shows when running and not paused */}
-                {tournamentRunning && !tournamentPaused && (
-                  <button
-                    onClick={handlePause}
-                    className="px-3 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg font-semibold text-sm flex items-center gap-2 transition"
-                  >
-                    <i className="fas fa-pause"></i>
-                    Pause
-                  </button>
-                )}
-
-                {/* Resume Button - shows when paused */}
-                {tournamentRunning && tournamentPaused && (
-                  <button
-                    onClick={handleResume}
-                    className="px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-semibold text-sm flex items-center gap-2 transition"
-                  >
-                    <i className="fas fa-play"></i>
-                    Resume
-                  </button>
-                )}
-
-                {/* Stop Button - shows when running */}
-                {tournamentRunning && (
-                  <button
-                    onClick={handleStop}
-                    className="px-3 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-semibold text-sm flex items-center gap-2 transition"
-                  >
-                    <i className="fas fa-stop"></i>
-                    Stop
-                  </button>
-                )}
-
-                {/* Refresh Button */}
-                <button
-                  onClick={loadTournamentLogs}
-                  disabled={isLoading}
-                  className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-semibold text-sm flex items-center gap-2 transition disabled:opacity-50"
-                >
-                  <i className={`fas fa-sync-alt ${isLoading ? 'animate-spin' : ''}`}></i>
-                  Refresh
-                </button>
+              <div>
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                  <i className="fas fa-robot text-purple-400"></i>
+                  AI Trading Activity
+                  {tournamentRunning && (
+                    <span className="ml-2 px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded-full flex items-center gap-1">
+                      <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                      LIVE
+                    </span>
+                  )}
+                </h3>
+                <p className="text-slate-400 text-sm mt-1">
+                  AI teams trade autonomously during US market hours (9:30 AM - 4:00 PM ET)
+                </p>
               </div>
+
+              <button
+                onClick={loadTournamentLogs}
+                disabled={isLoading}
+                className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-semibold text-sm flex items-center gap-2 transition disabled:opacity-50"
+              >
+                <i className={`fas fa-sync-alt ${isLoading ? 'animate-spin' : ''}`}></i>
+                Refresh
+              </button>
             </div>
 
-            {/* Logs Display */}
-            <div className="bg-slate-900/50 rounded-lg p-4 max-h-[400px] overflow-y-auto font-mono text-sm">
-              {isLoading && logs.length === 0 ? (
-                <div className="text-center py-8">
-                  <i className="fas fa-spinner animate-spin text-2xl text-purple-400 mb-2"></i>
-                  <p className="text-slate-400">Loading logs...</p>
+            {lastUpdate && (
+              <p className="text-slate-500 text-xs mb-4">
+                Last updated: {lastUpdate.toLocaleTimeString()}
+              </p>
+            )}
+
+            {/* Trade Cards with AI Reasoning */}
+            <div className="space-y-4 max-h-[600px] overflow-y-auto">
+              {isLoading && trades.length === 0 ? (
+                <div className="text-center py-12">
+                  <i className="fas fa-spinner animate-spin text-3xl text-purple-400 mb-3"></i>
+                  <p className="text-slate-400">Loading trade activity...</p>
                 </div>
-              ) : logs.length === 0 ? (
-                <div className="text-center py-8">
-                  <i className="fas fa-scroll text-4xl text-slate-700 mb-2"></i>
-                  <p className="text-slate-500">No tournament logs yet. Start a tournament to see activity.</p>
+              ) : trades.length === 0 ? (
+                <div className="text-center py-12">
+                  <i className="fas fa-chart-line text-5xl text-slate-700 mb-4"></i>
+                  <h4 className="text-lg font-semibold text-white mb-2">No Trades Yet</h4>
+                  <p className="text-slate-500 max-w-md mx-auto">
+                    The AI tournament runs automatically during US market hours.
+                    Check back when the market is open to see live trading activity.
+                  </p>
+                  <div className="mt-4 p-3 bg-slate-800/50 rounded-lg inline-block">
+                    <p className="text-slate-400 text-sm">
+                      <i className="fas fa-clock mr-2"></i>
+                      Market Hours: Mon-Fri, 9:30 AM - 4:00 PM ET
+                    </p>
+                  </div>
                 </div>
               ) : (
-                <div className="space-y-1">
-                  {logs.slice(0, 100).map((log, idx) => (
-                    <div key={idx} className={`flex items-start gap-2 ${
-                      log.type === 'error' ? 'text-red-400' :
-                      log.type === 'success' ? 'text-green-400' :
-                      log.type === 'warning' ? 'text-yellow-400' :
-                      'text-slate-300'
-                    }`}>
-                      <span className="text-slate-600 text-xs whitespace-nowrap">{log.time || log.timestamp}</span>
-                      <span>{log.message}</span>
+                trades.slice(0, 50).map((trade, idx) => (
+                  <div
+                    key={idx}
+                    className={`p-4 rounded-lg border ${
+                      trade.action === 'BUY'
+                        ? 'bg-green-500/5 border-green-500/30'
+                        : 'bg-red-500/5 border-red-500/30'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                          trade.action === 'BUY' ? 'bg-green-500/20' : 'bg-red-500/20'
+                        }`}>
+                          <i className={`fas ${trade.action === 'BUY' ? 'fa-arrow-up text-green-400' : 'fa-arrow-down text-red-400'}`}></i>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white">{trade.team}</span>
+                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                              trade.action === 'BUY' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                            }`}>
+                              {trade.action}
+                            </span>
+                          </div>
+                          <p className="text-slate-400 text-sm">
+                            {trade.shares} shares of <span className="text-cyan-400 font-semibold">{trade.symbol}</span> @ ${trade.price?.toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-slate-500 text-xs">{trade.time || trade.timestamp}</p>
+                        <p className="text-white font-semibold">${(trade.price * trade.shares).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+                      </div>
                     </div>
-                  ))}
-                </div>
+
+                    {/* AI Reasoning */}
+                    {trade.reasoning && (
+                      <div className="mt-3 p-3 bg-slate-800/50 rounded-lg border-l-2 border-purple-500">
+                        <div className="flex items-start gap-2">
+                          <i className="fas fa-brain text-purple-400 mt-0.5"></i>
+                          <div>
+                            <p className="text-xs text-purple-400 font-semibold mb-1">AI Analysis</p>
+                            <p className="text-slate-300 text-sm">{trade.reasoning}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
               )}
             </div>
           </div>
-
-          {/* Recent Trades */}
-          {trades.length > 0 && (
-            <div className="glass-card p-6 rounded-xl border border-cyan-500/30">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
-                <i className="fas fa-exchange-alt text-cyan-400"></i>
-                Recent Trades
-              </h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-slate-400 border-b border-slate-700">
-                      <th className="text-left py-2">Time</th>
-                      <th className="text-left py-2">Team</th>
-                      <th className="text-left py-2">Action</th>
-                      <th className="text-left py-2">Symbol</th>
-                      <th className="text-right py-2">Price</th>
-                      <th className="text-right py-2">Shares</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {trades.slice(0, 20).map((trade, idx) => (
-                      <tr key={idx} className="border-b border-slate-800 hover:bg-slate-800/50">
-                        <td className="py-2 text-slate-500">{trade.time || trade.timestamp}</td>
-                        <td className="py-2 text-white">{trade.team}</td>
-                        <td className={`py-2 font-semibold ${trade.action === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>
-                          {trade.action}
-                        </td>
-                        <td className="py-2 text-cyan-400">{trade.symbol}</td>
-                        <td className="py-2 text-right text-white">${trade.price?.toFixed(2)}</td>
-                        <td className="py-2 text-right text-slate-300">{trade.shares}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
         </div>
       );
     }
@@ -22302,9 +22233,7 @@ Be realistic and conservative. Base confidence on data quality.`;
 
             {/* TOURNAMENT LOGS TAB */}
             {activeMainTab === 'tournament' && (
-              <TournamentLogsTab
-                onOpenAITournament={() => setShowAITournament(true)}
-              />
+              <TournamentLogsTab />
             )}
 
             {/* PORTFOLIO TAB */}

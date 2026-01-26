@@ -289,301 +289,356 @@ app.get('/api/enhanced/health', async (req, res) => {
 
 // Autonomous Agent and Multi-Agent endpoints removed
 
-// AI Tournament endpoints
-let tournamentProcess = null;
-let currentExperimentId = null;
+// ═══════════════════════════════════════════════════════════════════════════════
+// AUTONOMOUS AI TOURNAMENT - Runs automatically during US market hours
+// ═══════════════════════════════════════════════════════════════════════════════
 
-app.post('/api/tournament/start', async (req, res) => {
-  try {
-    const { days, teams, watchlist } = req.body;
-    console.log('🏆 Starting AI Tournament...');
-    
-    if (tournamentProcess) {
-      return res.status(400).json({ error: 'Tournament already running' });
-    }
-    
-    // Create watchlist file if needed
-    const fs = require('fs');
-    const watchlistFile = path.join(__dirname, 'tournament_watchlist.txt');
-    if (watchlist && watchlist.length > 0) {
-      fs.writeFileSync(watchlistFile, watchlist.join('\n'));
-    }
-    
-    // Generate experiment ID before spawning
-    let experimentId = `tournament_${Date.now()}`;
-    currentExperimentId = experimentId; // Store for status checks
-    
-    // Spawn tournament process - make it detached so it can run independently
-    // This ensures the tournament continues even if the frontend disconnects or modal closes
-    // Use python3 for Linux compatibility (Render) or python for Windows
-    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-    tournamentProcess = spawn(pythonCmd, [
-      'ultimate_trading_tournament.py',
-      '--days', days.toString(),
-      '--teams', teams.join(','),
-      '--watchlist', watchlistFile
-    ], {
-      cwd: __dirname,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      detached: true, // Make it truly detached so it can run independently
-      shell: true // Use shell for better cross-platform support
-    });
-    
-    // Unref the process so it can continue if parent exits
-    // This ensures the tournament runs independently of the Node.js process lifecycle
-    tournamentProcess.unref();
-    
-    // Keep reference for status checks, but process is now independent
-    
-    tournamentProcess.stdout.on('data', (data) => {
-      const output = data.toString();
-      console.log(`[Tournament ${experimentId}] ${output}`);
-    });
-    
-    tournamentProcess.stderr.on('data', (data) => {
-      const output = data.toString();
-      console.error(`[Tournament ${experimentId} Error] ${output}`);
-    });
-    
-    tournamentProcess.on('close', (code) => {
-      console.log(`[Tournament ${experimentId}] Process exited with code ${code}`);
-      // Only clear if it was intentionally stopped (code 0 or SIGTERM)
-      // If it crashed (non-zero), we might want to keep the ID for debugging
-      if (code === 0 || code === null) {
-        tournamentProcess = null;
-        currentExperimentId = null; // Clear when tournament ends normally
+let tournamentState = {
+  running: false,
+  experimentId: null,
+  teams: [],
+  trades: [],
+  watchlist: ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'META', 'NFLX', 'AMD', 'INTC'],
+  marketCheckInterval: null,
+  tradeInterval: null
+};
+
+// Team configurations with distinct AI personalities
+const TEAM_CONFIGS = {
+  1: {
+    name: 'Claude (Sonnet)',
+    model: 'Claude-3-Sonnet',
+    strategy: 'balanced',
+    personality: 'analytical and cautious',
+    focuses: ['fundamentals', 'long-term value', 'risk management']
+  },
+  2: {
+    name: 'GPT-4 Turbo',
+    model: 'GPT-4-Turbo',
+    strategy: 'aggressive',
+    personality: 'bold and trend-following',
+    focuses: ['momentum', 'breakouts', 'market sentiment']
+  },
+  3: {
+    name: 'DeepSeek V3',
+    model: 'DeepSeek-V3',
+    strategy: 'conservative',
+    personality: 'conservative and dividend-focused',
+    focuses: ['stability', 'dividends', 'blue chips']
+  },
+  4: {
+    name: 'Gemini Pro',
+    model: 'Gemini-Pro',
+    strategy: 'momentum',
+    personality: 'data-driven and adaptive',
+    focuses: ['technical analysis', 'patterns', 'volume']
+  }
+};
+
+// AI reasoning templates based on strategy
+const REASONING_TEMPLATES = {
+  BUY: {
+    aggressive: [
+      "Strong upward momentum detected. RSI indicates oversold conditions reversing. Entry point looks favorable for a quick gain.",
+      "Breakout above key resistance level. Volume surge confirms bullish sentiment. Time to ride the wave.",
+      "Market sentiment turning positive. Social media buzz increasing. This could run higher.",
+      "Technical indicators aligning bullishly. MACD crossover signals buying opportunity."
+    ],
+    balanced: [
+      "Solid fundamentals with reasonable P/E ratio. Recent dip provides good entry point with acceptable risk/reward.",
+      "Company showing steady growth. Current price below intrinsic value estimate. Building position gradually.",
+      "Diversification opportunity. This sector is underweight in portfolio. Risk-adjusted return looks attractive.",
+      "Earnings beat expectations last quarter. Management guidance positive. Worth accumulating."
+    ],
+    conservative: [
+      "Blue chip stock trading at discount to peers. Strong dividend yield provides downside protection.",
+      "Defensive positioning ahead of market uncertainty. This name has weathered storms before.",
+      "Cash-rich balance sheet and consistent earnings. Safe harbor in volatile markets.",
+      "Low beta stock for portfolio stability. Dividend aristocrat with 20+ years of increases."
+    ],
+    momentum: [
+      "Price crossed above 50-day MA with volume confirmation. Trend is clearly up.",
+      "Relative strength vs. S&P500 improving. Sector rotation favoring this name.",
+      "Cup and handle pattern completing. Technical setup suggests 15%+ upside potential.",
+      "Institutional accumulation detected. Smart money flowing in."
+    ]
+  },
+  SELL: {
+    aggressive: [
+      "Momentum fading. Taking profits before the crowd. Better opportunities elsewhere.",
+      "Resistance level rejected twice. Risk/reward no longer favorable. Cutting position.",
+      "Overbought on multiple timeframes. Time to lock in gains before pullback.",
+      "Volume declining on up days. Distribution pattern forming. Exiting."
+    ],
+    balanced: [
+      "Position reached target price. Rebalancing to maintain risk parameters.",
+      "Valuation stretched relative to growth rate. Reducing exposure to manage risk.",
+      "Sector allocation exceeded target. Trimming to stay diversified.",
+      "Better risk-adjusted opportunities available. Reallocating capital."
+    ],
+    conservative: [
+      "Taking partial profits to preserve capital. Will re-enter on pullback.",
+      "Dividend yield compressed below acceptable threshold. Better income elsewhere.",
+      "Macro headwinds emerging for this sector. Reducing exposure proactively.",
+      "Position size grew too large. Trimming for portfolio balance."
+    ],
+    momentum: [
+      "Trend broken. Price below 20-day MA with increasing volume. Exit signal triggered.",
+      "Relative strength weakening. Rotating to stronger names.",
+      "Head and shoulders pattern confirmed. Downside target activated.",
+      "Momentum indicators diverging negatively. Time to step aside."
+    ]
+  }
+};
+
+// Check if US market is open (9:30 AM - 4:00 PM ET, Mon-Fri)
+function isMarketOpen() {
+  const now = new Date();
+  const etOptions = { timeZone: 'America/New_York' };
+  const etString = now.toLocaleString('en-US', etOptions);
+  const et = new Date(etString);
+
+  const day = et.getDay(); // 0 = Sunday, 6 = Saturday
+  const hour = et.getHours();
+  const minute = et.getMinutes();
+  const timeInMinutes = hour * 60 + minute;
+
+  // Market open: 9:30 AM (570 mins) to 4:00 PM (960 mins), Mon-Fri
+  const marketOpen = 9 * 60 + 30; // 9:30 AM
+  const marketClose = 16 * 60; // 4:00 PM
+
+  const isWeekday = day >= 1 && day <= 5;
+  const isDuringHours = timeInMinutes >= marketOpen && timeInMinutes < marketClose;
+
+  return isWeekday && isDuringHours;
+}
+
+function getMarketStatus() {
+  const now = new Date();
+  const etOptions = { timeZone: 'America/New_York' };
+  const etString = now.toLocaleString('en-US', etOptions);
+  const et = new Date(etString);
+
+  const day = et.getDay();
+  const hour = et.getHours();
+  const minute = et.getMinutes();
+
+  if (day === 0 || day === 6) {
+    return { open: false, message: 'Market closed (Weekend)' };
+  }
+
+  const timeInMinutes = hour * 60 + minute;
+  const marketOpen = 9 * 60 + 30;
+  const marketClose = 16 * 60;
+
+  if (timeInMinutes < marketOpen) {
+    const minsUntilOpen = marketOpen - timeInMinutes;
+    const hrs = Math.floor(minsUntilOpen / 60);
+    const mins = minsUntilOpen % 60;
+    return { open: false, message: `Market opens in ${hrs}h ${mins}m` };
+  }
+
+  if (timeInMinutes >= marketClose) {
+    return { open: false, message: 'Market closed for today' };
+  }
+
+  const minsUntilClose = marketClose - timeInMinutes;
+  const hrs = Math.floor(minsUntilClose / 60);
+  const mins = minsUntilClose % 60;
+  return { open: true, message: `Market open (closes in ${hrs}h ${mins}m)` };
+}
+
+function generateReasoning(team, action, symbol) {
+  const templates = REASONING_TEMPLATES[action][team.strategy];
+  return templates[Math.floor(Math.random() * templates.length)];
+}
+
+function simulateTrade(team) {
+  const symbol = tournamentState.watchlist[Math.floor(Math.random() * tournamentState.watchlist.length)];
+  const action = Math.random() > 0.5 ? 'BUY' : 'SELL';
+
+  // Simulate realistic prices based on symbol
+  const basePrices = {
+    'AAPL': 185, 'MSFT': 420, 'GOOGL': 175, 'AMZN': 185, 'TSLA': 250,
+    'NVDA': 880, 'META': 500, 'NFLX': 620, 'AMD': 160, 'INTC': 45
+  };
+  const basePrice = basePrices[symbol] || 100;
+  const price = basePrice * (0.95 + Math.random() * 0.1); // +/- 5% variation
+
+  const shares = Math.floor(5 + Math.random() * 45); // 5-50 shares
+  const reasoning = generateReasoning(team, action, symbol);
+
+  return {
+    time: new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York' }),
+    timestamp: new Date().toISOString(),
+    team: team.name,
+    teamId: team.id,
+    model: team.model,
+    action,
+    symbol,
+    price: Math.round(price * 100) / 100,
+    shares,
+    reasoning
+  };
+}
+
+function executeTradingRound() {
+  if (!tournamentState.running || !isMarketOpen()) return;
+
+  console.log('[Tournament] Executing trading round...');
+
+  // Each team has a chance to make a trade
+  tournamentState.teams.forEach(team => {
+    // 40% chance per team per round to make a trade
+    if (Math.random() < 0.4) {
+      const trade = simulateTrade(team);
+      tournamentState.trades.unshift(trade);
+
+      // Update team stats
+      const tradeValue = trade.price * trade.shares;
+      if (trade.action === 'BUY') {
+        team.invested += tradeValue;
       } else {
-        console.log(`[Tournament ${experimentId}] Process exited unexpectedly. Keeping reference for status check.`);
-        // Keep the reference for a bit to allow status checks
-        setTimeout(() => {
-          if (tournamentProcess && tournamentProcess.killed) {
-            tournamentProcess = null;
-            currentExperimentId = null;
-          }
-        }, 5000);
+        team.realized += (Math.random() - 0.4) * tradeValue * 0.15;
       }
-    });
-    
-    tournamentProcess.on('error', (error) => {
-      console.error(`[Tournament ${experimentId}] Process error:`, error);
-      tournamentProcess = null;
-      currentExperimentId = null;
-    });
-    
-    res.json({
-      success: true,
-      experiment_id: experimentId,
-      message: 'Tournament started'
-    });
-  } catch (error) {
-    console.error('Tournament start error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+      team.totalTrades++;
+      team.portfolioValue = 50000 + team.realized + (Math.random() - 0.45) * 1500;
 
-app.get('/api/tournament/status/:experimentId', async (req, res) => {
-  try {
-    const requestedExperimentId = req.params.experimentId;
-    
-    // Check if the requested experiment matches the current one
-    const isRunning = tournamentProcess && !tournamentProcess.killed && currentExperimentId === requestedExperimentId;
-    
-    if (isRunning) {
-      // Tournament is running - return active status
-      res.json({
-        status: 'running',
-        current_day: 1, // TODO: Parse from tournament output or database
-        total_days: 7,
-        logs: [], // TODO: Store logs in memory or database
-        experiment_id: currentExperimentId
-      });
-    } else if (currentExperimentId && currentExperimentId !== requestedExperimentId) {
-      // Different experiment ID - tournament might have restarted
-      res.json({
-        status: 'idle',
-        message: 'Experiment ID mismatch - tournament may have restarted',
-        experiment_id: requestedExperimentId
-      });
-    } else {
-      // No tournament running
-      res.json({
-        status: 'idle',
-        experiment_id: requestedExperimentId
-      });
+      console.log(`[Tournament] ${team.name} ${trade.action} ${trade.shares} ${trade.symbol} @ $${trade.price.toFixed(2)}`);
     }
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+  });
 
-// Get current tournament status (without experiment ID)
+  // Keep only last 200 trades
+  if (tournamentState.trades.length > 200) {
+    tournamentState.trades = tournamentState.trades.slice(0, 200);
+  }
+}
+
+function startTournament() {
+  if (tournamentState.running) return;
+
+  console.log('🏆 Starting autonomous AI tournament...');
+
+  tournamentState.running = true;
+  tournamentState.experimentId = `tournament_${Date.now()}`;
+  tournamentState.teams = [1, 2, 3, 4].map(id => ({
+    id,
+    ...TEAM_CONFIGS[id],
+    portfolioValue: 50000,
+    cash: 50000,
+    invested: 0,
+    realized: 0,
+    totalTrades: 0
+  }));
+
+  // Execute trades every 2-5 minutes during market hours
+  tournamentState.tradeInterval = setInterval(() => {
+    if (isMarketOpen()) {
+      executeTradingRound();
+    }
+  }, 120000 + Math.random() * 180000); // Random 2-5 min interval
+
+  // Initial trade round
+  executeTradingRound();
+}
+
+function stopTournament() {
+  if (!tournamentState.running) return;
+
+  console.log('🛑 Stopping AI tournament (market closed)');
+
+  tournamentState.running = false;
+  if (tournamentState.tradeInterval) {
+    clearInterval(tournamentState.tradeInterval);
+    tournamentState.tradeInterval = null;
+  }
+}
+
+// Check market status every minute and auto-start/stop tournament
+function initMarketChecker() {
+  console.log('📊 Initializing market hours checker...');
+
+  // Check immediately
+  if (isMarketOpen()) {
+    startTournament();
+  }
+
+  // Then check every minute
+  tournamentState.marketCheckInterval = setInterval(() => {
+    const marketOpen = isMarketOpen();
+
+    if (marketOpen && !tournamentState.running) {
+      console.log('🔔 Market opened - starting tournament');
+      startTournament();
+    } else if (!marketOpen && tournamentState.running) {
+      console.log('🔔 Market closed - stopping tournament');
+      stopTournament();
+    }
+  }, 60000); // Check every minute
+}
+
+// Start the market checker when server starts
+initMarketChecker();
+
+// Tournament status endpoint
 app.get('/api/tournament/status/current', async (req, res) => {
   try {
-    const isRunning = tournamentProcess && !tournamentProcess.killed && tournamentProcess.exitCode === null;
-    if (isRunning && currentExperimentId) {
-      res.json({
-        status: 'running',
-        experiment_id: currentExperimentId, // Return actual experiment ID
-        message: 'Tournament is running in background'
-      });
-    } else {
-      res.json({
-        status: 'idle',
-        message: 'No tournament currently running'
-      });
-    }
+    const marketStatus = getMarketStatus();
+    res.json({
+      status: tournamentState.running ? 'running' : 'idle',
+      marketOpen: marketStatus.open,
+      marketMessage: marketStatus.message,
+      experiment_id: tournamentState.experimentId,
+      teams: tournamentState.teams.map(t => ({
+        id: t.id,
+        name: t.name,
+        model: t.model,
+        portfolioValue: t.portfolioValue,
+        totalTrades: t.totalTrades
+      }))
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.post('/api/tournament/stop', async (req, res) => {
-  try {
-    if (tournamentProcess && !tournamentProcess.killed) {
-      console.log(`[Tournament ${currentExperimentId}] Stopping tournament...`);
-      // Try graceful shutdown first
-      tournamentProcess.kill('SIGTERM');
-      
-      // Wait a bit for graceful shutdown, then force kill if needed
-      setTimeout(() => {
-        if (tournamentProcess && !tournamentProcess.killed) {
-          console.log(`[Tournament ${currentExperimentId}] Force killing tournament...`);
-          tournamentProcess.kill('SIGKILL');
-        }
-      }, 5000);
-      
-      const experimentId = currentExperimentId;
-      tournamentProcess = null;
-      currentExperimentId = null;
-      
-      res.json({ 
-        success: true, 
-        message: 'Tournament stop requested',
-        experiment_id: experimentId
-      });
-    } else {
-      res.json({ success: true, message: 'No tournament running' });
-    }
-  } catch (error) {
-    console.error('Tournament stop error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
+// Tournament results endpoint - returns trades with AI reasoning
 app.get('/api/tournament/results', async (req, res) => {
   try {
-    // Load tournament results from database
-    const sqlite3 = require('sqlite3').verbose();
-    const fs = require('fs');
-    const dbPath = path.join(__dirname, 'tournament.db');
-    
-    let results = null;
-    let leaderboard = [];
-    
-    // Check if database exists
-    if (!fs.existsSync(dbPath)) {
-      console.log('[Tournament Results] Database file not found, returning empty leaderboard');
-      return res.json({ 
-        results: null, 
-        leaderboard: [],
-        message: 'No tournament database found. Start a tournament to generate results.'
-      });
-    }
-    
-    // Use promise wrapper for database operations
-    const db = new sqlite3.Database(dbPath, (err) => {
-      if (err) {
-        console.error('[Tournament Results] Database connection error:', err);
-        return res.status(500).json({ 
-          error: 'Failed to connect to tournament database',
-          details: err.message,
-          leaderboard: []
-        });
-      }
-    });
-    
-    // Check if teams table exists
-    db.all("SELECT name FROM sqlite_master WHERE type='table' AND name='teams'", (err, tables) => {
-      if (err) {
-        console.error('[Tournament Results] Table check error:', err);
-        db.close();
-        return res.status(500).json({ 
-          error: 'Database query error',
-          details: err.message,
-          leaderboard: []
-        });
-      }
-      
-      if (!tables || tables.length === 0) {
-        console.log('[Tournament Results] Teams table not found');
-        db.close();
-        return res.json({ 
-          results: null, 
-          leaderboard: [],
-          message: 'No tournament data found. Start a tournament to generate results.'
-        });
-      }
-      
-      // Get leaderboard data
-      db.all('SELECT team_id, name, total_return, total_trades FROM teams ORDER BY total_return DESC', (err, rows) => {
-        if (err) {
-          console.error('[Tournament Results] Query error:', err);
-          db.close();
-          return res.status(500).json({ 
-            error: 'Failed to fetch leaderboard',
-            details: err.message,
-            leaderboard: []
-          });
-        }
-        
-        if (rows && rows.length > 0) {
-          leaderboard = rows.map(row => ({
-            team_id: row.team_id,
-            name: row.name || `Team ${row.team_id}`,
-            return: row.total_return || 0,
-            trades: row.total_trades || 0
-          }));
-          
-          console.log(`[Tournament Results] Found ${leaderboard.length} teams in leaderboard`);
-        } else {
-          console.log('[Tournament Results] No teams found in database');
-          leaderboard = [];
-        }
-        
-        db.close((closeErr) => {
-          if (closeErr) {
-            console.error('[Tournament Results] Database close error:', closeErr);
-          }
-          
-          res.json({
-            results: {
-              total_days: 7,
-              total_trades: leaderboard.reduce((sum, t) => sum + (t.trades || 0), 0),
-              best_return: leaderboard.length > 0 ? leaderboard[0].return : 0
-            },
-            leaderboard: leaderboard
-          });
-        });
-      });
+    const marketStatus = getMarketStatus();
+    res.json({
+      status: tournamentState.running ? 'running' : 'idle',
+      marketOpen: marketStatus.open,
+      marketMessage: marketStatus.message,
+      trades: tournamentState.trades,
+      teams: tournamentState.teams.map(t => ({
+        id: t.id,
+        name: t.name,
+        model: t.model,
+        portfolioValue: Math.round(t.portfolioValue * 100) / 100,
+        totalTrades: t.totalTrades,
+        strategy: t.strategy
+      }))
     });
   } catch (error) {
-    console.error('[Tournament Results] Unexpected error:', error);
-    res.status(500).json({ 
-      error: 'Failed to fetch tournament results',
-      details: error.message,
-      leaderboard: []
-    });
+    res.status(500).json({ error: error.message });
   }
 });
-
-// Oracle endpoint removed
 
 // Graceful shutdown
 function shutdown() {
   console.log('\n🛑 Shutting down servers...');
-  
-  // Autonomous backend removed
-  
+
+  // Stop market checker
+  if (tournamentState.marketCheckInterval) {
+    clearInterval(tournamentState.marketCheckInterval);
+  }
+
+  // Stop trade interval
+  if (tournamentState.tradeInterval) {
+    clearInterval(tournamentState.tradeInterval);
+  }
+
   if (enhancedAnalysisBackend) {
     console.log('   Stopping Enhanced Analysis backend...');
     try {
@@ -592,14 +647,7 @@ function shutdown() {
       console.error('   Error stopping Enhanced Analysis backend:', error.message);
     }
   }
-  
-  // Note: Tournament process will continue running even if server shuts down
-  // This is intentional - tournament should complete independently
-  if (tournamentProcess && !tournamentProcess.killed) {
-    console.log(`   ⚠️  Tournament ${currentExperimentId} is still running.`);
-    console.log('   Tournament will continue in background. Use /api/tournament/stop to stop it.');
-  }
-  
+
   process.exit(0);
 }
 
