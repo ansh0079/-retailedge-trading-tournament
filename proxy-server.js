@@ -38,6 +38,138 @@ app.use(express.static(path.join(__dirname, 'dist'), {
 // Store background processes
 let enhancedAnalysisBackend = null;
 
+// Tournament state file for persistence across server restarts
+const TOURNAMENT_STATE_FILE = path.join(__dirname, '.tournament_state.json');
+let tournamentPaused = false;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// US MARKET HOURS CHECKER (9:30 AM - 4:00 PM Eastern Time)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function isUSMarketOpen() {
+  const now = new Date();
+  const etOptions = { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hour12: false };
+  const etTime = new Intl.DateTimeFormat('en-US', etOptions).format(now);
+  const [hours, minutes] = etTime.split(':').map(Number);
+  const currentMinutes = hours * 60 + minutes;
+  
+  const marketOpen = 9 * 60 + 30;  // 9:30 AM
+  const marketClose = 16 * 60;     // 4:00 PM
+  
+  const dayOfWeek = new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'short' });
+  const isWeekday = !['Sat', 'Sun'].includes(dayOfWeek);
+  const isOpen = isWeekday && currentMinutes >= marketOpen && currentMinutes < marketClose;
+  
+  return { isOpen, currentTime: etTime, dayOfWeek };
+}
+
+// Load tournament state on server start
+function loadTournamentState() {
+  const fs = require('fs');
+  try {
+    if (fs.existsSync(TOURNAMENT_STATE_FILE)) {
+      const data = JSON.parse(fs.readFileSync(TOURNAMENT_STATE_FILE, 'utf8'));
+      console.log('📁 Loaded tournament state:', data);
+      
+      if (data.pid) {
+        try {
+          process.kill(data.pid, 0);
+          console.log(`✅ Tournament process ${data.pid} is still running!`);
+          currentExperimentId = data.experimentId;
+          tournamentPaused = data.paused || false;
+          return data;
+        } catch (e) {
+          console.log(`⚠️ Tournament process ${data.pid} no longer running`);
+          // Keep experiment ID for data continuity
+          currentExperimentId = data.experimentId;
+          tournamentPaused = true;
+          return { ...data, paused: true, processLost: true };
+        }
+      }
+    }
+  } catch (error) {
+    console.log('No existing tournament state found');
+  }
+  return null;
+}
+
+// Save tournament state with pause info
+function saveTournamentState(experimentId, pid, paused = false) {
+  const fs = require('fs');
+  try {
+    const state = {
+      experimentId,
+      pid,
+      paused,
+      startedAt: new Date().toISOString(),
+      lastUpdated: new Date().toISOString()
+    };
+    fs.writeFileSync(TOURNAMENT_STATE_FILE, JSON.stringify(state, null, 2));
+    console.log('💾 Saved tournament state:', state);
+  } catch (error) {
+    console.error('Failed to save tournament state:', error);
+  }
+}
+
+// Update pause state only
+function updatePauseState(paused) {
+  const fs = require('fs');
+  try {
+    if (fs.existsSync(TOURNAMENT_STATE_FILE)) {
+      const data = JSON.parse(fs.readFileSync(TOURNAMENT_STATE_FILE, 'utf8'));
+      data.paused = paused;
+      data.lastUpdated = new Date().toISOString();
+      fs.writeFileSync(TOURNAMENT_STATE_FILE, JSON.stringify(data, null, 2));
+    }
+  } catch (e) { /* ignore */ }
+}
+
+// Clear tournament state
+function clearTournamentState() {
+  const fs = require('fs');
+  try {
+    if (fs.existsSync(TOURNAMENT_STATE_FILE)) {
+      fs.unlinkSync(TOURNAMENT_STATE_FILE);
+      console.log('🗑️ Cleared tournament state');
+    }
+  } catch (error) {
+    console.error('Failed to clear tournament state:', error);
+  }
+}
+
+// Auto-pause/resume based on market hours (check every minute)
+setInterval(() => {
+  if (!tournamentProcess || tournamentProcess.killed) return;
+  
+  const market = isUSMarketOpen();
+  
+  if (!market.isOpen && !tournamentPaused) {
+    console.log(`🔔 Market closed (${market.currentTime} ET) - Auto-pausing tournament`);
+    try {
+      process.kill(tournamentProcess.pid, 'SIGSTOP');
+      tournamentPaused = true;
+      updatePauseState(true);
+    } catch (e) { console.error('Auto-pause failed:', e); }
+  } else if (market.isOpen && tournamentPaused) {
+    console.log(`🔔 Market opened (${market.currentTime} ET) - Auto-resuming tournament`);
+    try {
+      process.kill(tournamentProcess.pid, 'SIGCONT');
+      tournamentPaused = false;
+      updatePauseState(false);
+    } catch (e) { console.error('Auto-resume failed:', e); }
+  }
+}, 60000);
+
+// Load state on server startup
+const existingTournament = loadTournamentState();
+if (existingTournament) {
+  currentExperimentId = existingTournament.experimentId;
+  tournamentPaused = existingTournament.paused || false;
+  const market = isUSMarketOpen();
+  console.log(`🔄 Reconnected to tournament: ${currentExperimentId}`);
+  console.log(`📊 Paused: ${tournamentPaused} | Market: ${market.isOpen ? 'OPEN' : 'CLOSED'} (${market.currentTime} ET)`);
+}
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -351,7 +483,8 @@ app.post('/api/tournament/start', async (req, res) => {
       // If it crashed (non-zero), we might want to keep the ID for debugging
       if (code === 0 || code === null) {
         tournamentProcess = null;
-        currentExperimentId = null; // Clear when tournament ends normally
+        currentExperimentId = null;
+        clearTournamentState(); // Clear state when tournament ends normally
       } else {
         console.log(`[Tournament ${experimentId}] Process exited unexpectedly. Keeping reference for status check.`);
         // Keep the reference for a bit to allow status checks
@@ -359,6 +492,7 @@ app.post('/api/tournament/start', async (req, res) => {
           if (tournamentProcess && tournamentProcess.killed) {
             tournamentProcess = null;
             currentExperimentId = null;
+            clearTournamentState();
           }
         }, 5000);
       }
@@ -368,7 +502,11 @@ app.post('/api/tournament/start', async (req, res) => {
       console.error(`[Tournament ${experimentId}] Process error:`, error);
       tournamentProcess = null;
       currentExperimentId = null;
+      clearTournamentState();
     });
+    
+    // Save state for persistence across server restarts
+    saveTournamentState(experimentId, tournamentProcess.pid);
     
     res.json({
       success: true,
@@ -419,19 +557,48 @@ app.get('/api/tournament/status/:experimentId', async (req, res) => {
 // Get current tournament status (without experiment ID)
 app.get('/api/tournament/status/current', async (req, res) => {
   try {
+    const fs = require('fs');
+    
+    // First check if we have a running process in memory
     const isRunning = tournamentProcess && !tournamentProcess.killed && tournamentProcess.exitCode === null;
+    
     if (isRunning && currentExperimentId) {
-      res.json({
+      return res.json({
         status: 'running',
-        experiment_id: currentExperimentId, // Return actual experiment ID
+        experiment_id: currentExperimentId,
         message: 'Tournament is running in background'
       });
-    } else {
-      res.json({
-        status: 'idle',
-        message: 'No tournament currently running'
-      });
     }
+    
+    // Check state file for orphaned/persisted tournament
+    if (fs.existsSync(TOURNAMENT_STATE_FILE)) {
+      try {
+        const state = JSON.parse(fs.readFileSync(TOURNAMENT_STATE_FILE, 'utf8'));
+        if (state.pid) {
+          // Check if process is still alive
+          try {
+            process.kill(state.pid, 0); // Signal 0 just checks if process exists
+            currentExperimentId = state.experimentId; // Reconnect
+            return res.json({
+              status: 'running',
+              experiment_id: state.experimentId,
+              message: 'Tournament is running (reconnected)',
+              startedAt: state.startedAt
+            });
+          } catch (e) {
+            // Process no longer exists, clean up
+            clearTournamentState();
+          }
+        }
+      } catch (e) {
+        console.log('Error reading tournament state:', e);
+      }
+    }
+    
+    res.json({
+      status: 'idle',
+      message: 'No tournament currently running'
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -455,6 +622,7 @@ app.post('/api/tournament/stop', async (req, res) => {
       const experimentId = currentExperimentId;
       tournamentProcess = null;
       currentExperimentId = null;
+      clearTournamentState();
       
       res.json({ 
         success: true, 
@@ -462,10 +630,93 @@ app.post('/api/tournament/stop', async (req, res) => {
         experiment_id: experimentId
       });
     } else {
+      // Also try to stop by reading state file (for orphaned processes)
+      const fs = require('fs');
+      try {
+        if (fs.existsSync(TOURNAMENT_STATE_FILE)) {
+          const state = JSON.parse(fs.readFileSync(TOURNAMENT_STATE_FILE, 'utf8'));
+          if (state.pid) {
+            process.kill(state.pid, 'SIGTERM');
+            clearTournamentState();
+            return res.json({ success: true, message: 'Orphaned tournament stopped' });
+          }
+        }
+      } catch (e) {
+        console.log('No orphaned tournament to stop');
+      }
       res.json({ success: true, message: 'No tournament running' });
     }
   } catch (error) {
     console.error('Tournament stop error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Pause tournament (send SIGSTOP signal)
+app.post('/api/tournament/pause', async (req, res) => {
+  try {
+    if (tournamentProcess && !tournamentProcess.killed) {
+      console.log(`[Tournament ${currentExperimentId}] Manual pause requested...`);
+      process.kill(tournamentProcess.pid, 'SIGSTOP');
+      tournamentPaused = true;
+      updatePauseState(true);
+      res.json({ success: true, message: 'Tournament paused', paused: true });
+    } else {
+      res.status(400).json({ error: 'No tournament running' });
+    }
+  } catch (error) {
+    console.error('Pause error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Resume tournament (send SIGCONT signal)
+app.post('/api/tournament/resume', async (req, res) => {
+  try {
+    const market = isUSMarketOpen();
+    
+    if (tournamentProcess && !tournamentProcess.killed) {
+      // Check if market is open before resuming
+      if (!market.isOpen) {
+        return res.json({ 
+          success: false, 
+          message: `Cannot resume - Market is CLOSED (${market.currentTime} ET, ${market.dayOfWeek}). Tournament will auto-resume when market opens.`,
+          marketOpen: false
+        });
+      }
+      
+      console.log(`[Tournament ${currentExperimentId}] Manual resume requested...`);
+      process.kill(tournamentProcess.pid, 'SIGCONT');
+      tournamentPaused = false;
+      updatePauseState(false);
+      res.json({ success: true, message: 'Tournament resumed', paused: false, marketOpen: true });
+    } else {
+      res.status(400).json({ error: 'No tournament running' });
+    }
+  } catch (error) {
+    console.error('Resume error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get tournament logs
+app.get('/api/tournament/logs', async (req, res) => {
+  try {
+    // TODO: Load from SQLite database
+    // For now, return empty array
+    res.json({ logs: [] });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get tournament trades
+app.get('/api/tournament/trades', async (req, res) => {
+  try {
+    // TODO: Load from SQLite database
+    // For now, return empty array
+    res.json({ trades: [] });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -705,20 +956,22 @@ app.get('/api/tournament/trades', async (req, res) => {
   }
 });
 
-// Pause tournament (not supported in current implementation, returns error)
-app.post('/api/tournament/pause', async (req, res) => {
-  res.status(501).json({
-    error: 'Pause not implemented',
-    message: 'Tournament pause/resume is not supported. Use stop to end the tournament.'
-  });
-});
-
-// Resume tournament (not supported in current implementation, returns error)
-app.post('/api/tournament/resume', async (req, res) => {
-  res.status(501).json({
-    error: 'Resume not implemented',
-    message: 'Tournament pause/resume is not supported. Start a new tournament instead.'
-  });
+// Market status endpoint - check if market is open
+app.get('/api/market/status', async (req, res) => {
+  try {
+    const market = isUSMarketOpen();
+    res.json({
+      isOpen: market.isOpen,
+      currentTime: market.currentTime,
+      dayOfWeek: market.dayOfWeek,
+      timezone: 'America/New_York',
+      marketHours: '9:30 AM - 4:00 PM ET',
+      tournamentPaused: tournamentPaused,
+      tournamentRunning: tournamentProcess && !tournamentProcess.killed
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.get('/api/tournament/results', async (req, res) => {
