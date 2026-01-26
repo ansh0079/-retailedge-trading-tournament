@@ -10208,7 +10208,7 @@ Be realistic and conservative. Base confidence on data quality.`;
     // AI TOURNAMENT COMPONENT
     // ═══════════════════════════════════════════════════════════════════════════
     
-    function AITournamentModal({ onClose, watchlist = [], stocks = [] }) {
+    function AITournamentModal({ onClose, watchlist = [], stocks = [], onTournamentStart }) {
       const [activeTab, setActiveTab] = useState('overview');
       const [tournamentStatus, setTournamentStatus] = useState('idle'); // idle, running, completed, error
       const [tournamentResults, setTournamentResults] = useState(null);
@@ -10326,6 +10326,8 @@ Be realistic and conservative. Base confidence on data quality.`;
             setExperimentId(expId);
             connectToSSE(expId);
             addLog(`🏆 Tournament started on backend server with ${symbolsToUse.length} stocks`, 'success');
+            // Notify parent that tournament has started
+            if (onTournamentStart) onTournamentStart();
           } else {
             const errorText = await response.text();
             console.error(`❌ Response not OK: ${response.status} - ${errorText}`);
@@ -22505,6 +22507,7 @@ Be realistic and conservative. Base confidence on data quality.`;
               onClose={() => setShowAITournament(false)}
               watchlist={stocks.map(s => s.symbol).filter(Boolean)}
               stocks={stocks}
+              onTournamentStart={() => setTournamentRunning(true)}
             />
           )}
 
