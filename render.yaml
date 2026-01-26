@@ -12,6 +12,12 @@ services:
         value: 3002
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: KIMI_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
     disk:
       name: tournament-data
       mountPath: /opt/render/project/src

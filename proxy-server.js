@@ -13,9 +13,20 @@ const PORT = process.env.PORT || 3002; // Use environment variable for cloud dep
 // API Keys - Use environment variables for security
 const CLAUDE_API_KEY = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
 
-if (!CLAUDE_API_KEY) {
-  console.error('⚠️  WARNING: ANTHROPIC_API_KEY not set in environment variables');
-  console.error('   Please set ANTHROPIC_API_KEY in your .env file or hosting platform');
+// Check for AI API keys (tournament supports multiple AI providers)
+const apiKeys = {
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
+  KIMI_API_KEY: process.env.KIMI_API_KEY,
+  GOOGLE_API_KEY: process.env.GOOGLE_API_KEY
+};
+
+const missingKeys = Object.entries(apiKeys).filter(([key, value]) => !value).map(([key]) => key);
+if (missingKeys.length > 0) {
+  console.error('⚠️  WARNING: Some AI API keys not set in environment variables');
+  console.error('   Missing keys:', missingKeys.join(', '));
+  console.error('   Tournament teams will be limited to available API keys');
+  console.error('   Set these in your .env file or hosting platform to enable all teams');
 }
 
 // Enable CORS for all routes
@@ -482,7 +493,14 @@ app.post('/api/tournament/start', async (req, res) => {
       cwd: __dirname,
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true, // Make it truly detached so it can run independently
-      shell: true // Use shell for better cross-platform support
+      shell: true, // Use shell for better cross-platform support
+      env: {
+        ...process.env, // Pass all environment variables
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+        DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
+        KIMI_API_KEY: process.env.KIMI_API_KEY,
+        GOOGLE_API_KEY: process.env.GOOGLE_API_KEY
+      }
     });
     
     // Unref the process so it can continue if parent exits

@@ -9736,7 +9736,7 @@ Be realistic and conservative. Base confidence on data quality.`;
     
     class OracleAnalyzer {
       constructor() {
-        this.baseUrl = 'http://localhost:3002/api/oracle';
+        this.baseUrl = `${API_BASE_URL}/api/oracle`;
         this.eventSources = {};
       }
       
@@ -10302,7 +10302,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           addLog(`🚀 Starting tournament with ${symbolsToUse.length} stocks...`, 'info');
 
           console.log('🌐 Sending POST request to /api/tournament/start...');
-          const response = await fetch('http://localhost:3002/api/tournament/start', {
+          const response = await fetch(`${API_BASE_URL}/api/tournament/start`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -10345,8 +10345,8 @@ Be realistic and conservative. Base confidence on data quality.`;
         }
         
         // If experimentId is 'current', use the current status endpoint
-        const statusUrl = experimentId === 'current' 
-          ? '${API_BASE_URL}/api/tournament/status/current'
+        const statusUrl = experimentId === 'current'
+          ? `${API_BASE_URL}/api/tournament/status/current`
           : `${API_BASE_URL}/api/tournament/status/${experimentId}`;
         
         pollIntervalRef.current = setInterval(async () => {
@@ -10472,7 +10472,7 @@ Be realistic and conservative. Base confidence on data quality.`;
 
       const checkForRunningTournament = async () => {
         try {
-          const response = await fetch('http://localhost:3002/api/tournament/results');
+          const response = await fetch(`${API_BASE_URL}/api/tournament/results`);
           if (response.ok) {
             const data = await response.json();
             if (data.results && data.results.status === 'running') {
@@ -10506,7 +10506,7 @@ Be realistic and conservative. Base confidence on data quality.`;
 
         // Connect to leaderboard updates
         const leaderboardSSE = new EventSource(
-          `http://localhost:3002/api/tournament/sse/leaderboard/${expId}`
+          `${API_BASE_URL}/api/tournament/sse/leaderboard/${expId}`
         );
 
         leaderboardSSE.onmessage = (event) => {
@@ -10528,7 +10528,7 @@ Be realistic and conservative. Base confidence on data quality.`;
 
         // Connect to logs
         const logsSSE = new EventSource(
-          `http://localhost:3002/api/tournament/sse/logs/${expId}`
+          `${API_BASE_URL}/api/tournament/sse/logs/${expId}`
         );
 
         logsSSE.onmessage = (event) => {
@@ -19023,7 +19023,7 @@ Be realistic and conservative. Base confidence on data quality.`;
     // TOURNAMENT LOGS MODAL COMPONENT
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function TournamentLogsModal({ isOpen, onClose, logs, trades, isLoading, tournamentRunning, tournamentPaused, marketStatus, onPause, onResume, onStop }) {
+    function TournamentLogsModal({ isOpen, onClose, logs, trades, isLoading, tournamentRunning, tournamentPaused, marketStatus, onPause, onResume, onStop, onOpenAITournament }) {
       if (!isOpen) return null;
 
       // Debug logging
@@ -19079,6 +19079,18 @@ Be realistic and conservative. Base confidence on data quality.`;
 
               <div className="flex items-center gap-2">
                 {/* Tournament Controls */}
+                {/* Start New Tournament - only when no tournament running */}
+                {!tournamentRunning && (
+                  <button
+                    onClick={onOpenAITournament}
+                    className="px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-semibold flex items-center gap-2 transition"
+                    title="Start a new AI tournament"
+                  >
+                    <i className="fas fa-trophy"></i>
+                    Start Tournament
+                  </button>
+                )}
+                {/* Pause - only when running and not paused */}
                 {tournamentRunning && !tournamentPaused && (
                   <button
                     onClick={onPause}
@@ -19089,21 +19101,18 @@ Be realistic and conservative. Base confidence on data quality.`;
                     Pause
                   </button>
                 )}
-                {(tournamentPaused || !tournamentRunning) && (
+                {/* Resume - only when paused (works regardless of market hours) */}
+                {tournamentRunning && tournamentPaused && (
                   <button
                     onClick={onResume}
-                    className={`px-3 py-2 text-white rounded-lg text-sm font-semibold flex items-center gap-2 transition ${
-                      marketStatus?.isOpen 
-                        ? 'bg-green-600 hover:bg-green-500' 
-                        : 'bg-slate-600 cursor-not-allowed'
-                    }`}
-                    title={marketStatus?.isOpen ? 'Resume tournament' : 'Market closed - cannot resume'}
-                    disabled={!marketStatus?.isOpen}
+                    className="px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-semibold flex items-center gap-2 transition"
+                    title="Resume tournament"
                   >
                     <i className="fas fa-play"></i>
-                    {marketStatus?.isOpen ? 'Resume' : 'Market Closed'}
+                    Resume
                   </button>
                 )}
+                {/* Stop - only when running */}
                 {tournamentRunning && (
                   <button
                     onClick={onStop}
@@ -19649,11 +19658,10 @@ Be realistic and conservative. Base confidence on data quality.`;
           if (response.ok) {
             const data = await response.json();
             setMarketStatus(data);
-            setTournamentPaused(data.tournamentPaused || false);
-            // Also update tournamentRunning state
-            if (data.tournamentRunning !== undefined) {
-              setTournamentRunning(data.tournamentRunning);
-            }
+            // Only set paused state if tournament is actually running
+            const isRunning = data.tournamentRunning || false;
+            setTournamentRunning(isRunning);
+            setTournamentPaused(isRunning ? (data.tournamentPaused || false) : false);
           }
         } catch (err) {
           console.error('Market status error:', err);
@@ -22692,6 +22700,10 @@ Be realistic and conservative. Base confidence on data quality.`;
                 onPause={handleTournamentPause}
                 onResume={handleTournamentResume}
                 onStop={handleTournamentStop}
+                onOpenAITournament={() => {
+                  setShowTournamentLogs(false);
+                  setShowAITournament(true);
+                }}
               />
             </ErrorBoundary>
           )}
