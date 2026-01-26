@@ -15285,7 +15285,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                               {patterns.length} pattern{patterns.length !== 1 ? 's' : ''} detected
                             </span>
                             <button
-                              onClick={() => setActiveTab('patterns')}
+                              onClick={(e) => { e.stopPropagation(); setActiveTab('patterns'); }}
                               className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded text-sm font-medium"
                             >
                               View Patterns
