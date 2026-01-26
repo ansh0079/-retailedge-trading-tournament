@@ -12,6 +12,7 @@ const PORT = process.env.PORT || 3002; // Use environment variable for cloud dep
 
 // API Keys - Use environment variables for security
 const CLAUDE_API_KEY = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
+const FMP_API_KEY = process.env.FMP_API_KEY || 'h43nCTpMeyiIiNquebaqktc7ChUHMxIz';
 
 if (!CLAUDE_API_KEY) {
   console.error('⚠️  WARNING: ANTHROPIC_API_KEY not set in environment variables');
@@ -293,12 +294,52 @@ app.get('/api/enhanced/health', async (req, res) => {
 // AUTONOMOUS AI TOURNAMENT - Runs automatically during US market hours
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Full stock watchlist - all stocks from the app
+const FULL_WATCHLIST = [
+  // Major Tech & S&P 500
+  "AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "NVDA", "TSLA", "META", "BRK.B", "UNH",
+  "XOM", "JNJ", "JPM", "V", "PG", "MA", "HD", "CVX", "LLY", "ABBV", "MRK", "AVGO",
+  "COST", "PEP", "KO", "ADBE", "TMO", "WMT", "MCD", "CSCO", "ACN", "ABT", "CRM",
+  "NFLX", "DHR", "LIN", "NKE", "VZ", "CMCSA", "TXN", "DIS", "PM", "NEE", "BMY",
+  "ORCL", "AMD", "INTC", "QCOM", "RTX", "UPS", "T", "HON", "UNP", "BA", "SPGI",
+  "COP", "SBUX", "LOW", "INTU", "AMGN", "GE", "DE", "CAT", "PLD", "ISRG", "MS",
+  "BLK", "GS", "AXP", "NOW", "AMAT", "TJX", "ELV", "ADI", "SYK", "BKNG", "MDLZ",
+  "LMT", "VRTX", "GILD", "CI", "ADP", "REGN", "ZTS", "PGR", "CVS", "MMC", "TGT",
+  "SLB", "LRCX", "CB", "ETN", "C", "MO", "SO", "BDX", "DUK", "SCHW", "BSX", "PNC",
+  "PYPL", "EQIX", "FISV", "ITW", "MMM", "FCX", "AON", "CL", "APD", "USB", "CME",
+  "ICE", "GM", "WM", "F", "NOC", "MCO", "NSC", "PSX", "CCI", "MPC", "SHW", "MCK",
+  "EMR", "ROP", "EOG", "KLAC", "HCA", "ECL", "MSI", "GD", "PSA", "APH", "PH",
+  "ADSK", "SNPS", "SRE", "AJG", "TEL", "TFC", "AIG", "COF", "MAR", "AFL", "TT",
+  "MET", "NXPI", "FIS", "PCAR", "CARR", "TRV", "SYY", "ALL", "AEP", "AZO", "PAYX",
+  "PRU", "ORLY", "FTNT", "HUM", "DHI", "D", "DD", "KMB", "MNST", "RSG", "CMG",
+  // Tech Growth & Cloud
+  "UBER", "LYFT", "ABNB", "COIN", "SHOP", "SQ", "ROKU", "SNAP", "PINS", "TWLO",
+  "ZM", "DOCU", "DDOG", "SNOW", "NET", "CRWD", "ZS", "OKTA", "PANW", "MDB",
+  "TEAM", "WDAY", "VEEV", "DKNG", "RBLX", "PATH", "PLTR", "SOFI", "HOOD", "AFRM",
+  // EV & Clean Energy
+  "RIVN", "LCID", "NIO", "XPEV", "LI", "ENPH", "SEDG", "FSLR", "RUN", "PLUG",
+  "BE", "BLNK", "CHPT", "QS", "FSR", "GOEV", "NKLA", "HYLN",
+  // Semiconductors
+  "TSM", "ASML", "MU", "MRVL", "ON", "QRVO", "STM", "GFS", "WOLF", "LSCC",
+  // Chinese Tech
+  "BABA", "JD", "PDD", "BIDU", "NTES", "BILI", "NIO", "XPEV", "LI",
+  // Meme & Retail Favorites
+  "AMC", "GME", "BB", "NOK", "SNDL", "CLOV", "WISH", "RKT"
+];
+
+// Price cache to avoid excessive API calls
+const priceCache = {
+  prices: {},
+  lastFetch: null,
+  cacheDuration: 60000 // Cache for 1 minute
+};
+
 let tournamentState = {
   running: false,
   experimentId: null,
   teams: [],
   trades: [],
-  watchlist: ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'META', 'NFLX', 'AMD', 'INTC'],
+  watchlist: FULL_WATCHLIST,
   marketCheckInterval: null,
   tradeInterval: null
 };
@@ -453,17 +494,94 @@ function generateReasoning(team, action, symbol) {
   return templates[Math.floor(Math.random() * templates.length)];
 }
 
-function simulateTrade(team) {
+// Fetch real-time prices from FMP API
+async function fetchRealTimePrices(symbols) {
+  const now = Date.now();
+
+  // Return cached prices if still valid
+  if (priceCache.lastFetch && (now - priceCache.lastFetch) < priceCache.cacheDuration) {
+    const cachedPrices = {};
+    let allCached = true;
+    for (const symbol of symbols) {
+      if (priceCache.prices[symbol]) {
+        cachedPrices[symbol] = priceCache.prices[symbol];
+      } else {
+        allCached = false;
+        break;
+      }
+    }
+    if (allCached) {
+      return cachedPrices;
+    }
+  }
+
+  try {
+    // FMP allows batch quotes with comma-separated symbols
+    const symbolList = symbols.join(',');
+    const url = `https://financialmodelingprep.com/stable/quote?symbol=${symbolList}&apikey=${FMP_API_KEY}`;
+
+    console.log(`[Tournament] Fetching real-time prices for ${symbols.length} symbols...`);
+
+    const response = await fetchWithRetry(url, { timeoutMs: 10000, retries: 2 });
+    const data = await response.json();
+
+    const prices = {};
+    if (Array.isArray(data)) {
+      for (const quote of data) {
+        if (quote.symbol && quote.price) {
+          prices[quote.symbol] = quote.price;
+          priceCache.prices[quote.symbol] = quote.price;
+        }
+      }
+    }
+
+    priceCache.lastFetch = now;
+    console.log(`[Tournament] Fetched prices for ${Object.keys(prices).length} symbols`);
+    return prices;
+  } catch (error) {
+    console.error('[Tournament] Error fetching prices:', error.message);
+    // Return cached prices as fallback
+    return priceCache.prices;
+  }
+}
+
+// Get real-time price for a single symbol
+async function getRealTimePrice(symbol) {
+  // Check cache first
+  if (priceCache.prices[symbol] && priceCache.lastFetch &&
+      (Date.now() - priceCache.lastFetch) < priceCache.cacheDuration) {
+    return priceCache.prices[symbol];
+  }
+
+  try {
+    const url = `https://financialmodelingprep.com/stable/quote?symbol=${symbol}&apikey=${FMP_API_KEY}`;
+    const response = await fetchWithRetry(url, { timeoutMs: 8000, retries: 1 });
+    const data = await response.json();
+
+    if (Array.isArray(data) && data.length > 0 && data[0].price) {
+      priceCache.prices[symbol] = data[0].price;
+      return data[0].price;
+    }
+  } catch (error) {
+    console.error(`[Tournament] Error fetching price for ${symbol}:`, error.message);
+  }
+
+  // Return cached price or null
+  return priceCache.prices[symbol] || null;
+}
+
+async function simulateTrade(team) {
   const symbol = tournamentState.watchlist[Math.floor(Math.random() * tournamentState.watchlist.length)];
   const action = Math.random() > 0.5 ? 'BUY' : 'SELL';
 
-  // Simulate realistic prices based on symbol
-  const basePrices = {
-    'AAPL': 185, 'MSFT': 420, 'GOOGL': 175, 'AMZN': 185, 'TSLA': 250,
-    'NVDA': 880, 'META': 500, 'NFLX': 620, 'AMD': 160, 'INTC': 45
-  };
-  const basePrice = basePrices[symbol] || 100;
-  const price = basePrice * (0.95 + Math.random() * 0.1); // +/- 5% variation
+  // Get real-time price from FMP API
+  let price = await getRealTimePrice(symbol);
+
+  // If we couldn't get a real price, skip this trade
+  if (!price) {
+    console.log(`[Tournament] Skipping trade - no price available for ${symbol}`);
+    return null;
+  }
 
   const shares = Math.floor(5 + Math.random() * 45); // 5-50 shares
   const reasoning = generateReasoning(team, action, symbol);
@@ -482,16 +600,30 @@ function simulateTrade(team) {
   };
 }
 
-function executeTradingRound() {
+async function executeTradingRound() {
   if (!tournamentState.running || !isMarketOpen()) return;
 
   console.log('[Tournament] Executing trading round...');
 
+  // Pre-fetch prices for a batch of random stocks to populate cache
+  const randomSymbols = [];
+  for (let i = 0; i < 20; i++) {
+    const symbol = tournamentState.watchlist[Math.floor(Math.random() * tournamentState.watchlist.length)];
+    if (!randomSymbols.includes(symbol)) {
+      randomSymbols.push(symbol);
+    }
+  }
+  await fetchRealTimePrices(randomSymbols);
+
   // Each team has a chance to make a trade
-  tournamentState.teams.forEach(team => {
+  for (const team of tournamentState.teams) {
     // 40% chance per team per round to make a trade
     if (Math.random() < 0.4) {
-      const trade = simulateTrade(team);
+      const trade = await simulateTrade(team);
+
+      // Skip if trade failed (no price available)
+      if (!trade) continue;
+
       tournamentState.trades.unshift(trade);
 
       // Update team stats
@@ -504,9 +636,9 @@ function executeTradingRound() {
       team.totalTrades++;
       team.portfolioValue = 50000 + team.realized + (Math.random() - 0.45) * 1500;
 
-      console.log(`[Tournament] ${team.name} ${trade.action} ${trade.shares} ${trade.symbol} @ $${trade.price.toFixed(2)}`);
+      console.log(`[Tournament] ${team.name} ${trade.action} ${trade.shares} ${trade.symbol} @ $${trade.price.toFixed(2)} (Real-time)`);
     }
-  });
+  }
 
   // Keep only last 200 trades
   if (tournamentState.trades.length > 200) {
@@ -517,7 +649,8 @@ function executeTradingRound() {
 function startTournament() {
   if (tournamentState.running) return;
 
-  console.log('🏆 Starting autonomous AI tournament...');
+  console.log('🏆 Starting autonomous AI tournament with REAL-TIME market data...');
+  console.log(`📊 Watching ${tournamentState.watchlist.length} stocks`);
 
   tournamentState.running = true;
   tournamentState.experimentId = `tournament_${Date.now()}`;
@@ -532,9 +665,9 @@ function startTournament() {
   }));
 
   // Execute trades every 2-5 minutes during market hours
-  tournamentState.tradeInterval = setInterval(() => {
+  tournamentState.tradeInterval = setInterval(async () => {
     if (isMarketOpen()) {
-      executeTradingRound();
+      await executeTradingRound();
     }
   }, 120000 + Math.random() * 180000); // Random 2-5 min interval
 
@@ -610,6 +743,8 @@ app.get('/api/tournament/results', async (req, res) => {
       status: tournamentState.running ? 'running' : 'idle',
       marketOpen: marketStatus.open,
       marketMessage: marketStatus.message,
+      dataSource: 'Real-time FMP API',
+      watchlistCount: tournamentState.watchlist.length,
       trades: tournamentState.trades,
       teams: tournamentState.teams.map(t => ({
         id: t.id,
