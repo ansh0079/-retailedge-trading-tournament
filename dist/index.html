@@ -4,6 +4,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>RetailEdge Pro | AI Stock Screener & Portfolio Tracker</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link
@@ -10561,6 +10564,7 @@ Be realistic and conservative. Base confidence on data quality.`;
       const [currentDay, setCurrentDay] = useState(0);
       const [experimentId, setExperimentId] = useState(null);
       const eventSourceRef = useRef(null);
+      const pollIntervalRef = useRef(null);
 
       // Use all available stocks instead of just watchlist
       const availableStocks = useMemo(() => {
@@ -10729,10 +10733,14 @@ Be realistic and conservative. Base confidence on data quality.`;
         checkForRunningTournament();
 
         return () => {
-          // Only close SSE connections, don't stop tournament
+          // Clean up SSE connections and polling intervals on unmount
           if (eventSourceRef.current) {
             eventSourceRef.current.leaderboard?.close();
             eventSourceRef.current.logs?.close();
+          }
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
           }
         };
       }, []);

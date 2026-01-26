@@ -10561,6 +10561,7 @@ Be realistic and conservative. Base confidence on data quality.`;
       const [currentDay, setCurrentDay] = useState(0);
       const [experimentId, setExperimentId] = useState(null);
       const eventSourceRef = useRef(null);
+      const pollIntervalRef = useRef(null);
 
       // Use all available stocks instead of just watchlist
       const availableStocks = useMemo(() => {
@@ -10729,10 +10730,14 @@ Be realistic and conservative. Base confidence on data quality.`;
         checkForRunningTournament();
 
         return () => {
-          // Only close SSE connections, don't stop tournament
+          // Clean up SSE connections and polling intervals on unmount
           if (eventSourceRef.current) {
             eventSourceRef.current.leaderboard?.close();
             eventSourceRef.current.logs?.close();
+          }
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
           }
         };
       }, []);
