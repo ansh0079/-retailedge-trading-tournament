@@ -19629,12 +19629,35 @@ Be realistic and conservative. Base confidence on data quality.`;
       const [tournamentLogs, setTournamentLogs] = useState([]);
       const [tournamentTrades, setTournamentTrades] = useState([]);
       const [logsLoading, setLogsLoading] = useState(false);
+      const [tournamentPaused, setTournamentPaused] = useState(false);
+      const [marketStatus, setMarketStatus] = useState(null);
+
+      // ===== LOAD MARKET STATUS =====
+      const loadMarketStatus = useCallback(async () => {
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/market/status`);
+          if (response.ok) {
+            const data = await response.json();
+            setMarketStatus(data);
+            setTournamentPaused(data.tournamentPaused || false);
+            // Also update tournamentRunning state
+            if (data.tournamentRunning !== undefined) {
+              setTournamentRunning(data.tournamentRunning);
+            }
+          }
+        } catch (err) {
+          console.error('Market status error:', err);
+        }
+      }, []);
 
       // ===== LOAD TOURNAMENT LOGS & TRADES - NEW FUNCTION =====
       const loadTournamentLogs = useCallback(async () => {
         setLogsLoading(true);
 
         try {
+          // First get market status
+          await loadMarketStatus();
+          
           const response = await fetch(`${API_BASE_URL}/api/tournament/results`);
           if (!response.ok) {
             throw new Error(`Failed to load: ${response.status}`);
@@ -19660,7 +19683,7 @@ Be realistic and conservative. Base confidence on data quality.`;
         } finally {
           setLogsLoading(false);
         }
-      }, []);
+      }, [loadMarketStatus]);
 
       // ===== AUTO-REFRESH LOGS WHEN MODAL IS OPEN =====
       useEffect(() => {
@@ -22321,11 +22344,16 @@ Be realistic and conservative. Base confidence on data quality.`;
             trades={tournamentTrades}
             isLoading={logsLoading}
             tournamentRunning={tournamentRunning}
+            tournamentPaused={tournamentPaused}
+            marketStatus={marketStatus}
             onPause={async () => {
               try {
                 const response = await fetch(`${API_BASE_URL}/api/tournament/pause`, { method: 'POST' });
                 if (response.ok) {
-                  console.log('Tournament paused');
+                  const data = await response.json();
+                  console.log('Tournament paused:', data);
+                  setTournamentPaused(true);
+                  await loadMarketStatus(); // Refresh status
                 }
               } catch (error) {
                 console.error('Failed to pause tournament:', error);
@@ -22334,8 +22362,13 @@ Be realistic and conservative. Base confidence on data quality.`;
             onResume={async () => {
               try {
                 const response = await fetch(`${API_BASE_URL}/api/tournament/resume`, { method: 'POST' });
-                if (response.ok) {
-                  console.log('Tournament resumed');
+                const data = await response.json();
+                if (response.ok && data.success) {
+                  console.log('Tournament resumed:', data);
+                  setTournamentPaused(false);
+                  await loadMarketStatus(); // Refresh status
+                } else {
+                  alert(data.message || 'Cannot resume tournament');
                 }
               } catch (error) {
                 console.error('Failed to resume tournament:', error);
@@ -22347,6 +22380,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                   const response = await fetch(`${API_BASE_URL}/api/tournament/stop`, { method: 'POST' });
                   if (response.ok) {
                     console.log('Tournament stopped');
+                    setTournamentRunning(false);
+                    setTournamentPaused(false);
                     setShowTournamentLogs(false);
                   }
                 } catch (error) {
