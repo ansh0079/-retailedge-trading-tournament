@@ -35,7 +35,7 @@ app.use(express.json());
 
 // Explicit root route - serve index.html
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // Health check endpoint for Render.com
@@ -62,8 +62,8 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Serve static files from dist folder
-app.use(express.static(path.join(__dirname, 'dist'), {
+// Serve static files from root folder
+app.use(express.static(__dirname, {
   index: false, // Don't serve index.html automatically
   fallthrough: true // Continue to next middleware if file not found
 }));
@@ -87,14 +87,14 @@ function isUSMarketOpen() {
   const etTime = new Intl.DateTimeFormat('en-US', etOptions).format(now);
   const [hours, minutes] = etTime.split(':').map(Number);
   const currentMinutes = hours * 60 + minutes;
-  
+
   const marketOpen = 9 * 60 + 30;  // 9:30 AM
   const marketClose = 16 * 60;     // 4:00 PM
-  
+
   const dayOfWeek = new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'short' });
   const isWeekday = !['Sat', 'Sun'].includes(dayOfWeek);
   const isOpen = isWeekday && currentMinutes >= marketOpen && currentMinutes < marketClose;
-  
+
   return { isOpen, currentTime: etTime, dayOfWeek };
 }
 
@@ -105,7 +105,7 @@ function loadTournamentState() {
     if (fs.existsSync(TOURNAMENT_STATE_FILE)) {
       const data = JSON.parse(fs.readFileSync(TOURNAMENT_STATE_FILE, 'utf8'));
       console.log('📁 Loaded tournament state:', data);
-      
+
       if (data.pid) {
         try {
           process.kill(data.pid, 0);
@@ -176,9 +176,9 @@ function clearTournamentState() {
 // Auto-pause/resume based on market hours (check every minute)
 setInterval(() => {
   if (!tournamentProcess || tournamentProcess.killed) return;
-  
+
   const market = isUSMarketOpen();
-  
+
   if (!market.isOpen && !tournamentPaused) {
     console.log(`🔔 Market closed (${market.currentTime} ET) - Auto-pausing tournament`);
     try {
@@ -289,10 +289,10 @@ async function fetchWithRetry(url, options = {}) {
 // Claude API proxy
 app.post('/api/claude', async (req, res) => {
   const { messages, model, max_tokens } = req.body;
-  
+
   if (!CLAUDE_API_KEY) {
-     console.log('⚠️ No Anthropic API key found.');
-     return res.status(500).json({ error: 'Claude API key not configured' });
+    console.log('⚠️ No Anthropic API key found.');
+    return res.status(500).json({ error: 'Claude API key not configured' });
   }
 
   try {
@@ -313,7 +313,7 @@ app.post('/api/claude', async (req, res) => {
         messages: messages
       })
     });
-    
+
     const data = await response.json();
     if (data.error) {
       console.error('Claude API error:', data.error);
@@ -331,7 +331,7 @@ app.post('/api/claude', async (req, res) => {
 app.get('/api/stocktwits/:symbol', async (req, res) => {
   const { symbol } = req.params;
   const url = `https://api.stocktwits.com/api/2/streams/symbol/${symbol}.json`;
-  
+
   try {
     console.log(`📡 Proxying StockTwits request for ${symbol}...`);
     const response = await fetchWithRetry(url, { timeoutMs: 15000, retries: 2 });
@@ -348,7 +348,7 @@ app.get('/api/reddit/:subreddit/search', async (req, res) => {
   const { subreddit } = req.params;
   const { q } = req.query;
   const url = `https://www.reddit.com/r/${subreddit}/search.json?q=${q}&restrict_sr=1&limit=25&sort=new`;
-  
+
   try {
     console.log(`📡 Proxying Reddit request for r/${subreddit} - ${q}...`);
     const response = await fetchWithRetry(url, {
@@ -376,7 +376,7 @@ app.get('/health', (req, res) => {
 // Start Enhanced Analysis Backend
 function startEnhancedAnalysisBackend() {
   console.log('\n📊 Starting Enhanced Analysis Backend...');
-  
+
   try {
     // Spawn Python process for enhanced analysis backend
     enhancedAnalysisBackend = spawn('python', ['enhanced_analysis_backend.py'], {
@@ -425,14 +425,14 @@ function startEnhancedAnalysisBackend() {
 // Enhanced Analysis proxy endpoint
 app.get('/api/enhanced/analyze/:symbol', async (req, res) => {
   const { symbol } = req.params;
-  
+
   try {
     console.log(`📊 Proxying enhanced analysis request for ${symbol}...`);
     const response = await fetchWithRetry(`http://localhost:5003/api/analyze/${symbol}`, {
       timeoutMs: 30000,
       retries: 1
     });
-    
+
     const data = await response.json();
     res.json(data);
   } catch (error) {
@@ -465,22 +465,22 @@ app.post('/api/tournament/start', async (req, res) => {
   try {
     const { days, teams, watchlist } = req.body;
     console.log('🏆 Starting AI Tournament...');
-    
+
     if (tournamentProcess) {
       return res.status(400).json({ error: 'Tournament already running' });
     }
-    
+
     // Create watchlist file if needed
     const fs = require('fs');
     const watchlistFile = path.join(__dirname, 'tournament_watchlist.txt');
     if (watchlist && watchlist.length > 0) {
       fs.writeFileSync(watchlistFile, watchlist.join('\n'));
     }
-    
+
     // Generate experiment ID before spawning
     let experimentId = `tournament_${Date.now()}`;
     currentExperimentId = experimentId; // Store for status checks
-    
+
     // Spawn tournament process - make it detached so it can run independently
     // This ensures the tournament continues even if the frontend disconnects or modal closes
     // Use python3 for Linux compatibility (Render) or python for Windows
@@ -503,23 +503,23 @@ app.post('/api/tournament/start', async (req, res) => {
         GOOGLE_API_KEY: process.env.GOOGLE_API_KEY
       }
     });
-    
+
     // Unref the process so it can continue if parent exits
     // This ensures the tournament runs independently of the Node.js process lifecycle
     tournamentProcess.unref();
-    
+
     // Keep reference for status checks, but process is now independent
-    
+
     tournamentProcess.stdout.on('data', (data) => {
       const output = data.toString();
       console.log(`[Tournament ${experimentId}] ${output}`);
     });
-    
+
     tournamentProcess.stderr.on('data', (data) => {
       const output = data.toString();
       console.error(`[Tournament ${experimentId} Error] ${output}`);
     });
-    
+
     tournamentProcess.on('close', (code) => {
       console.log(`[Tournament ${experimentId}] Process exited with code ${code}`);
       // Only clear if it was intentionally stopped (code 0 or SIGTERM)
@@ -540,17 +540,17 @@ app.post('/api/tournament/start', async (req, res) => {
         }, 5000);
       }
     });
-    
+
     tournamentProcess.on('error', (error) => {
       console.error(`[Tournament ${experimentId}] Process error:`, error);
       tournamentProcess = null;
       currentExperimentId = null;
       clearTournamentState();
     });
-    
+
     // Save state for persistence across server restarts
     saveTournamentState(experimentId, tournamentProcess.pid);
-    
+
     res.json({
       success: true,
       experiment_id: experimentId,
@@ -609,10 +609,10 @@ app.get('/api/tournament/status/current', async (req, res) => {
 app.get('/api/tournament/status/:experimentId', async (req, res) => {
   try {
     const requestedExperimentId = req.params.experimentId;
-    
+
     // Check if the requested experiment matches the current one
     const isRunning = tournamentProcess && !tournamentProcess.killed && currentExperimentId === requestedExperimentId;
-    
+
     if (isRunning) {
       // Tournament is running - return active status
       res.json({
@@ -647,7 +647,7 @@ app.post('/api/tournament/stop', async (req, res) => {
       console.log(`[Tournament ${currentExperimentId}] Stopping tournament...`);
       // Try graceful shutdown first
       tournamentProcess.kill('SIGTERM');
-      
+
       // Wait a bit for graceful shutdown, then force kill if needed
       setTimeout(() => {
         if (tournamentProcess && !tournamentProcess.killed) {
@@ -655,14 +655,14 @@ app.post('/api/tournament/stop', async (req, res) => {
           tournamentProcess.kill('SIGKILL');
         }
       }, 5000);
-      
+
       const experimentId = currentExperimentId;
       tournamentProcess = null;
       currentExperimentId = null;
       clearTournamentState();
-      
-      res.json({ 
-        success: true, 
+
+      res.json({
+        success: true,
         message: 'Tournament stop requested',
         experiment_id: experimentId
       });
@@ -711,17 +711,17 @@ app.post('/api/tournament/pause', async (req, res) => {
 app.post('/api/tournament/resume', async (req, res) => {
   try {
     const market = isUSMarketOpen();
-    
+
     if (tournamentProcess && !tournamentProcess.killed) {
       // Check if market is open before resuming
       if (!market.isOpen) {
-        return res.json({ 
-          success: false, 
+        return res.json({
+          success: false,
           message: `Cannot resume - Market is CLOSED (${market.currentTime} ET, ${market.dayOfWeek}). Tournament will auto-resume when market opens.`,
           marketOpen: false
         });
       }
-      
+
       console.log(`[Tournament ${currentExperimentId}] Manual resume requested...`);
       process.kill(tournamentProcess.pid, 'SIGCONT');
       tournamentPaused = false;
@@ -1017,66 +1017,66 @@ app.get('/api/tournament/results', async (req, res) => {
     const sqlite3 = require('sqlite3').verbose();
     const fs = require('fs');
     const dbPath = path.join(__dirname, 'ultimate_tournament.db');
-    
+
     let results = null;
     let leaderboard = [];
-    
+
     // Check if database exists
     if (!fs.existsSync(dbPath)) {
       console.log('[Tournament Results] Database file not found, returning empty leaderboard');
-      return res.json({ 
-        results: null, 
+      return res.json({
+        results: null,
         leaderboard: [],
         message: 'No tournament database found. Start a tournament to generate results.'
       });
     }
-    
+
     // Use promise wrapper for database operations
     const db = new sqlite3.Database(dbPath, (err) => {
       if (err) {
         console.error('[Tournament Results] Database connection error:', err);
-        return res.status(500).json({ 
+        return res.status(500).json({
           error: 'Failed to connect to tournament database',
           details: err.message,
           leaderboard: []
         });
       }
     });
-    
+
     // Check if teams table exists
     db.all("SELECT name FROM sqlite_master WHERE type='table' AND name='teams'", (err, tables) => {
       if (err) {
         console.error('[Tournament Results] Table check error:', err);
         db.close();
-        return res.status(500).json({ 
+        return res.status(500).json({
           error: 'Database query error',
           details: err.message,
           leaderboard: []
         });
       }
-      
+
       if (!tables || tables.length === 0) {
         console.log('[Tournament Results] Teams table not found');
         db.close();
-        return res.json({ 
-          results: null, 
+        return res.json({
+          results: null,
           leaderboard: [],
           message: 'No tournament data found. Start a tournament to generate results.'
         });
       }
-      
+
       // Get leaderboard data
       db.all('SELECT team_id, name, total_return, total_trades FROM teams ORDER BY total_return DESC', (err, rows) => {
         if (err) {
           console.error('[Tournament Results] Query error:', err);
           db.close();
-          return res.status(500).json({ 
+          return res.status(500).json({
             error: 'Failed to fetch leaderboard',
             details: err.message,
             leaderboard: []
           });
         }
-        
+
         if (rows && rows.length > 0) {
           leaderboard = rows.map(row => ({
             team_id: row.team_id,
@@ -1084,18 +1084,18 @@ app.get('/api/tournament/results', async (req, res) => {
             return: row.total_return || 0,
             trades: row.total_trades || 0
           }));
-          
+
           console.log(`[Tournament Results] Found ${leaderboard.length} teams in leaderboard`);
         } else {
           console.log('[Tournament Results] No teams found in database');
           leaderboard = [];
         }
-        
+
         db.close((closeErr) => {
           if (closeErr) {
             console.error('[Tournament Results] Database close error:', closeErr);
           }
-          
+
           res.json({
             results: {
               total_days: 7,
@@ -1109,7 +1109,7 @@ app.get('/api/tournament/results', async (req, res) => {
     });
   } catch (error) {
     console.error('[Tournament Results] Unexpected error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to fetch tournament results',
       details: error.message,
       leaderboard: []
@@ -1122,9 +1122,9 @@ app.get('/api/tournament/results', async (req, res) => {
 // Graceful shutdown
 function shutdown() {
   console.log('\n🛑 Shutting down servers...');
-  
+
   // Autonomous backend removed
-  
+
   if (enhancedAnalysisBackend) {
     console.log('   Stopping Enhanced Analysis backend...');
     try {
@@ -1133,14 +1133,14 @@ function shutdown() {
       console.error('   Error stopping Enhanced Analysis backend:', error.message);
     }
   }
-  
+
   // Note: Tournament process will continue running even if server shuts down
   // This is intentional - tournament should complete independently
   if (tournamentProcess && !tournamentProcess.killed) {
     console.log(`   ⚠️  Tournament ${currentExperimentId} is still running.`);
     console.log('   Tournament will continue in background. Use /api/tournament/stop to stop it.');
   }
-  
+
   process.exit(0);
 }
 
@@ -1173,7 +1173,7 @@ app.listen(PORT, () => {
   console.log(`   - Reddit: http://localhost:${PORT}/api/reddit/:subreddit/search?q=:query`);
   console.log(`   - Claude AI: http://localhost:${PORT}/api/claude/analyze`);
   console.log(`\n🔥 Ready to serve social sentiment data!`);
-  
+
   // Start AI backends after proxy is ready
   startEnhancedAnalysisBackend();
   // Autonomous Agent and Intelligent Agent removed

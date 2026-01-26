@@ -29,3 +29,5 @@ set-api-keys*.bat
 # Build artifacts
 dist/
 build/
+src/
+.claude/

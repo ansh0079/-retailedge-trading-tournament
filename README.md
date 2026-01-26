@@ -1,189 +1,107 @@
-# 🚀 Retail Edge Pro - Quick Start
+# 🚀 RetailEdge Pro - Stock Analysis Platform
 
-## Instant Start (Double-Click)
+A sophisticated stock analysis platform with AI-powered insights, real-time data, and social sentiment analysis.
 
-**👉 Just double-click `start.bat` to launch the app!**
+## 🌐 Deployment
 
-It will:
-- ✅ Start the server automatically
-- ✅ Open your browser to http://localhost:3002
-- ✅ Keep running in the background
+This project is configured for **Render.com** deployment via GitHub.
 
-That's it! The app is now running.
+### Quick Deploy to Render
+
+1. **Push to GitHub**:
+   ```bash
+   git add .
+   git commit -m "Deploy to Render"
+   git push origin main
+   ```
+
+2. **Connect to Render**:
+   - Go to [render.com](https://render.com)
+   - Create new Web Service
+   - Connect your GitHub repository
+   - Render will auto-detect `render.yaml`
+
+3. **Set Environment Variables** in Render Dashboard:
+   - `FMP_API_KEY` - Financial Modeling Prep API key
+   - `ANTHROPIC_API_KEY` - Claude AI API key
+   - `DEEPSEEK_API_KEY` - DeepSeek AI API key (optional)
+   - `KIMI_API_KEY` - Kimi AI API key (optional)
+   - `GOOGLE_API_KEY` - Google AI API key (optional)
 
 ---
 
-## 📚 Documentation
+## 🔑 Required API Keys
 
-- **[START_APP.md](START_APP.md)** - Detailed startup instructions and troubleshooting
-- **[TOURNAMENT_CONTROLS.md](TOURNAMENT_CONTROLS.md)** - Tournament pause/resume/stop controls guide
-- **[FIXES_APPLIED.md](FIXES_APPLIED.md)** - Complete changelog of all fixes
-- **[DEBUG_TOURNAMENT_BUTTONS.md](DEBUG_TOURNAMENT_BUTTONS.md)** - Debugging tournament controls
+| Key | Purpose | Get it from |
+|-----|---------|-------------|
+| `FMP_API_KEY` | Real-time stock data | [financialmodelingprep.com](https://financialmodelingprep.com) |
+| `ANTHROPIC_API_KEY` | AI analysis | [anthropic.com](https://www.anthropic.com) |
 
 ---
 
-## ⚡ Quick Actions
+## 📁 Project Structure
 
-### Start the App
-```cmd
-start.bat
 ```
-Or double-click `start.bat`
-
-### Stop the Server
-Press `Ctrl+C` twice in the server window
-
-### View Tournament Status
-Open: http://localhost:3002/api/tournament/status/current
-
-### Check Market Hours
-Open: http://localhost:3002/api/market/status
-
----
-
-## 🎮 Using the Tournament
-
-1. **Start App**: Double-click `start.bat`
-2. **Start Tournament**: 
-   - Click "AI Tournament" in sidebar
-   - Click "Start AI Tournament"
-   - Wait for green "Tournament Running" indicator
-3. **View Progress**: Click "Tournament Logs" button in top navigation
-4. **Control Tournament**:
-   - **Pause**: Yellow button (pauses the tournament)
-   - **Resume**: Green button (only works during market hours)
-   - **Stop**: Red button (terminates tournament completely)
-
----
-
-## 🔍 Key Features
-
-### Tournament Controls
-- ✅ **Live Status Indicator**: Green pulsing light when running
-- ✅ **Pause/Resume**: Manual control or auto-pause outside market hours
-- ✅ **Market Hours Detection**: 9:30 AM - 4:00 PM ET (weekdays)
-- ✅ **Tournament Logs**: Real-time trades and event logs
-- ✅ **Persistence**: Tournaments survive server restarts
-
-### Auto Pause/Resume
-- 🕐 **4:00 PM ET**: Tournament auto-pauses when market closes
-- 🕐 **9:30 AM ET**: Tournament auto-resumes when market opens
-- 📅 **Weekends**: Stays paused on Sat/Sun
-
----
-
-## 🆘 Troubleshooting
-
-### Server Not Starting
-```cmd
-# Check if port is in use
-netstat -ano | findstr :3002
-
-# Kill existing process
-taskkill /F /PID <PID_NUMBER>
-
-# Try again
-start.bat
-```
-
-### Tournament Buttons Not Showing
-1. Ensure server is running (`start.bat`)
-2. Open http://localhost:3002 (not file://)
-3. Hard refresh: `Ctrl+Shift+R`
-4. Check browser console (F12) for debug output
-
-### "Tournament Already Running"
-```cmd
-# Stop existing tournament
-curl -X POST http://localhost:3002/api/tournament/stop
-
-# Or from browser console:
-fetch('http://localhost:3002/api/tournament/stop', {method: 'POST'})
+├── index.html          # Main frontend application
+├── proxy-server.js     # Express backend server
+├── package.json        # Node.js dependencies
+├── render.yaml         # Render deployment config
+├── SP500_STOCKS.json   # S&P 500 stock list
+└── .env.example        # Environment variables template
 ```
 
 ---
 
-## 🛠️ Tech Stack
+## 🛠️ Local Development
 
-- **Frontend**: React 18 + Tailwind CSS
-- **Backend**: Node.js + Express
-- **Tournament**: Python (multi-AI agents)
-- **Database**: SQLite3
-- **Analysis**: Claude AI + Multi-source sentiment
+1. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+
+2. **Set up environment**:
+   ```bash
+   # Copy example to .env
+   cp .env.example .env
+   # Add your API keys to .env
+   ```
+
+3. **Start the server**:
+   ```bash
+   npm start
+   ```
+
+4. **Open in browser**: http://localhost:3002
+
+---
+
+## 🎯 Features
+
+- 📊 **Real-time Stock Data** - Live quotes and charts
+- 🤖 **AI Analysis** - Claude-powered stock insights
+- 📱 **Social Sentiment** - Reddit & StockTwits integration
+- 🏆 **Tournament Mode** - AI trading competition
 
 ---
 
 ## 📊 API Endpoints
 
-- `GET /api/tournament/status/current` - Tournament status
-- `GET /api/market/status` - Market hours and status
-- `GET /api/tournament/logs` - Last 100 log entries
-- `GET /api/tournament/trades` - Last 100 trades
-- `POST /api/tournament/start` - Start new tournament
-- `POST /api/tournament/pause` - Pause running tournament
-- `POST /api/tournament/resume` - Resume paused tournament
-- `POST /api/tournament/stop` - Stop and terminate tournament
+- `GET /` - Main application
+- `GET /api/health` - Health check
+- `POST /api/claude` - AI analysis proxy
+- `GET /api/stocktwits/:symbol` - StockTwits sentiment
+- `GET /api/reddit/:subreddit/search` - Reddit search
 
 ---
 
-## 💡 Pro Tips
+## 🔒 Security
 
-1. **Bookmark it**: Add http://localhost:3002 to favorites
-2. **Keep server running**: Don't close the server window
-3. **Check logs**: Server window shows all activity
-4. **Market hours matter**: Resume only works during trading hours
-5. **State persists**: Your tournament continues even after restarting the server
+- Never commit `.env` file (it's in `.gitignore`)
+- Use Render's environment variables for production
+- API keys are only used server-side
 
 ---
 
-## 📁 Important Files
+## 📜 License
 
-- `start.bat` - One-click startup script
-- `proxy-server.js` - Main backend server
-- `ultimate_trading_tournament.py` - Tournament engine
-- `.tournament_state.json` - Tournament persistence (auto-created)
-- `ultimate_tournament.db` - Tournament database (auto-created)
-
----
-
-## 🎯 What's New (Latest Updates)
-
-### UI Changes
-- ✅ Removed leaderboard tab
-- ✅ Added "Tournament Logs" button (always visible)
-- ✅ Added green pulsing status indicator when tournament runs
-- ✅ Tournament controls in logs modal (Pause/Resume/Stop)
-
-### Features Added
-- ✅ Manual pause/resume controls
-- ✅ Auto pause/resume based on market hours
-- ✅ Market status indicator (Open/Closed with ET time)
-- ✅ Live trades display (last 100 trades)
-- ✅ Live event logs (last 100 events)
-- ✅ Tournament state persistence across restarts
-- ✅ Process reconnection on server restart
-
----
-
-## 🚀 Getting Started
-
-1. **First Time**:
-   ```cmd
-   npm install
-   start.bat
-   ```
-
-2. **Every Time After**:
-   ```cmd
-   start.bat
-   ```
-   Or just double-click `start.bat`
-
-3. **Use the App**:
-   - Browser opens automatically
-   - Start trading competitions
-   - Monitor with Tournament Logs modal
-
----
-
-**Need help?** Check [START_APP.md](START_APP.md) for detailed instructions!
+MIT License
