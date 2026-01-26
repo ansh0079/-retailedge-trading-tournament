@@ -13,20 +13,9 @@ const PORT = process.env.PORT || 3002; // Use environment variable for cloud dep
 // API Keys - Use environment variables for security
 const CLAUDE_API_KEY = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
 
-// Check for AI API keys (tournament supports multiple AI providers)
-const apiKeys = {
-  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-  DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
-  KIMI_API_KEY: process.env.KIMI_API_KEY,
-  GOOGLE_API_KEY: process.env.GOOGLE_API_KEY
-};
-
-const missingKeys = Object.entries(apiKeys).filter(([key, value]) => !value).map(([key]) => key);
-if (missingKeys.length > 0) {
-  console.error('⚠️  WARNING: Some AI API keys not set in environment variables');
-  console.error('   Missing keys:', missingKeys.join(', '));
-  console.error('   Tournament teams will be limited to available API keys');
-  console.error('   Set these in your .env file or hosting platform to enable all teams');
+if (!CLAUDE_API_KEY) {
+  console.error('⚠️  WARNING: ANTHROPIC_API_KEY not set in environment variables');
+  console.error('   Please set ANTHROPIC_API_KEY in your .env file or hosting platform');
 }
 
 // Enable CORS for all routes
@@ -35,35 +24,11 @@ app.use(express.json());
 
 // Explicit root route - serve index.html
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-// Health check endpoint for Render.com
-app.get('/api/health', (req, res) => {
-  const fs = require('fs');
-  const marketStatus = isUSMarketOpen();
-
-  // Check if tournament is running
-  let tournamentRunning = false;
-  try {
-    const stateData = fs.readFileSync(TOURNAMENT_STATE_FILE, 'utf8');
-    const state = JSON.parse(stateData);
-    tournamentRunning = state.running && state.pid && isPidRunning(state.pid);
-  } catch (err) {
-    // State file doesn't exist or is invalid
-  }
-
-  res.json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    marketStatus: marketStatus,
-    tournamentRunning: tournamentRunning,
-    tournamentPaused: tournamentPaused
-  });
-});
-
-// Serve static files from root folder
-app.use(express.static(__dirname, {
+// Serve static files from dist folder
+app.use(express.static(path.join(__dirname, 'dist'), {
   index: false, // Don't serve index.html automatically
   fallthrough: true // Continue to next middleware if file not found
 }));
@@ -72,139 +37,6 @@ app.use(express.static(__dirname, {
 
 // Store background processes
 let enhancedAnalysisBackend = null;
-
-// Tournament state file for persistence across server restarts
-const TOURNAMENT_STATE_FILE = path.join(__dirname, '.tournament_state.json');
-let tournamentPaused = false;
-
-// ═══════════════════════════════════════════════════════════════════════════
-// US MARKET HOURS CHECKER (9:30 AM - 4:00 PM Eastern Time)
-// ═══════════════════════════════════════════════════════════════════════════
-
-function isUSMarketOpen() {
-  const now = new Date();
-  const etOptions = { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hour12: false };
-  const etTime = new Intl.DateTimeFormat('en-US', etOptions).format(now);
-  const [hours, minutes] = etTime.split(':').map(Number);
-  const currentMinutes = hours * 60 + minutes;
-
-  const marketOpen = 9 * 60 + 30;  // 9:30 AM
-  const marketClose = 16 * 60;     // 4:00 PM
-
-  const dayOfWeek = new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'short' });
-  const isWeekday = !['Sat', 'Sun'].includes(dayOfWeek);
-  const isOpen = isWeekday && currentMinutes >= marketOpen && currentMinutes < marketClose;
-
-  return { isOpen, currentTime: etTime, dayOfWeek };
-}
-
-// Load tournament state on server start
-function loadTournamentState() {
-  const fs = require('fs');
-  try {
-    if (fs.existsSync(TOURNAMENT_STATE_FILE)) {
-      const data = JSON.parse(fs.readFileSync(TOURNAMENT_STATE_FILE, 'utf8'));
-      console.log('📁 Loaded tournament state:', data);
-
-      if (data.pid) {
-        try {
-          process.kill(data.pid, 0);
-          console.log(`✅ Tournament process ${data.pid} is still running!`);
-          currentExperimentId = data.experimentId;
-          tournamentPaused = data.paused || false;
-          return data;
-        } catch (e) {
-          console.log(`⚠️ Tournament process ${data.pid} no longer running`);
-          // Keep experiment ID for data continuity
-          currentExperimentId = data.experimentId;
-          tournamentPaused = true;
-          return { ...data, paused: true, processLost: true };
-        }
-      }
-    }
-  } catch (error) {
-    console.log('No existing tournament state found');
-  }
-  return null;
-}
-
-// Save tournament state with pause info
-function saveTournamentState(experimentId, pid, paused = false) {
-  const fs = require('fs');
-  try {
-    const state = {
-      experimentId,
-      pid,
-      paused,
-      running: true,
-      startedAt: new Date().toISOString(),
-      lastUpdated: new Date().toISOString()
-    };
-    fs.writeFileSync(TOURNAMENT_STATE_FILE, JSON.stringify(state, null, 2));
-    console.log('💾 Saved tournament state:', state);
-  } catch (error) {
-    console.error('Failed to save tournament state:', error);
-  }
-}
-
-// Update pause state only
-function updatePauseState(paused) {
-  const fs = require('fs');
-  try {
-    if (fs.existsSync(TOURNAMENT_STATE_FILE)) {
-      const data = JSON.parse(fs.readFileSync(TOURNAMENT_STATE_FILE, 'utf8'));
-      data.paused = paused;
-      data.lastUpdated = new Date().toISOString();
-      fs.writeFileSync(TOURNAMENT_STATE_FILE, JSON.stringify(data, null, 2));
-    }
-  } catch (e) { /* ignore */ }
-}
-
-// Clear tournament state
-function clearTournamentState() {
-  const fs = require('fs');
-  try {
-    if (fs.existsSync(TOURNAMENT_STATE_FILE)) {
-      fs.unlinkSync(TOURNAMENT_STATE_FILE);
-      console.log('🗑️ Cleared tournament state');
-    }
-  } catch (error) {
-    console.error('Failed to clear tournament state:', error);
-  }
-}
-
-// Auto-pause/resume based on market hours (check every minute)
-setInterval(() => {
-  if (!tournamentProcess || tournamentProcess.killed) return;
-
-  const market = isUSMarketOpen();
-
-  if (!market.isOpen && !tournamentPaused) {
-    console.log(`🔔 Market closed (${market.currentTime} ET) - Auto-pausing tournament`);
-    try {
-      process.kill(tournamentProcess.pid, 'SIGSTOP');
-      tournamentPaused = true;
-      updatePauseState(true);
-    } catch (e) { console.error('Auto-pause failed:', e); }
-  } else if (market.isOpen && tournamentPaused) {
-    console.log(`🔔 Market opened (${market.currentTime} ET) - Auto-resuming tournament`);
-    try {
-      process.kill(tournamentProcess.pid, 'SIGCONT');
-      tournamentPaused = false;
-      updatePauseState(false);
-    } catch (e) { console.error('Auto-resume failed:', e); }
-  }
-}, 60000);
-
-// Load state on server startup
-const existingTournament = loadTournamentState();
-if (existingTournament) {
-  currentExperimentId = existingTournament.experimentId;
-  tournamentPaused = existingTournament.paused || false;
-  const market = isUSMarketOpen();
-  console.log(`🔄 Reconnected to tournament: ${currentExperimentId}`);
-  console.log(`📊 Paused: ${tournamentPaused} | Market: ${market.isOpen ? 'OPEN' : 'CLOSED'} (${market.currentTime} ET)`);
-}
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -289,10 +121,10 @@ async function fetchWithRetry(url, options = {}) {
 // Claude API proxy
 app.post('/api/claude', async (req, res) => {
   const { messages, model, max_tokens } = req.body;
-
+  
   if (!CLAUDE_API_KEY) {
-    console.log('⚠️ No Anthropic API key found.');
-    return res.status(500).json({ error: 'Claude API key not configured' });
+     console.log('⚠️ No Anthropic API key found.');
+     return res.status(500).json({ error: 'Claude API key not configured' });
   }
 
   try {
@@ -313,7 +145,7 @@ app.post('/api/claude', async (req, res) => {
         messages: messages
       })
     });
-
+    
     const data = await response.json();
     if (data.error) {
       console.error('Claude API error:', data.error);
@@ -331,7 +163,7 @@ app.post('/api/claude', async (req, res) => {
 app.get('/api/stocktwits/:symbol', async (req, res) => {
   const { symbol } = req.params;
   const url = `https://api.stocktwits.com/api/2/streams/symbol/${symbol}.json`;
-
+  
   try {
     console.log(`📡 Proxying StockTwits request for ${symbol}...`);
     const response = await fetchWithRetry(url, { timeoutMs: 15000, retries: 2 });
@@ -348,7 +180,7 @@ app.get('/api/reddit/:subreddit/search', async (req, res) => {
   const { subreddit } = req.params;
   const { q } = req.query;
   const url = `https://www.reddit.com/r/${subreddit}/search.json?q=${q}&restrict_sr=1&limit=25&sort=new`;
-
+  
   try {
     console.log(`📡 Proxying Reddit request for r/${subreddit} - ${q}...`);
     const response = await fetchWithRetry(url, {
@@ -376,7 +208,7 @@ app.get('/health', (req, res) => {
 // Start Enhanced Analysis Backend
 function startEnhancedAnalysisBackend() {
   console.log('\n📊 Starting Enhanced Analysis Backend...');
-
+  
   try {
     // Spawn Python process for enhanced analysis backend
     enhancedAnalysisBackend = spawn('python', ['enhanced_analysis_backend.py'], {
@@ -425,14 +257,14 @@ function startEnhancedAnalysisBackend() {
 // Enhanced Analysis proxy endpoint
 app.get('/api/enhanced/analyze/:symbol', async (req, res) => {
   const { symbol } = req.params;
-
+  
   try {
     console.log(`📊 Proxying enhanced analysis request for ${symbol}...`);
     const response = await fetchWithRetry(`http://localhost:5003/api/analyze/${symbol}`, {
       timeoutMs: 30000,
       retries: 1
     });
-
+    
     const data = await response.json();
     res.json(data);
   } catch (error) {
@@ -465,22 +297,22 @@ app.post('/api/tournament/start', async (req, res) => {
   try {
     const { days, teams, watchlist } = req.body;
     console.log('🏆 Starting AI Tournament...');
-
+    
     if (tournamentProcess) {
       return res.status(400).json({ error: 'Tournament already running' });
     }
-
+    
     // Create watchlist file if needed
     const fs = require('fs');
     const watchlistFile = path.join(__dirname, 'tournament_watchlist.txt');
     if (watchlist && watchlist.length > 0) {
       fs.writeFileSync(watchlistFile, watchlist.join('\n'));
     }
-
+    
     // Generate experiment ID before spawning
     let experimentId = `tournament_${Date.now()}`;
     currentExperimentId = experimentId; // Store for status checks
-
+    
     // Spawn tournament process - make it detached so it can run independently
     // This ensures the tournament continues even if the frontend disconnects or modal closes
     // Use python3 for Linux compatibility (Render) or python for Windows
@@ -494,40 +326,32 @@ app.post('/api/tournament/start', async (req, res) => {
       cwd: __dirname,
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true, // Make it truly detached so it can run independently
-      shell: true, // Use shell for better cross-platform support
-      env: {
-        ...process.env, // Pass all environment variables
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-        DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
-        KIMI_API_KEY: process.env.KIMI_API_KEY,
-        GOOGLE_API_KEY: process.env.GOOGLE_API_KEY
-      }
+      shell: true // Use shell for better cross-platform support
     });
-
+    
     // Unref the process so it can continue if parent exits
     // This ensures the tournament runs independently of the Node.js process lifecycle
     tournamentProcess.unref();
-
+    
     // Keep reference for status checks, but process is now independent
-
+    
     tournamentProcess.stdout.on('data', (data) => {
       const output = data.toString();
       console.log(`[Tournament ${experimentId}] ${output}`);
     });
-
+    
     tournamentProcess.stderr.on('data', (data) => {
       const output = data.toString();
       console.error(`[Tournament ${experimentId} Error] ${output}`);
     });
-
+    
     tournamentProcess.on('close', (code) => {
       console.log(`[Tournament ${experimentId}] Process exited with code ${code}`);
       // Only clear if it was intentionally stopped (code 0 or SIGTERM)
       // If it crashed (non-zero), we might want to keep the ID for debugging
       if (code === 0 || code === null) {
         tournamentProcess = null;
-        currentExperimentId = null;
-        clearTournamentState(); // Clear state when tournament ends normally
+        currentExperimentId = null; // Clear when tournament ends normally
       } else {
         console.log(`[Tournament ${experimentId}] Process exited unexpectedly. Keeping reference for status check.`);
         // Keep the reference for a bit to allow status checks
@@ -535,22 +359,17 @@ app.post('/api/tournament/start', async (req, res) => {
           if (tournamentProcess && tournamentProcess.killed) {
             tournamentProcess = null;
             currentExperimentId = null;
-            clearTournamentState();
           }
         }, 5000);
       }
     });
-
+    
     tournamentProcess.on('error', (error) => {
       console.error(`[Tournament ${experimentId}] Process error:`, error);
       tournamentProcess = null;
       currentExperimentId = null;
-      clearTournamentState();
     });
-
-    // Save state for persistence across server restarts
-    saveTournamentState(experimentId, tournamentProcess.pid);
-
+    
     res.json({
       success: true,
       experiment_id: experimentId,
@@ -562,57 +381,13 @@ app.post('/api/tournament/start', async (req, res) => {
   }
 });
 
-// Get current tournament status (without experiment ID)
-app.get('/api/tournament/status/current', async (req, res) => {
-  try {
-    const fs = require('fs');
-
-    // First check if we have a running process in memory (simplest check)
-    if (tournamentProcess && currentExperimentId) {
-      return res.json({
-        status: 'running',
-        experiment_id: currentExperimentId,
-        paused: tournamentPaused,
-        message: 'Tournament is running in background'
-      });
-    }
-
-    // Check state file for orphaned/persisted tournament
-    if (fs.existsSync(TOURNAMENT_STATE_FILE)) {
-      try {
-        const state = JSON.parse(fs.readFileSync(TOURNAMENT_STATE_FILE, 'utf8'));
-        if (state.running && state.experimentId) {
-          currentExperimentId = state.experimentId; // Reconnect
-          return res.json({
-            status: 'running',
-            experiment_id: state.experimentId,
-            paused: state.paused || false,
-            message: 'Tournament is running (from state file)',
-            startedAt: state.startedAt
-          });
-        }
-      } catch (e) {
-        console.log('Error reading tournament state:', e);
-      }
-    }
-
-    res.json({
-      status: 'idle',
-      experiment_id: 'current',
-      message: 'No tournament currently running'
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 app.get('/api/tournament/status/:experimentId', async (req, res) => {
   try {
     const requestedExperimentId = req.params.experimentId;
-
+    
     // Check if the requested experiment matches the current one
     const isRunning = tournamentProcess && !tournamentProcess.killed && currentExperimentId === requestedExperimentId;
-
+    
     if (isRunning) {
       // Tournament is running - return active status
       res.json({
@@ -641,13 +416,34 @@ app.get('/api/tournament/status/:experimentId', async (req, res) => {
   }
 });
 
+// Get current tournament status (without experiment ID)
+app.get('/api/tournament/status/current', async (req, res) => {
+  try {
+    const isRunning = tournamentProcess && !tournamentProcess.killed && tournamentProcess.exitCode === null;
+    if (isRunning && currentExperimentId) {
+      res.json({
+        status: 'running',
+        experiment_id: currentExperimentId, // Return actual experiment ID
+        message: 'Tournament is running in background'
+      });
+    } else {
+      res.json({
+        status: 'idle',
+        message: 'No tournament currently running'
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/tournament/stop', async (req, res) => {
   try {
     if (tournamentProcess && !tournamentProcess.killed) {
       console.log(`[Tournament ${currentExperimentId}] Stopping tournament...`);
       // Try graceful shutdown first
       tournamentProcess.kill('SIGTERM');
-
+      
       // Wait a bit for graceful shutdown, then force kill if needed
       setTimeout(() => {
         if (tournamentProcess && !tournamentProcess.killed) {
@@ -655,358 +451,21 @@ app.post('/api/tournament/stop', async (req, res) => {
           tournamentProcess.kill('SIGKILL');
         }
       }, 5000);
-
+      
       const experimentId = currentExperimentId;
       tournamentProcess = null;
       currentExperimentId = null;
-      clearTournamentState();
-
-      res.json({
-        success: true,
+      
+      res.json({ 
+        success: true, 
         message: 'Tournament stop requested',
         experiment_id: experimentId
       });
     } else {
-      // Also try to stop by reading state file (for orphaned processes)
-      const fs = require('fs');
-      try {
-        if (fs.existsSync(TOURNAMENT_STATE_FILE)) {
-          const state = JSON.parse(fs.readFileSync(TOURNAMENT_STATE_FILE, 'utf8'));
-          if (state.pid) {
-            process.kill(state.pid, 'SIGTERM');
-            clearTournamentState();
-            return res.json({ success: true, message: 'Orphaned tournament stopped' });
-          }
-        }
-      } catch (e) {
-        console.log('No orphaned tournament to stop');
-      }
       res.json({ success: true, message: 'No tournament running' });
     }
   } catch (error) {
     console.error('Tournament stop error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Pause tournament (send SIGSTOP signal)
-app.post('/api/tournament/pause', async (req, res) => {
-  try {
-    if (tournamentProcess && !tournamentProcess.killed) {
-      console.log(`[Tournament ${currentExperimentId}] Manual pause requested...`);
-      process.kill(tournamentProcess.pid, 'SIGSTOP');
-      tournamentPaused = true;
-      updatePauseState(true);
-      res.json({ success: true, message: 'Tournament paused', paused: true });
-    } else {
-      res.status(400).json({ error: 'No tournament running' });
-    }
-  } catch (error) {
-    console.error('Pause error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Resume tournament (send SIGCONT signal)
-app.post('/api/tournament/resume', async (req, res) => {
-  try {
-    const market = isUSMarketOpen();
-
-    if (tournamentProcess && !tournamentProcess.killed) {
-      // Check if market is open before resuming
-      if (!market.isOpen) {
-        return res.json({
-          success: false,
-          message: `Cannot resume - Market is CLOSED (${market.currentTime} ET, ${market.dayOfWeek}). Tournament will auto-resume when market opens.`,
-          marketOpen: false
-        });
-      }
-
-      console.log(`[Tournament ${currentExperimentId}] Manual resume requested...`);
-      process.kill(tournamentProcess.pid, 'SIGCONT');
-      tournamentPaused = false;
-      updatePauseState(false);
-      res.json({ success: true, message: 'Tournament resumed', paused: false, marketOpen: true });
-    } else {
-      res.status(400).json({ error: 'No tournament running' });
-    }
-  } catch (error) {
-    console.error('Resume error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get tournament logs
-app.get('/api/tournament/logs', async (req, res) => {
-  try {
-    // TODO: Load from SQLite database
-    // For now, return empty array
-    res.json({ logs: [] });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get tournament trades
-app.get('/api/tournament/trades', async (req, res) => {
-  try {
-    // TODO: Load from SQLite database
-    // For now, return empty array
-    res.json({ trades: [] });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// SSE endpoint for tournament leaderboard updates
-app.get('/api/tournament/sse/leaderboard/:experimentId', async (req, res) => {
-  const { experimentId } = req.params;
-
-  // Set up SSE headers
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive'
-  });
-
-  console.log(`[SSE] Client connected to leaderboard stream for ${experimentId}`);
-
-  // Send initial connection message
-  res.write(`data: ${JSON.stringify({ message: 'Connected to leaderboard updates' })}\n\n`);
-
-  // Poll database every 2 seconds for updates
-  const intervalId = setInterval(async () => {
-    try {
-      const sqlite3 = require('sqlite3').verbose();
-      const fs = require('fs');
-      const dbPath = path.join(__dirname, 'ultimate_tournament.db');
-
-      if (!fs.existsSync(dbPath)) {
-        return; // Database not created yet
-      }
-
-      const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (err) => {
-        if (err) {
-          console.error('[SSE Leaderboard] Database error:', err);
-          return;
-        }
-      });
-
-      db.all(`
-        SELECT team_id, name, total_return, total_trades, current_cash, current_holdings_value
-        FROM teams
-        WHERE experiment_id = ?
-        ORDER BY total_return DESC
-      `, [experimentId], (err, rows) => {
-        if (err) {
-          console.error('[SSE Leaderboard] Query error:', err);
-          db.close();
-          return;
-        }
-
-        if (rows && rows.length > 0) {
-          const leaderboard = rows.map(row => ({
-            team_id: row.team_id,
-            name: row.name || `Team ${row.team_id}`,
-            return: row.total_return || 0,
-            trades: row.total_trades || 0,
-            cash: row.current_cash || 0,
-            holdings: row.current_holdings_value || 0
-          }));
-
-          res.write(`data: ${JSON.stringify({ leaderboard })}\n\n`);
-        }
-
-        db.close();
-      });
-    } catch (error) {
-      console.error('[SSE Leaderboard] Error:', error);
-    }
-  }, 2000);
-
-  // Clean up on client disconnect
-  req.on('close', () => {
-    clearInterval(intervalId);
-    console.log(`[SSE] Client disconnected from leaderboard stream for ${experimentId}`);
-  });
-});
-
-// SSE endpoint for tournament logs
-app.get('/api/tournament/sse/logs/:experimentId', async (req, res) => {
-  const { experimentId } = req.params;
-
-  // Set up SSE headers
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive'
-  });
-
-  console.log(`[SSE] Client connected to logs stream for ${experimentId}`);
-
-  // Send initial connection message
-  res.write(`data: ${JSON.stringify({ message: '📡 Connected to tournament logs', type: 'success' })}\n\n`);
-
-  let lastLogId = 0;
-
-  // Poll database every 1 second for new logs
-  const intervalId = setInterval(async () => {
-    try {
-      const sqlite3 = require('sqlite3').verbose();
-      const fs = require('fs');
-      const dbPath = path.join(__dirname, 'ultimate_tournament.db');
-
-      if (!fs.existsSync(dbPath)) {
-        return; // Database not created yet
-      }
-
-      const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (err) => {
-        if (err) {
-          console.error('[SSE Logs] Database error:', err);
-          return;
-        }
-      });
-
-      // Check if logs table exists and get new logs
-      db.all(`
-        SELECT name FROM sqlite_master WHERE type='table' AND name='logs'
-      `, [], (err, tables) => {
-        if (err || !tables || tables.length === 0) {
-          db.close();
-          return;
-        }
-
-        db.all(`
-          SELECT id, timestamp, message, log_type
-          FROM logs
-          WHERE experiment_id = ? AND id > ?
-          ORDER BY id ASC
-        `, [experimentId, lastLogId], (err, rows) => {
-          if (err) {
-            console.error('[SSE Logs] Query error:', err);
-            db.close();
-            return;
-          }
-
-          if (rows && rows.length > 0) {
-            rows.forEach(row => {
-              lastLogId = Math.max(lastLogId, row.id);
-              res.write(`data: ${JSON.stringify({
-                message: row.message,
-                type: row.log_type || 'info',
-                timestamp: row.timestamp
-              })}\n\n`);
-            });
-          }
-
-          db.close();
-        });
-      });
-    } catch (error) {
-      console.error('[SSE Logs] Error:', error);
-    }
-  }, 1000);
-
-  // Clean up on client disconnect
-  req.on('close', () => {
-    clearInterval(intervalId);
-    console.log(`[SSE] Client disconnected from logs stream for ${experimentId}`);
-  });
-});
-
-// Get tournament logs
-app.get('/api/tournament/logs', async (req, res) => {
-  try {
-    const sqlite3 = require('sqlite3').verbose();
-    const fs = require('fs');
-    const dbPath = path.join(__dirname, 'ultimate_tournament.db');
-
-    if (!fs.existsSync(dbPath)) {
-      return res.json({ logs: [] });
-    }
-
-    const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY);
-
-    db.all(`
-      SELECT name FROM sqlite_master WHERE type='table' AND name='logs'
-    `, [], (err, tables) => {
-      if (err || !tables || tables.length === 0) {
-        db.close();
-        return res.json({ logs: [] });
-      }
-
-      db.all(`
-        SELECT timestamp, message, log_type as type
-        FROM logs
-        ORDER BY id DESC
-        LIMIT 100
-      `, [], (err, rows) => {
-        db.close();
-        if (err) {
-          return res.status(500).json({ error: err.message, logs: [] });
-        }
-        res.json({ logs: rows || [] });
-      });
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message, logs: [] });
-  }
-});
-
-// Get tournament trades
-app.get('/api/tournament/trades', async (req, res) => {
-  try {
-    const sqlite3 = require('sqlite3').verbose();
-    const fs = require('fs');
-    const dbPath = path.join(__dirname, 'ultimate_tournament.db');
-
-    if (!fs.existsSync(dbPath)) {
-      return res.json({ trades: [] });
-    }
-
-    const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY);
-
-    db.all(`
-      SELECT name FROM sqlite_master WHERE type='table' AND name='trades'
-    `, [], (err, tables) => {
-      if (err || !tables || tables.length === 0) {
-        db.close();
-        return res.json({ trades: [] });
-      }
-
-      db.all(`
-        SELECT t.timestamp, t.action, t.symbol, t.shares, t.price, teams.name as team_name
-        FROM trades t
-        LEFT JOIN teams ON t.team_id = teams.team_id
-        ORDER BY t.id DESC
-        LIMIT 100
-      `, [], (err, rows) => {
-        db.close();
-        if (err) {
-          return res.status(500).json({ error: err.message, trades: [] });
-        }
-        res.json({ trades: rows || [] });
-      });
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message, trades: [] });
-  }
-});
-
-// Market status endpoint - check if market is open
-app.get('/api/market/status', async (req, res) => {
-  try {
-    const market = isUSMarketOpen();
-    res.json({
-      isOpen: market.isOpen,
-      currentTime: market.currentTime,
-      dayOfWeek: market.dayOfWeek,
-      timezone: 'America/New_York',
-      marketHours: '9:30 AM - 4:00 PM ET',
-      tournamentPaused: tournamentPaused,
-      tournamentRunning: tournamentProcess && !tournamentProcess.killed
-    });
-  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -1016,67 +475,67 @@ app.get('/api/tournament/results', async (req, res) => {
     // Load tournament results from database
     const sqlite3 = require('sqlite3').verbose();
     const fs = require('fs');
-    const dbPath = path.join(__dirname, 'ultimate_tournament.db');
-
+    const dbPath = path.join(__dirname, 'tournament.db');
+    
     let results = null;
     let leaderboard = [];
-
+    
     // Check if database exists
     if (!fs.existsSync(dbPath)) {
       console.log('[Tournament Results] Database file not found, returning empty leaderboard');
-      return res.json({
-        results: null,
+      return res.json({ 
+        results: null, 
         leaderboard: [],
         message: 'No tournament database found. Start a tournament to generate results.'
       });
     }
-
+    
     // Use promise wrapper for database operations
     const db = new sqlite3.Database(dbPath, (err) => {
       if (err) {
         console.error('[Tournament Results] Database connection error:', err);
-        return res.status(500).json({
+        return res.status(500).json({ 
           error: 'Failed to connect to tournament database',
           details: err.message,
           leaderboard: []
         });
       }
     });
-
+    
     // Check if teams table exists
     db.all("SELECT name FROM sqlite_master WHERE type='table' AND name='teams'", (err, tables) => {
       if (err) {
         console.error('[Tournament Results] Table check error:', err);
         db.close();
-        return res.status(500).json({
+        return res.status(500).json({ 
           error: 'Database query error',
           details: err.message,
           leaderboard: []
         });
       }
-
+      
       if (!tables || tables.length === 0) {
         console.log('[Tournament Results] Teams table not found');
         db.close();
-        return res.json({
-          results: null,
+        return res.json({ 
+          results: null, 
           leaderboard: [],
           message: 'No tournament data found. Start a tournament to generate results.'
         });
       }
-
+      
       // Get leaderboard data
       db.all('SELECT team_id, name, total_return, total_trades FROM teams ORDER BY total_return DESC', (err, rows) => {
         if (err) {
           console.error('[Tournament Results] Query error:', err);
           db.close();
-          return res.status(500).json({
+          return res.status(500).json({ 
             error: 'Failed to fetch leaderboard',
             details: err.message,
             leaderboard: []
           });
         }
-
+        
         if (rows && rows.length > 0) {
           leaderboard = rows.map(row => ({
             team_id: row.team_id,
@@ -1084,18 +543,18 @@ app.get('/api/tournament/results', async (req, res) => {
             return: row.total_return || 0,
             trades: row.total_trades || 0
           }));
-
+          
           console.log(`[Tournament Results] Found ${leaderboard.length} teams in leaderboard`);
         } else {
           console.log('[Tournament Results] No teams found in database');
           leaderboard = [];
         }
-
+        
         db.close((closeErr) => {
           if (closeErr) {
             console.error('[Tournament Results] Database close error:', closeErr);
           }
-
+          
           res.json({
             results: {
               total_days: 7,
@@ -1109,7 +568,7 @@ app.get('/api/tournament/results', async (req, res) => {
     });
   } catch (error) {
     console.error('[Tournament Results] Unexpected error:', error);
-    res.status(500).json({
+    res.status(500).json({ 
       error: 'Failed to fetch tournament results',
       details: error.message,
       leaderboard: []
@@ -1122,9 +581,9 @@ app.get('/api/tournament/results', async (req, res) => {
 // Graceful shutdown
 function shutdown() {
   console.log('\n🛑 Shutting down servers...');
-
+  
   // Autonomous backend removed
-
+  
   if (enhancedAnalysisBackend) {
     console.log('   Stopping Enhanced Analysis backend...');
     try {
@@ -1133,14 +592,14 @@ function shutdown() {
       console.error('   Error stopping Enhanced Analysis backend:', error.message);
     }
   }
-
+  
   // Note: Tournament process will continue running even if server shuts down
   // This is intentional - tournament should complete independently
   if (tournamentProcess && !tournamentProcess.killed) {
     console.log(`   ⚠️  Tournament ${currentExperimentId} is still running.`);
     console.log('   Tournament will continue in background. Use /api/tournament/stop to stop it.');
   }
-
+  
   process.exit(0);
 }
 
@@ -1173,10 +632,8 @@ app.listen(PORT, () => {
   console.log(`   - Reddit: http://localhost:${PORT}/api/reddit/:subreddit/search?q=:query`);
   console.log(`   - Claude AI: http://localhost:${PORT}/api/claude/analyze`);
   console.log(`\n🔥 Ready to serve social sentiment data!`);
-
+  
   // Start AI backends after proxy is ready
   startEnhancedAnalysisBackend();
   // Autonomous Agent and Intelligent Agent removed
 });
-
-// Updated: 2026-01-26 01:49:13

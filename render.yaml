@@ -2,23 +2,11 @@ services:
   - type: web
     name: retailedge-proxy
     env: node
-    plan: starter
-    buildCommand: npm install
+    buildCommand: npm install && npm run build
     startCommand: node proxy-server.js
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 3002
-      - key: FMP_API_KEY
-        sync: false
-      - key: ANTHROPIC_API_KEY
-        sync: false
-      - key: DEEPSEEK_API_KEY
-        sync: false
-      - key: KIMI_API_KEY
-        sync: false
-      - key: GOOGLE_API_KEY
-        sync: false
-    healthCheckPath: /api/health
-
+    healthCheckPath: /
