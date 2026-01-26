@@ -136,6 +136,7 @@ function saveTournamentState(experimentId, pid, paused = false) {
       experimentId,
       pid,
       paused,
+      running: true,
       startedAt: new Date().toISOString(),
       lastUpdated: new Date().toISOString()
     };
@@ -600,45 +601,39 @@ app.get('/api/tournament/status/:experimentId', async (req, res) => {
 app.get('/api/tournament/status/current', async (req, res) => {
   try {
     const fs = require('fs');
-    
-    // First check if we have a running process in memory
-    const isRunning = tournamentProcess && !tournamentProcess.killed && tournamentProcess.exitCode === null;
-    
-    if (isRunning && currentExperimentId) {
+
+    // First check if we have a running process in memory (simplest check)
+    if (tournamentProcess && currentExperimentId) {
       return res.json({
         status: 'running',
         experiment_id: currentExperimentId,
+        paused: tournamentPaused,
         message: 'Tournament is running in background'
       });
     }
-    
+
     // Check state file for orphaned/persisted tournament
     if (fs.existsSync(TOURNAMENT_STATE_FILE)) {
       try {
         const state = JSON.parse(fs.readFileSync(TOURNAMENT_STATE_FILE, 'utf8'));
-        if (state.pid) {
-          // Check if process is still alive
-          try {
-            process.kill(state.pid, 0); // Signal 0 just checks if process exists
-            currentExperimentId = state.experimentId; // Reconnect
-            return res.json({
-              status: 'running',
-              experiment_id: state.experimentId,
-              message: 'Tournament is running (reconnected)',
-              startedAt: state.startedAt
-            });
-          } catch (e) {
-            // Process no longer exists, clean up
-            clearTournamentState();
-          }
+        if (state.running && state.experimentId) {
+          currentExperimentId = state.experimentId; // Reconnect
+          return res.json({
+            status: 'running',
+            experiment_id: state.experimentId,
+            paused: state.paused || false,
+            message: 'Tournament is running (from state file)',
+            startedAt: state.startedAt
+          });
         }
       } catch (e) {
         console.log('Error reading tournament state:', e);
       }
     }
-    
+
     res.json({
       status: 'idle',
+      experiment_id: 'current',
       message: 'No tournament currently running'
     });
   } catch (error) {
