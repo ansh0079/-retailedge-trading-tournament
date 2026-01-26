@@ -562,41 +562,6 @@ app.post('/api/tournament/start', async (req, res) => {
   }
 });
 
-app.get('/api/tournament/status/:experimentId', async (req, res) => {
-  try {
-    const requestedExperimentId = req.params.experimentId;
-    
-    // Check if the requested experiment matches the current one
-    const isRunning = tournamentProcess && !tournamentProcess.killed && currentExperimentId === requestedExperimentId;
-    
-    if (isRunning) {
-      // Tournament is running - return active status
-      res.json({
-        status: 'running',
-        current_day: 1, // TODO: Parse from tournament output or database
-        total_days: 7,
-        logs: [], // TODO: Store logs in memory or database
-        experiment_id: currentExperimentId
-      });
-    } else if (currentExperimentId && currentExperimentId !== requestedExperimentId) {
-      // Different experiment ID - tournament might have restarted
-      res.json({
-        status: 'idle',
-        message: 'Experiment ID mismatch - tournament may have restarted',
-        experiment_id: requestedExperimentId
-      });
-    } else {
-      // No tournament running
-      res.json({
-        status: 'idle',
-        experiment_id: requestedExperimentId
-      });
-    }
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // Get current tournament status (without experiment ID)
 app.get('/api/tournament/status/current', async (req, res) => {
   try {
@@ -636,6 +601,41 @@ app.get('/api/tournament/status/current', async (req, res) => {
       experiment_id: 'current',
       message: 'No tournament currently running'
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/tournament/status/:experimentId', async (req, res) => {
+  try {
+    const requestedExperimentId = req.params.experimentId;
+    
+    // Check if the requested experiment matches the current one
+    const isRunning = tournamentProcess && !tournamentProcess.killed && currentExperimentId === requestedExperimentId;
+    
+    if (isRunning) {
+      // Tournament is running - return active status
+      res.json({
+        status: 'running',
+        current_day: 1, // TODO: Parse from tournament output or database
+        total_days: 7,
+        logs: [], // TODO: Store logs in memory or database
+        experiment_id: currentExperimentId
+      });
+    } else if (currentExperimentId && currentExperimentId !== requestedExperimentId) {
+      // Different experiment ID - tournament might have restarted
+      res.json({
+        status: 'idle',
+        message: 'Experiment ID mismatch - tournament may have restarted',
+        experiment_id: requestedExperimentId
+      });
+    } else {
+      // No tournament running
+      res.json({
+        status: 'idle',
+        experiment_id: requestedExperimentId
+      });
+    }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
