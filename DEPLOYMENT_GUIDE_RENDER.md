@@ -45,26 +45,50 @@ git push -u origin main
 
 4. **Configure the Service**:
    ```
-   Name: ai-tournament-backend
+   Name: retailedge-proxy
    Region: Oregon (US West) - or closest to you
    Branch: main
    Root Directory: (leave blank)
    Runtime: Node
-   Build Command: npm install
-   Start Command: npm start
+   Build Command: npm install && npm run build
+   Start Command: node proxy-server.js
    ```
 
-5. **Select Free Plan**:
+5. **Add Environment Variables**:
+   - Click "Advanced" to expand environment variables
+   - Add the following:
+     - `NODE_ENV` = `production`
+     - `PORT` = `3002`
+     - `ANTHROPIC_API_KEY` = `your-api-key-here` (REQUIRED - get from https://console.anthropic.com)
+
+6. **Enable Disk Persistence** (IMPORTANT):
+   - Scroll down to "Persistent Disk"
+   - Click "Add Disk"
+   - Name: `tournament-data`
+   - Mount Path: `/opt/render/project/src`
+   - Size: 1 GB (free tier)
+   - This ensures your tournament database persists between restarts
+
+7. **Select Free Plan**:
    - Click "Free" plan
    - Click "Create Web Service"
 
-6. **Wait for Deployment** (2-3 minutes):
+8. **Wait for Deployment** (2-3 minutes):
    - You'll see logs showing the build process
-   - Once complete, you'll get a URL like: `https://ai-tournament-backend-xxxx.onrender.com`
+   - Once complete, you'll get a URL like: `https://retailedge-proxy-xxxx.onrender.com`
 
-7. **Test Your Backend**:
-   - Open: `https://your-backend-url.onrender.com/health`
-   - You should see: `{"status":"ok","service":"AI Tournament Server","activeTournaments":0}`
+9. **Test Your Backend**:
+   - Open: `https://your-backend-url.onrender.com/api/health`
+   - You should see:
+   ```json
+   {
+     "status": "healthy",
+     "timestamp": "2026-01-26T...",
+     "marketStatus": { "isOpen": false, "currentTime": "...", "dayOfWeek": "..." },
+     "tournamentRunning": false,
+     "tournamentPaused": false
+   }
+   ```
 
 ### Step 3: Update Frontend
 
@@ -149,20 +173,33 @@ Your AI Tournament is now live! Visit your frontend URL to use it.
 
 **Important Notes:**
 
+- **ANTHROPIC_API_KEY Required**:
+  - The tournament WILL NOT START without this API key
+  - Get yours at https://console.anthropic.com
+  - Add it in Render dashboard → Environment → Environment Variables
+
 - **Free Tier Limitations**:
   - Backend may sleep after 15 minutes of inactivity (takes 30-60 seconds to wake up)
   - 750 hours/month of runtime (enough for most use cases)
+  - Use UptimeRobot (free) to ping `/api/health` every 5 minutes to keep it awake
 
 - **Testing**:
   - Visit your frontend URL
-  - Click "AI Tournament" tab
+  - Click "Tournament Logs" button in header
   - Click "Start Tournament"
-  - Watch it run live!
+  - Watch it run live with real-time logs!
 
 - **Persistence**:
-  - Tournaments will continue running even if you close your browser
-  - Results are saved on the server
-  - You can pause/resume tournaments
+  - Tournaments continue running even if you close your computer
+  - Results saved to persistent disk (survives restarts)
+  - Auto-pauses at 4:00 PM ET, auto-resumes at 9:30 AM ET
+  - You can manually pause/resume/stop tournaments
+
+- **Tournament Controls**:
+  - Green pulsing indicator shows when tournament is running
+  - Click "Tournament Logs" to see live trades and logs
+  - Use Pause/Resume/Stop buttons in the modal
+  - Tournament automatically respects US market hours (9:30 AM - 4:00 PM ET)
 
 ---
 

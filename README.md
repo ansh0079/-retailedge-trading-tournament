@@ -1,227 +1,189 @@
-# 🚀 RetailEdge Pro - AI Stock Screener & Portfolio Tracker
+# 🚀 Retail Edge Pro - Quick Start
 
-Advanced stock analysis platform with AI-powered insights, real-time data, and automated trading tournaments.
+## Instant Start (Double-Click)
 
-## ✨ Features
+**👉 Just double-click `start.bat` to launch the app!**
 
-### 📊 Stock Analysis
-- **AI-Powered Screening** - Multi-factor analysis with ML predictions
-- **Real-Time Data** - Live quotes, charts, and market data
-- **Incremental Loading** - Efficient batch loading with progress tracking
-- **Advanced Caching** - IndexedDB + localStorage for fast access
+It will:
+- ✅ Start the server automatically
+- ✅ Open your browser to http://localhost:3002
+- ✅ Keep running in the background
 
-### 🏆 AI Trading Tournament
-- **Multi-AI Competition** - 4 AI teams (Claude, GPT-4, DeepSeek, Gemini)
-- **Background Execution** - Tournament runs independently
-- **Real-Time Updates** - SSE for live leaderboard and logs
-- **All Stocks Analysis** - Uses entire stock universe
-- **Persistent State** - Continue running when modal is closed
-
-### 📈 Advanced Features
-- **Chart Pattern Recognition** - Automated technical pattern detection
-- **Social Sentiment Analysis** - Real-time social media sentiment
-- **Fundamentals Tab** - Comprehensive financial metrics
-- **Watchlist Management** - Track favorite stocks
-- **Portfolio Tracking** - Monitor holdings and performance
-- **Mobile Responsive** - Works on all devices
-
-### 🎯 Main Page Tabs
-- **Stock Screener** - Filter and analyze stocks
-- **AI Tournament Leaderboard** - Track tournament results
-- **Portfolio** - Manage your investments
-
-## 🛠️ Technology Stack
-
-### Frontend
-- **React 18** - Modern UI framework
-- **Tailwind CSS** - Utility-first styling
-- **Lightweight Charts** - Fast charting library
-- **IndexedDB** - Client-side database
-
-### Backend
-- **Node.js + Express** - API server
-- **Python** - Tournament engine
-- **SQLite** - Results storage
-- **Server-Sent Events** - Real-time updates
-
-## 🚀 Deployment
-
-### Quick Deploy to Render
-
-1. **Push to GitHub** (see GITHUB_SETUP.md)
-2. **Create New Web Service** on Render
-3. **Connect your repository**
-4. **Settings:**
-   - Build: `npm install && npm run build`
-   - Start: `node proxy-server.js`
-5. **Deploy!**
-
-### Alternative Platforms
-
-- **Vercel** - See `vercel.json`
-- **Netlify** - See `netlify.toml`
-- **Railway** - Auto-detect Node.js
-
-See `DEPLOYMENT.md` and `QUICK_DEPLOY.md` for detailed instructions.
-
-## 📦 Installation & Development
-
-### Prerequisites
-- Node.js 18+
-- Python 3.8+ (for AI tournament)
-- npm or yarn
-
-### Setup
-
-```bash
-# Install dependencies
-npm install
-
-# Build the application
-npm run build
-
-# Start the server
-npm run proxy
-# or
-node proxy-server.js
-```
-
-### Development Mode
-
-```bash
-# Watch mode for CSS
-npm run build:css
-
-# Start server with auto-reload
-npm run dev
-```
-
-### Access
-- Open http://localhost:3002
-- The application will load with all features
-
-## 📁 Project Structure
-
-```
-working version/
-├── src/
-│   └── index.source.html          # Main source file
-├── dist/                           # Built files (auto-generated)
-├── build/
-│   ├── build.js                    # Build script
-│   └── vendor.js                   # Vendor bundling
-├── proxy-server.js                 # Backend API server
-├── ultimate_trading_tournament.py  # AI tournament engine
-├── package.json                    # Dependencies
-├── vercel.json                     # Vercel config
-├── render.yaml                     # Render config
-└── netlify.toml                    # Netlify config
-```
-
-## 🎮 Usage
-
-### Running a Tournament
-
-1. Click **"AI Tournament"** button in the header
-2. Configure settings (days, teams)
-3. Click **"Start Tournament"**
-4. Close modal - tournament continues in background
-5. Watch the indicator in the top-right
-6. Reopen modal to see live updates
-
-### Stock Screening
-
-1. Use filters or presets (Growth, Momentum, Value, Oversold)
-2. Search for specific stocks by ticker or name
-3. Click any stock to see detailed analysis
-4. Add to watchlist with the star button
-
-### Portfolio Management
-
-1. Click **"Portfolio"** in header
-2. Add holdings with buy/sell transactions
-3. Track performance and allocation
-4. View AI recommendations
-
-## 🔑 API Keys (Optional)
-
-Set in environment variables or `.env` file:
-
-- `ANTHROPIC_API_KEY` - For Claude AI analysis
-- `OPENAI_API_KEY` - For GPT-4 analysis (optional)
-- `DEEPSEEK_API_KEY` - For DeepSeek analysis (optional)
-
-## 🐛 Troubleshooting
-
-### Build fails with SQLite error
-- This is normal - the app uses pre-built dist files
-- SQLite is only needed for tournament results storage
-
-### Application doesn't load
-- Check console for errors (F12)
-- Verify all CDN resources loaded
-- Clear browser cache
-
-### Tournament doesn't start
-- Check Python is installed: `python --version`
-- Verify `ultimate_trading_tournament.py` exists
-- Check server logs for errors
-
-### Tournament stops when closing modal
-- Already fixed! Tournament runs detached
-- Check "TOURNAMENT RUNNING" indicator
-- Reopen modal to reconnect
-
-## 📚 Documentation
-
-- `DEPLOYMENT.md` - Full deployment guide
-- `QUICK_DEPLOY.md` - Quick deployment steps
-- `GITHUB_SETUP.md` - Git and GitHub setup
-- `DEPLOYMENT_STATUS.md` - Current deployment status
-- `TROUBLESHOOTING.md` - Common issues and fixes
-
-## 🌟 Features Highlights
-
-### Tournament Persistence
-- Runs independently of UI
-- Survives modal close
-- Auto-reconnects on reopen
-- Background execution with detached process
-
-### Performance Optimizations
-- Incremental stock loading
-- Request deduplication and batching
-- Predictive prefetching
-- Advanced caching with background refresh
-- Performance monitoring
-
-### Real-Time Features
-- Live price updates
-- Social sentiment tracking
-- Pattern recognition
-- Heatmap updates (60-min refresh)
-- Tournament leaderboard updates
-
-## 📄 License
-
-This project is for educational and personal use.
-
-## 🤝 Contributing
-
-This is a personal project deployed on Render. For issues or suggestions, please open an issue.
-
-## 🎯 Roadmap
-
-- [ ] Add more AI models
-- [ ] Enhanced backtesting
-- [ ] Options trading analysis
-- [ ] Cryptocurrency support
-- [ ] Multi-portfolio management
+That's it! The app is now running.
 
 ---
 
-**Built with ❤️ using React, Node.js, and Python**
+## 📚 Documentation
 
-**Deployed on:** Render  
-**Version:** 2.0  
-**Last Updated:** January 2026
+- **[START_APP.md](START_APP.md)** - Detailed startup instructions and troubleshooting
+- **[TOURNAMENT_CONTROLS.md](TOURNAMENT_CONTROLS.md)** - Tournament pause/resume/stop controls guide
+- **[FIXES_APPLIED.md](FIXES_APPLIED.md)** - Complete changelog of all fixes
+- **[DEBUG_TOURNAMENT_BUTTONS.md](DEBUG_TOURNAMENT_BUTTONS.md)** - Debugging tournament controls
+
+---
+
+## ⚡ Quick Actions
+
+### Start the App
+```cmd
+start.bat
+```
+Or double-click `start.bat`
+
+### Stop the Server
+Press `Ctrl+C` twice in the server window
+
+### View Tournament Status
+Open: http://localhost:3002/api/tournament/status/current
+
+### Check Market Hours
+Open: http://localhost:3002/api/market/status
+
+---
+
+## 🎮 Using the Tournament
+
+1. **Start App**: Double-click `start.bat`
+2. **Start Tournament**: 
+   - Click "AI Tournament" in sidebar
+   - Click "Start AI Tournament"
+   - Wait for green "Tournament Running" indicator
+3. **View Progress**: Click "Tournament Logs" button in top navigation
+4. **Control Tournament**:
+   - **Pause**: Yellow button (pauses the tournament)
+   - **Resume**: Green button (only works during market hours)
+   - **Stop**: Red button (terminates tournament completely)
+
+---
+
+## 🔍 Key Features
+
+### Tournament Controls
+- ✅ **Live Status Indicator**: Green pulsing light when running
+- ✅ **Pause/Resume**: Manual control or auto-pause outside market hours
+- ✅ **Market Hours Detection**: 9:30 AM - 4:00 PM ET (weekdays)
+- ✅ **Tournament Logs**: Real-time trades and event logs
+- ✅ **Persistence**: Tournaments survive server restarts
+
+### Auto Pause/Resume
+- 🕐 **4:00 PM ET**: Tournament auto-pauses when market closes
+- 🕐 **9:30 AM ET**: Tournament auto-resumes when market opens
+- 📅 **Weekends**: Stays paused on Sat/Sun
+
+---
+
+## 🆘 Troubleshooting
+
+### Server Not Starting
+```cmd
+# Check if port is in use
+netstat -ano | findstr :3002
+
+# Kill existing process
+taskkill /F /PID <PID_NUMBER>
+
+# Try again
+start.bat
+```
+
+### Tournament Buttons Not Showing
+1. Ensure server is running (`start.bat`)
+2. Open http://localhost:3002 (not file://)
+3. Hard refresh: `Ctrl+Shift+R`
+4. Check browser console (F12) for debug output
+
+### "Tournament Already Running"
+```cmd
+# Stop existing tournament
+curl -X POST http://localhost:3002/api/tournament/stop
+
+# Or from browser console:
+fetch('http://localhost:3002/api/tournament/stop', {method: 'POST'})
+```
+
+---
+
+## 🛠️ Tech Stack
+
+- **Frontend**: React 18 + Tailwind CSS
+- **Backend**: Node.js + Express
+- **Tournament**: Python (multi-AI agents)
+- **Database**: SQLite3
+- **Analysis**: Claude AI + Multi-source sentiment
+
+---
+
+## 📊 API Endpoints
+
+- `GET /api/tournament/status/current` - Tournament status
+- `GET /api/market/status` - Market hours and status
+- `GET /api/tournament/logs` - Last 100 log entries
+- `GET /api/tournament/trades` - Last 100 trades
+- `POST /api/tournament/start` - Start new tournament
+- `POST /api/tournament/pause` - Pause running tournament
+- `POST /api/tournament/resume` - Resume paused tournament
+- `POST /api/tournament/stop` - Stop and terminate tournament
+
+---
+
+## 💡 Pro Tips
+
+1. **Bookmark it**: Add http://localhost:3002 to favorites
+2. **Keep server running**: Don't close the server window
+3. **Check logs**: Server window shows all activity
+4. **Market hours matter**: Resume only works during trading hours
+5. **State persists**: Your tournament continues even after restarting the server
+
+---
+
+## 📁 Important Files
+
+- `start.bat` - One-click startup script
+- `proxy-server.js` - Main backend server
+- `ultimate_trading_tournament.py` - Tournament engine
+- `.tournament_state.json` - Tournament persistence (auto-created)
+- `ultimate_tournament.db` - Tournament database (auto-created)
+
+---
+
+## 🎯 What's New (Latest Updates)
+
+### UI Changes
+- ✅ Removed leaderboard tab
+- ✅ Added "Tournament Logs" button (always visible)
+- ✅ Added green pulsing status indicator when tournament runs
+- ✅ Tournament controls in logs modal (Pause/Resume/Stop)
+
+### Features Added
+- ✅ Manual pause/resume controls
+- ✅ Auto pause/resume based on market hours
+- ✅ Market status indicator (Open/Closed with ET time)
+- ✅ Live trades display (last 100 trades)
+- ✅ Live event logs (last 100 events)
+- ✅ Tournament state persistence across restarts
+- ✅ Process reconnection on server restart
+
+---
+
+## 🚀 Getting Started
+
+1. **First Time**:
+   ```cmd
+   npm install
+   start.bat
+   ```
+
+2. **Every Time After**:
+   ```cmd
+   start.bat
+   ```
+   Or just double-click `start.bat`
+
+3. **Use the App**:
+   - Browser opens automatically
+   - Start trading competitions
+   - Monitor with Tournament Logs modal
+
+---
+
+**Need help?** Check [START_APP.md](START_APP.md) for detailed instructions!

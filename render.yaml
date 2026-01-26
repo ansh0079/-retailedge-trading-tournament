@@ -2,6 +2,7 @@ services:
   - type: web
     name: retailedge-proxy
     env: node
+    plan: starter
     buildCommand: npm install && npm run build
     startCommand: node proxy-server.js
     envVars:
@@ -9,4 +10,10 @@ services:
         value: production
       - key: PORT
         value: 3002
-    healthCheckPath: /
+      - key: ANTHROPIC_API_KEY
+        sync: false
+    disk:
+      name: tournament-data
+      mountPath: /opt/render/project/src
+      sizeGB: 1
+    healthCheckPath: /api/health

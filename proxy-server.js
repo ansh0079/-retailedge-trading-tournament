@@ -27,6 +27,30 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
+// Health check endpoint for Render.com
+app.get('/api/health', (req, res) => {
+  const fs = require('fs');
+  const marketStatus = isUSMarketOpen();
+
+  // Check if tournament is running
+  let tournamentRunning = false;
+  try {
+    const stateData = fs.readFileSync(TOURNAMENT_STATE_FILE, 'utf8');
+    const state = JSON.parse(stateData);
+    tournamentRunning = state.running && state.pid && isPidRunning(state.pid);
+  } catch (err) {
+    // State file doesn't exist or is invalid
+  }
+
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    marketStatus: marketStatus,
+    tournamentRunning: tournamentRunning,
+    tournamentPaused: tournamentPaused
+  });
+});
+
 // Serve static files from dist folder
 app.use(express.static(path.join(__dirname, 'dist'), {
   index: false, // Don't serve index.html automatically

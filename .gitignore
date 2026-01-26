@@ -1,6 +1,7 @@
 node_modules/
 *.log
 .env
+.env.local
 .DS_Store
 *.swp
 *.swo
@@ -19,3 +20,12 @@ server.log
 *API_KEYS*.md
 set-api-keys*.ps1
 set-api-keys*.bat
+
+# Database files (will be on persistent disk in Render)
+*.db
+*.db-journal
+.tournament_state.json
+
+# Build artifacts
+dist/
+build/
