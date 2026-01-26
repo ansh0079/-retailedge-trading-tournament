@@ -22,7 +22,9 @@
       "Bash(node:*)",
       "Bash(curl:*)",
       "Bash(npm run build:app:*)",
-      "Bash(awk:*)"
+      "Bash(awk:*)",
+      "Bash(netstat:*)",
+      "Bash(python ultimate_trading_tournament.py:*)"
     ]
   }
 }

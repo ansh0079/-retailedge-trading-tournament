@@ -470,12 +470,263 @@ app.post('/api/tournament/stop', async (req, res) => {
   }
 });
 
+// SSE endpoint for tournament leaderboard updates
+app.get('/api/tournament/sse/leaderboard/:experimentId', async (req, res) => {
+  const { experimentId } = req.params;
+
+  // Set up SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive'
+  });
+
+  console.log(`[SSE] Client connected to leaderboard stream for ${experimentId}`);
+
+  // Send initial connection message
+  res.write(`data: ${JSON.stringify({ message: 'Connected to leaderboard updates' })}\n\n`);
+
+  // Poll database every 2 seconds for updates
+  const intervalId = setInterval(async () => {
+    try {
+      const sqlite3 = require('sqlite3').verbose();
+      const fs = require('fs');
+      const dbPath = path.join(__dirname, 'ultimate_tournament.db');
+
+      if (!fs.existsSync(dbPath)) {
+        return; // Database not created yet
+      }
+
+      const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (err) => {
+        if (err) {
+          console.error('[SSE Leaderboard] Database error:', err);
+          return;
+        }
+      });
+
+      db.all(`
+        SELECT team_id, name, total_return, total_trades, current_cash, current_holdings_value
+        FROM teams
+        WHERE experiment_id = ?
+        ORDER BY total_return DESC
+      `, [experimentId], (err, rows) => {
+        if (err) {
+          console.error('[SSE Leaderboard] Query error:', err);
+          db.close();
+          return;
+        }
+
+        if (rows && rows.length > 0) {
+          const leaderboard = rows.map(row => ({
+            team_id: row.team_id,
+            name: row.name || `Team ${row.team_id}`,
+            return: row.total_return || 0,
+            trades: row.total_trades || 0,
+            cash: row.current_cash || 0,
+            holdings: row.current_holdings_value || 0
+          }));
+
+          res.write(`data: ${JSON.stringify({ leaderboard })}\n\n`);
+        }
+
+        db.close();
+      });
+    } catch (error) {
+      console.error('[SSE Leaderboard] Error:', error);
+    }
+  }, 2000);
+
+  // Clean up on client disconnect
+  req.on('close', () => {
+    clearInterval(intervalId);
+    console.log(`[SSE] Client disconnected from leaderboard stream for ${experimentId}`);
+  });
+});
+
+// SSE endpoint for tournament logs
+app.get('/api/tournament/sse/logs/:experimentId', async (req, res) => {
+  const { experimentId } = req.params;
+
+  // Set up SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive'
+  });
+
+  console.log(`[SSE] Client connected to logs stream for ${experimentId}`);
+
+  // Send initial connection message
+  res.write(`data: ${JSON.stringify({ message: '📡 Connected to tournament logs', type: 'success' })}\n\n`);
+
+  let lastLogId = 0;
+
+  // Poll database every 1 second for new logs
+  const intervalId = setInterval(async () => {
+    try {
+      const sqlite3 = require('sqlite3').verbose();
+      const fs = require('fs');
+      const dbPath = path.join(__dirname, 'ultimate_tournament.db');
+
+      if (!fs.existsSync(dbPath)) {
+        return; // Database not created yet
+      }
+
+      const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (err) => {
+        if (err) {
+          console.error('[SSE Logs] Database error:', err);
+          return;
+        }
+      });
+
+      // Check if logs table exists and get new logs
+      db.all(`
+        SELECT name FROM sqlite_master WHERE type='table' AND name='logs'
+      `, [], (err, tables) => {
+        if (err || !tables || tables.length === 0) {
+          db.close();
+          return;
+        }
+
+        db.all(`
+          SELECT id, timestamp, message, log_type
+          FROM logs
+          WHERE experiment_id = ? AND id > ?
+          ORDER BY id ASC
+        `, [experimentId, lastLogId], (err, rows) => {
+          if (err) {
+            console.error('[SSE Logs] Query error:', err);
+            db.close();
+            return;
+          }
+
+          if (rows && rows.length > 0) {
+            rows.forEach(row => {
+              lastLogId = Math.max(lastLogId, row.id);
+              res.write(`data: ${JSON.stringify({
+                message: row.message,
+                type: row.log_type || 'info',
+                timestamp: row.timestamp
+              })}\n\n`);
+            });
+          }
+
+          db.close();
+        });
+      });
+    } catch (error) {
+      console.error('[SSE Logs] Error:', error);
+    }
+  }, 1000);
+
+  // Clean up on client disconnect
+  req.on('close', () => {
+    clearInterval(intervalId);
+    console.log(`[SSE] Client disconnected from logs stream for ${experimentId}`);
+  });
+});
+
+// Get tournament logs
+app.get('/api/tournament/logs', async (req, res) => {
+  try {
+    const sqlite3 = require('sqlite3').verbose();
+    const fs = require('fs');
+    const dbPath = path.join(__dirname, 'ultimate_tournament.db');
+
+    if (!fs.existsSync(dbPath)) {
+      return res.json({ logs: [] });
+    }
+
+    const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY);
+
+    db.all(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='logs'
+    `, [], (err, tables) => {
+      if (err || !tables || tables.length === 0) {
+        db.close();
+        return res.json({ logs: [] });
+      }
+
+      db.all(`
+        SELECT timestamp, message, log_type as type
+        FROM logs
+        ORDER BY id DESC
+        LIMIT 100
+      `, [], (err, rows) => {
+        db.close();
+        if (err) {
+          return res.status(500).json({ error: err.message, logs: [] });
+        }
+        res.json({ logs: rows || [] });
+      });
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message, logs: [] });
+  }
+});
+
+// Get tournament trades
+app.get('/api/tournament/trades', async (req, res) => {
+  try {
+    const sqlite3 = require('sqlite3').verbose();
+    const fs = require('fs');
+    const dbPath = path.join(__dirname, 'ultimate_tournament.db');
+
+    if (!fs.existsSync(dbPath)) {
+      return res.json({ trades: [] });
+    }
+
+    const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY);
+
+    db.all(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='trades'
+    `, [], (err, tables) => {
+      if (err || !tables || tables.length === 0) {
+        db.close();
+        return res.json({ trades: [] });
+      }
+
+      db.all(`
+        SELECT t.timestamp, t.action, t.symbol, t.shares, t.price, teams.name as team_name
+        FROM trades t
+        LEFT JOIN teams ON t.team_id = teams.team_id
+        ORDER BY t.id DESC
+        LIMIT 100
+      `, [], (err, rows) => {
+        db.close();
+        if (err) {
+          return res.status(500).json({ error: err.message, trades: [] });
+        }
+        res.json({ trades: rows || [] });
+      });
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message, trades: [] });
+  }
+});
+
+// Pause tournament (not supported in current implementation, returns error)
+app.post('/api/tournament/pause', async (req, res) => {
+  res.status(501).json({
+    error: 'Pause not implemented',
+    message: 'Tournament pause/resume is not supported. Use stop to end the tournament.'
+  });
+});
+
+// Resume tournament (not supported in current implementation, returns error)
+app.post('/api/tournament/resume', async (req, res) => {
+  res.status(501).json({
+    error: 'Resume not implemented',
+    message: 'Tournament pause/resume is not supported. Start a new tournament instead.'
+  });
+});
+
 app.get('/api/tournament/results', async (req, res) => {
   try {
     // Load tournament results from database
     const sqlite3 = require('sqlite3').verbose();
     const fs = require('fs');
-    const dbPath = path.join(__dirname, 'tournament.db');
+    const dbPath = path.join(__dirname, 'ultimate_tournament.db');
     
     let results = null;
     let leaderboard = [];
