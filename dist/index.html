@@ -19715,8 +19715,8 @@ Be realistic and conservative. Base confidence on data quality.`;
         if (showTournamentLogs) {
           loadTournamentLogs();
 
-          // Poll every hour when modal is open
-          const interval = setInterval(loadTournamentLogs, 3600000);
+          // Poll every 15 minutes when modal is open
+          const interval = setInterval(loadTournamentLogs, 900000);
           return () => clearInterval(interval);
         }
       }, [showTournamentLogs, loadTournamentLogs]);
