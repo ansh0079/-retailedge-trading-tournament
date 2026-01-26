@@ -1,6 +1,2 @@
-// API Configuration - automatically detects if running locally or on Render
-const API_BASE_URL = window.location.hostname === 'localhost'
-  ? 'http://localhost:3002'
-  : window.location.origin;
-
-console.log('🌐 API Base URL:', API_BASE_URL);
+// API Configuration
+const API_BASE_URL = 'https://retailedge-trading-tournament-1.onrender.com';
