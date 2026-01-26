@@ -5351,7 +5351,7 @@ Please provide a clear, structured analysis in markdown format.`;
       async fetchStockTwits(symbol) {
         try {
           // Use proxy server to avoid CORS
-          const response = await fetchWithRetry(`http://localhost:3002/api/stocktwits/${symbol}`, { timeoutMs: 12000, retries: 1 });
+          const response = await fetchWithRetry(`${API_BASE_URL}/api/stocktwits/${symbol}`, { timeoutMs: 12000, retries: 1 });
           
           if (!response.ok) {
             console.log(`⚠️ StockTwits API returned ${response.status}`);
@@ -5412,7 +5412,7 @@ Please provide a clear, structured analysis in markdown format.`;
           for (const subreddit of subreddits) {
             try {
               // Use proxy server to avoid CORS
-              const searchUrl = `http://localhost:3002/api/reddit/${subreddit}/search?q=${symbol}`;
+              const searchUrl = `${API_BASE_URL}/api/reddit/${subreddit}/search?q=${symbol}`;
               const response = await fetchWithRetry(searchUrl, { timeoutMs: 12000, retries: 1 });
 
               if (response.ok) {
@@ -7226,7 +7226,7 @@ Please provide a clear, structured analysis in markdown format.`;
         console.log('📡 Making API request to Claude via backend...');
         
         // Call local backend server that securely handles Claude API
-        const response = await fetchWithRetry("http://localhost:3002/api/claude", {
+        const response = await fetchWithRetry(`${API_BASE_URL}/api/claude`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
