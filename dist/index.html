@@ -19673,9 +19673,6 @@ Be realistic and conservative. Base confidence on data quality.`;
         setLogsLoading(true);
 
         try {
-          // First get market status
-          await loadMarketStatus();
-          
           const response = await fetch(`${API_BASE_URL}/api/tournament/results`);
           if (!response.ok) {
             throw new Error(`Failed to load: ${response.status}`);
@@ -19718,8 +19715,8 @@ Be realistic and conservative. Base confidence on data quality.`;
         if (showTournamentLogs) {
           loadTournamentLogs();
 
-          // Poll every 5 seconds when modal is open
-          const interval = setInterval(loadTournamentLogs, 5000);
+          // Poll every hour when modal is open
+          const interval = setInterval(loadTournamentLogs, 3600000);
           return () => clearInterval(interval);
         }
       }, [showTournamentLogs, loadTournamentLogs]);
