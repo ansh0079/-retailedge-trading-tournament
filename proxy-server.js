@@ -8,8 +8,23 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 // Import Node.js Tournament Manager (runs in-process, no Python needed)
-const TournamentManager = require('./tournament.js');
-const tournamentManager = new TournamentManager();
+let TournamentManager, tournamentManager;
+try {
+  TournamentManager = require('./tournament.js');
+  tournamentManager = new TournamentManager();
+  console.log('✅ TournamentManager loaded successfully');
+} catch (err) {
+  console.error('⚠️ Failed to load TournamentManager:', err.message);
+  // Create a dummy tournament manager so endpoints don't crash
+  tournamentManager = {
+    activeTournaments: new Map(),
+    startTournament: async () => ({ experimentId: 'error', status: 'error' }),
+    getTournament: () => null,
+    getLatestResult: async () => null,
+    pauseTournament: async () => ({ success: false }),
+    resumeTournament: () => ({ success: false })
+  };
+}
 
 const app = express();
 const PORT = process.env.PORT || 3002; // Use environment variable for cloud deployment
