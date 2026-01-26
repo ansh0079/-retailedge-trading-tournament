@@ -19673,6 +19673,15 @@ Be realistic and conservative. Base confidence on data quality.`;
         setLogsLoading(true);
 
         try {
+          // Check tournament status
+          const statusResponse = await fetch(`${API_BASE_URL}/api/tournament/status/current`);
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json();
+            const isRunning = statusData.status === 'running';
+            setTournamentRunning(isRunning);
+            setTournamentPaused(isRunning ? (statusData.paused || false) : false);
+          }
+
           const response = await fetch(`${API_BASE_URL}/api/tournament/results`);
           if (!response.ok) {
             throw new Error(`Failed to load: ${response.status}`);
@@ -19680,7 +19689,7 @@ Be realistic and conservative. Base confidence on data quality.`;
 
           const data = await response.json();
 
-          // Get logs from database (we'll create endpoint for this)
+          // Get logs from database
           const logsResponse = await fetch(`${API_BASE_URL}/api/tournament/logs`);
           if (logsResponse.ok) {
             const logsData = await logsResponse.json();
@@ -19698,7 +19707,7 @@ Be realistic and conservative. Base confidence on data quality.`;
         } finally {
           setLogsLoading(false);
         }
-      }, [loadMarketStatus]);
+      }, []);
 
       // ===== LOAD MARKET STATUS ON MOUNT AND PERIODICALLY =====
       useEffect(() => {
