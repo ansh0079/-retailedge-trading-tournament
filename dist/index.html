@@ -7093,7 +7093,21 @@ Please provide a clear, structured analysis in markdown format.`;
           const isBrowser = typeof window !== 'undefined';
 
           const newsPromises = [
-            // Marketaux - Primary news source with sentiment (increased limit)
+            // NewsFilter.io - Primary news source (free, no API key required)
+            fetch('https://api.newsfilter.io/public/actions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: 'filterArticles',
+                queryString: `symbols:${symbol}`,
+                from: 0,
+                size: 30
+              })
+            })
+              .then(r => r.ok ? r.json() : { articles: [] })
+              .catch(() => ({ articles: [] })),
+
+            // Marketaux - Secondary news source with sentiment
             fetch(`https://api.marketaux.com/v1/news/all?symbols=${symbol}&filter_entities=true&language=en&limit=50&api_token=${API_KEYS.MARKETAUX}`)
               .then(r => r.ok ? r.json() : { data: [] })
               .catch(() => ({ data: [] })),
@@ -7130,16 +7144,31 @@ Please provide a clear, structured analysis in markdown format.`;
               .catch(() => [])
           ];
 
-          const [marketauxResponse, finnhubNews, fmpArticles, fmpGeneralNews] = await Promise.all(newsPromises);
+          const [newsFilterResponse, marketauxResponse, finnhubNews, fmpArticles, fmpGeneralNews] = await Promise.all(newsPromises);
 
+          const newsFilterArticles = newsFilterResponse?.articles || [];
           const marketauxNews = marketauxResponse?.data || [];
 
-          console.log(`📊 News sources: Marketaux=${marketauxNews.length}, Finnhub=${finnhubNews?.length || 0}, FMP Articles=${fmpArticles?.length || 0}, FMP General=${fmpGeneralNews?.length || 0}`);
+          console.log(`📊 News sources: NewsFilter=${newsFilterArticles.length}, Marketaux=${marketauxNews.length}, Finnhub=${finnhubNews?.length || 0}, FMP Articles=${fmpArticles?.length || 0}, FMP General=${fmpGeneralNews?.length || 0}`);
 
           // Combine and normalize news from all sources
           let allNews = [];
 
-          // Process Marketaux news (primary source with built-in sentiment)
+          // Process NewsFilter.io news (primary source - free, reliable)
+          newsFilterArticles.forEach(item => {
+            allNews.push({
+              title: item.title,
+              description: item.description || '',
+              url: item.url,
+              source: item.source?.name || 'NewsFilter',
+              publishedAt: item.publishedAt,
+              image: null, // NewsFilter doesn't provide images
+              symbol: symbol,
+              symbols: item.symbols || []
+            });
+          });
+
+          // Process Marketaux news (secondary source with built-in sentiment)
           marketauxNews.forEach(item => {
             allNews.push({
               title: item.title,
