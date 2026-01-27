@@ -363,8 +363,8 @@ const TEAM_CONFIGS = {
     focuses: ['momentum', 'breakouts', 'market sentiment']
   },
   3: {
-    name: 'DeepSeek V3',
-    model: 'DeepSeek-V3',
+    name: 'Kimi',
+    model: 'Kimi-K2',
     strategy: 'conservative',
     personality: 'conservative and dividend-focused',
     focuses: ['stability', 'dividends', 'blue chips']
