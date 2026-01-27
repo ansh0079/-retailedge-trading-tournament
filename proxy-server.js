@@ -5,7 +5,11 @@ const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
+
+// Data persistence file path
+const TOURNAMENT_DATA_FILE = path.join(__dirname, 'tournament_data.json');
 
 const app = express();
 const PORT = process.env.PORT || 3002; // Use environment variable for cloud deployment
@@ -345,6 +349,74 @@ let tournamentState = {
   portfolioHistory: [], // Track portfolio values over time for charting
   portfolioUpdateInterval: null // For live P/L updates
 };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DATA PERSISTENCE - Save/Load tournament state to survive server restarts
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function saveTournamentState() {
+  try {
+    // Only save the data we need to persist (exclude intervals and functions)
+    const dataToSave = {
+      experimentId: tournamentState.experimentId,
+      teams: tournamentState.teams.map(t => ({
+        id: t.id,
+        name: t.name,
+        model: t.model,
+        strategy: t.strategy,
+        personality: t.personality,
+        focuses: t.focuses,
+        portfolioValue: t.portfolioValue,
+        cash: t.cash,
+        invested: t.invested,
+        realizedPnL: t.realizedPnL,
+        unrealizedPnL: t.unrealizedPnL,
+        totalTrades: t.totalTrades,
+        holdings: t.holdings,
+        tradeHistory: t.tradeHistory
+      })),
+      trades: tournamentState.trades,
+      portfolioHistory: tournamentState.portfolioHistory,
+      savedAt: new Date().toISOString()
+    };
+
+    fs.writeFileSync(TOURNAMENT_DATA_FILE, JSON.stringify(dataToSave, null, 2));
+    console.log('[Tournament] State saved to disk');
+  } catch (error) {
+    console.error('[Tournament] Error saving state:', error.message);
+  }
+}
+
+function loadTournamentState() {
+  try {
+    if (fs.existsSync(TOURNAMENT_DATA_FILE)) {
+      const data = JSON.parse(fs.readFileSync(TOURNAMENT_DATA_FILE, 'utf8'));
+
+      // Check if data is recent (within last 24 hours) to avoid loading stale data
+      const savedAt = new Date(data.savedAt);
+      const hoursSinceSave = (Date.now() - savedAt.getTime()) / (1000 * 60 * 60);
+
+      if (hoursSinceSave > 24) {
+        console.log('[Tournament] Saved data is older than 24 hours, starting fresh');
+        return false;
+      }
+
+      if (data.teams && data.teams.length > 0) {
+        tournamentState.experimentId = data.experimentId;
+        tournamentState.teams = data.teams;
+        tournamentState.trades = data.trades || [];
+        tournamentState.portfolioHistory = data.portfolioHistory || [];
+
+        console.log(`[Tournament] Restored state from ${savedAt.toLocaleString()}`);
+        console.log(`[Tournament] ${data.teams.length} teams, ${data.trades?.length || 0} trades loaded`);
+        return true;
+      }
+    }
+  } catch (error) {
+    console.error('[Tournament] Error loading state:', error.message);
+  }
+  return false;
+}
 
 // Team configurations with distinct AI personalities
 const TEAM_CONFIGS = {
@@ -918,6 +990,9 @@ async function executeTradingRound() {
   if (tournamentState.portfolioHistory.length > 100) {
     tournamentState.portfolioHistory = tournamentState.portfolioHistory.slice(-100);
   }
+
+  // Save state after each trading round
+  saveTournamentState();
 }
 
 function startTournament() {
@@ -927,31 +1002,42 @@ function startTournament() {
   console.log(`📊 Watching ${tournamentState.watchlist.length} stocks`);
 
   tournamentState.running = true;
-  tournamentState.experimentId = `tournament_${Date.now()}`;
-  tournamentState.portfolioHistory = []; // Reset history on new tournament
-  tournamentState.teams = [1, 2, 3, 4].map(id => ({
-    id,
-    ...TEAM_CONFIGS[id],
-    portfolioValue: 50000,
-    cash: 50000,
-    invested: 0,
-    realizedPnL: 0,
-    unrealizedPnL: 0,
-    totalTrades: 0,
-    holdings: {}, // { symbol: { shares, avgCost, currentPrice, marketValue, unrealizedPnL } }
-    tradeHistory: [] // Detailed trade history for this team
-  }));
 
-  // Record initial portfolio values
-  tournamentState.portfolioHistory.push({
-    timestamp: new Date().toISOString(),
-    time: new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' }),
-    teams: tournamentState.teams.map(t => ({
-      id: t.id,
-      name: t.name,
-      portfolioValue: 50000
-    }))
-  });
+  // Try to load existing state first
+  const stateLoaded = loadTournamentState();
+
+  if (!stateLoaded || tournamentState.teams.length === 0) {
+    // No saved state or empty state - start fresh
+    console.log('[Tournament] Starting fresh tournament');
+    tournamentState.experimentId = `tournament_${Date.now()}`;
+    tournamentState.portfolioHistory = [];
+    tournamentState.trades = [];
+    tournamentState.teams = [1, 2, 3, 4].map(id => ({
+      id,
+      ...TEAM_CONFIGS[id],
+      portfolioValue: 50000,
+      cash: 50000,
+      invested: 0,
+      realizedPnL: 0,
+      unrealizedPnL: 0,
+      totalTrades: 0,
+      holdings: {},
+      tradeHistory: []
+    }));
+
+    // Record initial portfolio values
+    tournamentState.portfolioHistory.push({
+      timestamp: new Date().toISOString(),
+      time: new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' }),
+      teams: tournamentState.teams.map(t => ({
+        id: t.id,
+        name: t.name,
+        portfolioValue: 50000
+      }))
+    });
+  } else {
+    console.log('[Tournament] Resuming from saved state');
+  }
 
   // Execute trades every 2-5 minutes during market hours
   tournamentState.tradeInterval = setInterval(async () => {
@@ -1005,6 +1091,9 @@ async function updatePortfolioValues() {
   }
 
   console.log('[Tournament] Portfolio values updated with live prices');
+
+  // Save state after portfolio update
+  saveTournamentState();
 }
 
 function stopTournament() {
