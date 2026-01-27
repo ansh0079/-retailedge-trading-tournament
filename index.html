@@ -4,6 +4,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>RetailEdge Pro | AI Stock Screener & Portfolio Tracker</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link
@@ -1743,15 +1746,17 @@ Please provide a clear, structured analysis in markdown format.`;
     // ═══════════════════════════════════════════════════════════════════════════
 
     const CACHE_CONFIG = {
-      // Cache duration in milliseconds
-      STOCK_DATA: 60 * 60 * 1000,            // 1 HOUR for fundamentals (was 24h)
-      QUOTE_DATA: 60 * 60 * 1000,            // 1 HOUR for quotes
-      CHART_DATA: 60 * 60 * 1000,           // 1 hour for charts
-      NEWS_DATA: 30 * 60 * 1000,            // 30 minutes for news
-      SENTIMENT_DATA: 30 * 60 * 1000,       // 30 minutes for sentiment
+      // Cache duration in milliseconds - EXTENDED FOR BETTER PERFORMANCE
+      STOCK_DATA: 7 * 24 * 60 * 60 * 1000,   // 7 DAYS for fundamentals (company profile, ratios, etc.)
+      QUOTE_DATA_MARKET_OPEN: 5 * 60 * 1000, // 5 minutes during market hours
+      QUOTE_DATA_MARKET_CLOSED: 4 * 60 * 60 * 1000, // 4 hours when market closed
+      CHART_DATA: 24 * 60 * 60 * 1000,       // 24 hours for historical charts
+      NEWS_DATA: 6 * 60 * 60 * 1000,         // 6 hours for news articles
+      SENTIMENT_DATA: 2 * 60 * 60 * 1000,    // 2 hours for sentiment data
+      EARNINGS_DATA: 30 * 24 * 60 * 60 * 1000, // 30 days for earnings (changes quarterly)
       MARKET_CLOSED: 7 * 24 * 60 * 60 * 1000, // 7 days when market closed
       MAX_CACHE_SIZE: 500,
-      CACHE_VERSION: 'v4',                   // Bump version to force cache reset
+      CACHE_VERSION: 'v5',                   // Bumped for new cache durations
       OFFLINE_MODE: true
     };
 
@@ -1776,17 +1781,23 @@ Please provide a clear, structured analysis in markdown format.`;
         return true;
       },
 
-      // Get appropriate cache duration - User-defined fixed intervals (independent of market hours)
+      // Get appropriate cache duration - Smart intervals based on data type and market hours
       getCacheDuration(type = 'STOCK_DATA') {
+        // For quotes, use market-aware duration
+        if (type === 'QUOTE_DATA') {
+          return this.isMarketOpen() 
+            ? CACHE_CONFIG.QUOTE_DATA_MARKET_OPEN 
+            : CACHE_CONFIG.QUOTE_DATA_MARKET_CLOSED;
+        }
+
         const intervals = {
-          'QUOTE_DATA': CACHE_CONFIG.QUOTE_DATA,
           'STOCK_DATA': CACHE_CONFIG.STOCK_DATA,
           'CHART_DATA': CACHE_CONFIG.CHART_DATA,
           'NEWS_DATA': CACHE_CONFIG.NEWS_DATA,
-          'SENTIMENT_DATA': CACHE_CONFIG.SENTIMENT_DATA
+          'SENTIMENT_DATA': CACHE_CONFIG.SENTIMENT_DATA,
+          'EARNINGS_DATA': CACHE_CONFIG.EARNINGS_DATA
         };
 
-        // Return fixed interval
         return intervals[type] || CACHE_CONFIG.STOCK_DATA;
       },
 
@@ -2160,8 +2171,8 @@ Please provide a clear, structured analysis in markdown format.`;
         return data;
       },
 
-      // Set data with TTL
-      async set(store, key, value, ttl = 3600000) {
+      // Set data with TTL (default 24 hours instead of 1 hour)
+      async set(store, key, value, ttl = 24 * 60 * 60 * 1000) {
         const data = {
           id: key,
           symbol: key.split('_')[0],
@@ -2337,8 +2348,8 @@ Please provide a clear, structured analysis in markdown format.`;
       pendingRequests: new Map(),
       batchQueue: [],
       batchTimer: null,
-      BATCH_DELAY: 50, // 50ms batching window
-      MAX_BATCH_SIZE: 10,
+      BATCH_DELAY: 30, // 30ms batching window (faster response)
+      MAX_BATCH_SIZE: 25, // Increased from 10 to 25 (FMP supports up to 100)
 
       // Deduplicate requests
       async fetchUnique(url, options = {}) {
@@ -2403,18 +2414,30 @@ Please provide a clear, structured analysis in markdown format.`;
           byEndpoint[item.endpoint].push(item);
         });
 
-        // Execute batches
-        for (const [endpoint, items] of Object.entries(byEndpoint)) {
+        // Execute batches in parallel (multiple endpoints at once)
+        const batchPromises = Object.entries(byEndpoint).map(async ([endpoint, items]) => {
           const allSymbols = items.flatMap(i => i.symbols);
           const uniqueSymbols = [...new Set(allSymbols)];
 
           try {
-            // Use batch endpoint if available
-            const batchUrl = `https://financialmodelingprep.com/stable/${endpoint}?symbols=${uniqueSymbols.join(',')}&apikey=${FMP_API_KEY}`;
-            console.log(`🚀 Batch fetching ${uniqueSymbols.length} symbols for ${endpoint}`);
+            // Split into chunks if > 50 symbols (FMP works best with <50 at a time)
+            const chunks = [];
+            for (let i = 0; i < uniqueSymbols.length; i += 50) {
+              chunks.push(uniqueSymbols.slice(i, i + 50));
+            }
 
-            const response = await this.fetchUnique(batchUrl);
-            const data = await response.json();
+            // Fetch all chunks in parallel
+            const chunkResults = await Promise.all(
+              chunks.map(async (chunk) => {
+                const batchUrl = `https://financialmodelingprep.com/stable/${endpoint}?symbols=${chunk.join(',')}&apikey=${FMP_API_KEY}`;
+                console.log(`🚀 Batch fetching ${chunk.length} symbols for ${endpoint}`);
+                const response = await this.fetchUnique(batchUrl);
+                return await response.json();
+              })
+            );
+
+            // Combine all chunk results
+            const data = chunkResults.flat();
 
             // Resolve individual promises
             items.forEach(item => {
@@ -2428,7 +2451,10 @@ Please provide a clear, structured analysis in markdown format.`;
             console.error(`❌ Batch fetch failed for ${endpoint}:`, error);
             items.forEach(item => item.resolve({ data: null, success: false }));
           }
-        }
+        });
+
+        // Wait for all batches to complete
+        await Promise.all(batchPromises);
       },
 
       // Priority-based loading
@@ -2511,7 +2537,7 @@ Please provide a clear, structured analysis in markdown format.`;
           const data = await response.json();
 
           // Cache for 24 hours (chart data is stable)
-          await AdvancedStorage.set('chartData', cacheKey, data, 24 * 60 * 60 * 1000);
+          await AdvancedStorage.set('chartData', cacheKey, data, CACHE_CONFIG.CHART_DATA);
           console.log(`💾 Cached chart data for ${symbol} (${timeframe})`);
         } catch (error) {
           console.warn(`⚠️ Failed to prefetch chart for ${symbol}:`, error);
@@ -2555,7 +2581,7 @@ Please provide a clear, structured analysis in markdown format.`;
             `https://financialmodelingprep.com/stable/earnings?symbol=${symbol}&apikey=${FMP_API_KEY}`
           );
           const data = await response.json();
-          await AdvancedStorage.set('stockData', `${symbol}_earnings`, data, 24 * 60 * 60 * 1000);
+          await AdvancedStorage.set('stockData', `${symbol}_earnings`, data, CACHE_CONFIG.EARNINGS_DATA);
         } catch (error) {
           console.warn(`⚠️ Failed to prefetch earnings for ${symbol}:`, error);
         }
@@ -2690,8 +2716,8 @@ Please provide a clear, structured analysis in markdown format.`;
         const response = await RequestManager.batchFetch('quote', symbol);
         const data = Array.isArray(response.data) ? response.data[0] : response.data;
 
-        // Cache critical data for 5 minutes (market hours)
-        const ttl = Cache.isMarketOpen() ? 5 * 60 * 1000 : 60 * 60 * 1000;
+        // Cache critical data (quotes) - varies by market hours
+        const ttl = Cache.getCacheDuration('QUOTE_DATA');
         await AdvancedStorage.set('stockData', symbol, { critical: data }, ttl);
 
         return data;
@@ -2711,7 +2737,7 @@ Please provide a clear, structured analysis in markdown format.`;
           ...ratios[0]
         };
 
-        await AdvancedStorage.set('stockData', `${symbol}_fundamentals`, data, 60 * 60 * 1000);
+        await AdvancedStorage.set('stockData', `${symbol}_fundamentals`, data, CACHE_CONFIG.STOCK_DATA);
         return data;
       },
 
@@ -2732,7 +2758,7 @@ Please provide a clear, structured analysis in markdown format.`;
           macd: taData[0]?.macd
         };
 
-        await AdvancedStorage.set('stockData', `${symbol}_technical`, data, 5 * 60 * 1000);
+        await AdvancedStorage.set('stockData', `${symbol}_technical`, data, Cache.getCacheDuration('QUOTE_DATA'));
         return data;
       },
 
@@ -5704,7 +5730,7 @@ Please provide a clear, structured analysis in markdown format.`;
       async fetchStockTwits(symbol) {
         try {
           // Use proxy server to avoid CORS
-          const response = await fetchWithRetry(`http://localhost:3002/api/stocktwits/${symbol}`, { timeoutMs: 12000, retries: 1 });
+          const response = await fetchWithRetry(`${API_BASE_URL}/api/stocktwits/${symbol}`, { timeoutMs: 12000, retries: 1 });
 
           if (!response.ok) {
             console.log(`⚠️ StockTwits API returned ${response.status}`);
@@ -5765,7 +5791,7 @@ Please provide a clear, structured analysis in markdown format.`;
           for (const subreddit of subreddits) {
             try {
               // Use proxy server to avoid CORS
-              const searchUrl = `http://localhost:3002/api/reddit/${subreddit}/search?q=${symbol}`;
+              const searchUrl = `${API_BASE_URL}/api/reddit/${subreddit}/search?q=${symbol}`;
               const response = await fetchWithRetry(searchUrl, { timeoutMs: 12000, retries: 1 });
 
               if (response.ok) {
@@ -7090,53 +7116,40 @@ Please provide a clear, structured analysis in markdown format.`;
           const isBrowser = typeof window !== 'undefined';
 
           const newsPromises = [
-            // Marketaux - Primary news source with sentiment (increased limit)
-            fetch(`https://api.marketaux.com/v1/news/all?symbols=${symbol}&filter_entities=true&language=en&limit=50&api_token=${API_KEYS.MARKETAUX}`)
-              .then(r => r.ok ? r.json() : { data: [] })
-              .catch(() => ({ data: [] })),
-
-            // Finnhub News - Skip in browser due to CORS restrictions
-            ...(isBrowser ? [Promise.resolve([])] : [
-              fetch(`https://finnhub.io/api/v1/company-news?symbol=${symbol}&from=${this.getDateDaysAgo(7)}&to=${this.getToday()}&token=${API_KEYS.FINNHUB}`)
-                .then(async r => {
-                  if (!r.ok) return [];
-                  const text = await r.text();
-                  // Check if response is HTML (error page) instead of JSON
-                  if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
-                    console.warn('⚠️ Finnhub returned HTML instead of JSON (likely error page)');
-                    return [];
-                  }
-                  try {
-                    return JSON.parse(text);
-                  } catch (e) {
-                    console.warn('⚠️ Finnhub response is not valid JSON:', e.message);
-                    return [];
-                  }
-                })
-                .catch(() => [])
-            ]),
-
-            // FMP Articles (general market news)
-            fetch(`https://financialmodelingprep.com/stable/fmp-articles?page=0&limit=20&apikey=${API_KEYS.FMP}`)
+            // FMP Stock News - Primary source (paid API, stock-specific news)
+            fetch(`https://financialmodelingprep.com/stable/news/stock?symbols=${symbol}&limit=30&apikey=${API_KEYS.FMP}`)
               .then(r => r.ok ? r.json() : [])
               .catch(() => []),
 
-            // FMP General Latest News
-            fetch(`https://financialmodelingprep.com/stable/news/general-latest?page=0&limit=20&apikey=${API_KEYS.FMP}`)
-              .then(r => r.ok ? r.json() : [])
-              .catch(() => [])
+            // Marketaux - Secondary news source with sentiment
+            fetch(`https://api.marketaux.com/v1/news/all?symbols=${symbol}&filter_entities=true&language=en&limit=20&api_token=${API_KEYS.MARKETAUX}`)
+              .then(r => r.ok ? r.json() : { data: [] })
+              .catch(() => ({ data: [] }))
           ];
 
-          const [marketauxResponse, finnhubNews, fmpArticles, fmpGeneralNews] = await Promise.all(newsPromises);
+          const [fmpStockNews, marketauxResponse] = await Promise.all(newsPromises);
 
           const marketauxNews = marketauxResponse?.data || [];
 
-          console.log(`📊 News sources: Marketaux=${marketauxNews.length}, Finnhub=${finnhubNews?.length || 0}, FMP Articles=${fmpArticles?.length || 0}, FMP General=${fmpGeneralNews?.length || 0}`);
+          console.log(`📊 News sources: FMP Stock News=${fmpStockNews?.length || 0}, Marketaux=${marketauxNews.length}`);
 
           // Combine and normalize news from all sources
           let allNews = [];
 
-          // Process Marketaux news (primary source with built-in sentiment)
+          // Process FMP Stock News (primary source - paid, stock-specific)
+          (fmpStockNews || []).forEach(item => {
+            allNews.push({
+              title: item.title,
+              description: item.text || item.content || '',
+              url: item.url,
+              source: item.site || item.source || 'FMP',
+              publishedAt: item.publishedDate || item.date,
+              image: item.image,
+              symbol: symbol
+            });
+          });
+
+          // Process Marketaux news (secondary source with built-in sentiment)
           marketauxNews.forEach(item => {
             allNews.push({
               title: item.title,
@@ -7150,58 +7163,13 @@ Please provide a clear, structured analysis in markdown format.`;
             });
           });
 
-          // Process FMP Articles (filter by symbol relevance)
-          (fmpArticles || []).forEach(item => {
-            const text = (item.title + ' ' + (item.text || '')).toLowerCase();
-            if (text.includes(symbol.toLowerCase())) {
-              allNews.push({
-                title: item.title,
-                description: item.text || item.content || '',
-                url: item.url,
-                source: item.site || 'FMP',
-                publishedAt: item.publishedDate || item.date,
-                image: item.image,
-                symbol: symbol
-              });
-            }
-          });
-
-          // Process FMP General News (filter by symbol relevance)
-          (fmpGeneralNews || []).forEach(item => {
-            const text = (item.title + ' ' + (item.text || '')).toLowerCase();
-            if (text.includes(symbol.toLowerCase())) {
-              allNews.push({
-                title: item.title,
-                description: item.text || item.content || '',
-                url: item.url,
-                source: item.site || 'MarketNews',
-                publishedAt: item.publishedDate || item.date,
-                image: item.image,
-                symbol: symbol
-              });
-            }
-          });
-
-          // Process Finnhub news
-          (finnhubNews || []).forEach(item => {
-            allNews.push({
-              title: item.headline,
-              description: item.summary || '',
-              url: item.url,
-              source: item.source || 'Finnhub',
-              publishedAt: new Date(item.datetime * 1000).toISOString(),
-              image: item.image,
-              symbol: symbol
-            });
-          });
-
           // Remove duplicates by URL
           const uniqueNews = allNews.filter((news, index, self) =>
             index === self.findIndex(n => n.url === news.url)
           );
 
-          // Keep only articles from the last 30 days
-          const cutoff = Date.now() - (30 * 24 * 60 * 60 * 1000);
+          // Keep only articles from the last 3 months
+          const cutoff = Date.now() - (90 * 24 * 60 * 60 * 1000);
           const recentNews = uniqueNews.filter(n => {
             const t = new Date(n.publishedAt).getTime();
             return Number.isFinite(t) && t >= cutoff;
@@ -7579,7 +7547,7 @@ Please provide a clear, structured analysis in markdown format.`;
         console.log('📡 Making API request to Claude via backend...');
 
         // Call local backend server that securely handles Claude API
-        const response = await fetchWithRetry("http://localhost:3002/api/claude", {
+        const response = await fetchWithRetry(`${API_BASE_URL}/api/claude`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -10080,7 +10048,7 @@ Be realistic and conservative. Base confidence on data quality.`;
 
     class OracleAnalyzer {
       constructor() {
-        this.baseUrl = 'http://localhost:3002/api/oracle';
+        this.baseUrl = `${API_BASE_URL}/api/oracle`;
         this.eventSources = {};
       }
 
@@ -10561,6 +10529,7 @@ Be realistic and conservative. Base confidence on data quality.`;
       const [currentDay, setCurrentDay] = useState(0);
       const [experimentId, setExperimentId] = useState(null);
       const eventSourceRef = useRef(null);
+      const pollIntervalRef = useRef(null);
 
       // Use all available stocks instead of just watchlist
       const availableStocks = useMemo(() => {
@@ -10596,7 +10565,7 @@ Be realistic and conservative. Base confidence on data quality.`;
 
           addLog(`🚀 Starting tournament with ${symbolsToUse.length} stocks...`, 'info');
 
-          const response = await fetch('http://localhost:3002/api/tournament/start', {
+          const response = await fetch(`${API_BASE_URL}/api/tournament/start`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -10629,7 +10598,7 @@ Be realistic and conservative. Base confidence on data quality.`;
 
         // If experimentId is 'current', use the current status endpoint
         const statusUrl = experimentId === 'current'
-          ? '${API_BASE_URL}/api/tournament/status/current'
+          ? `${API_BASE_URL}/api/tournament/status/current`
           : `${API_BASE_URL}/api/tournament/status/${experimentId}`;
 
         pollIntervalRef.current = setInterval(async () => {
@@ -10694,7 +10663,7 @@ Be realistic and conservative. Base confidence on data quality.`;
       const getTeamName = (teamId) => {
         const names = {
           1: 'Team Alpha (Claude-3-Sonnet)',
-          2: 'Team Beta (GPT-4-Turbo)',
+          2: 'Team Beta (Kimi-K2)',
           3: 'Team Gamma (DeepSeek-V3)',
           4: 'Team Delta (Gemini-Pro)'
         };
@@ -10710,7 +10679,7 @@ Be realistic and conservative. Base confidence on data quality.`;
 
       const loadTournamentResults = async () => {
         try {
-          const response = await fetch('${API_BASE_URL}/api/tournament/results');
+          const response = await fetch(`${API_BASE_URL}/api/tournament/results`);
           if (response.ok) {
             const data = await response.json();
             if (data.results) {
@@ -10729,17 +10698,21 @@ Be realistic and conservative. Base confidence on data quality.`;
         checkForRunningTournament();
 
         return () => {
-          // Only close SSE connections, don't stop tournament
+          // Clean up SSE connections and polling intervals on unmount
           if (eventSourceRef.current) {
             eventSourceRef.current.leaderboard?.close();
             eventSourceRef.current.logs?.close();
+          }
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
           }
         };
       }, []);
 
       const checkForRunningTournament = async () => {
         try {
-          const response = await fetch('http://localhost:3002/api/tournament/results');
+          const response = await fetch(`${API_BASE_URL}/api/tournament/results`);
           if (response.ok) {
             const data = await response.json();
             if (data.results && data.results.status === 'running') {
@@ -10765,7 +10738,7 @@ Be realistic and conservative. Base confidence on data quality.`;
 
         // Connect to leaderboard updates
         const leaderboardSSE = new EventSource(
-          `http://localhost:3002/api/tournament/sse/leaderboard/${expId}`
+          `${API_BASE_URL}/api/tournament/sse/leaderboard/${expId}`
         );
 
         leaderboardSSE.onmessage = (event) => {
@@ -10787,7 +10760,7 @@ Be realistic and conservative. Base confidence on data quality.`;
 
         // Connect to logs
         const logsSSE = new EventSource(
-          `http://localhost:3002/api/tournament/sse/logs/${expId}`
+          `${API_BASE_URL}/api/tournament/sse/logs/${expId}`
         );
 
         logsSSE.onmessage = (event) => {
@@ -10806,7 +10779,7 @@ Be realistic and conservative. Base confidence on data quality.`;
 
       const checkRunningTournament = async () => {
         try {
-          const response = await fetch('${API_BASE_URL}/api/tournament/status/current');
+          const response = await fetch(`${API_BASE_URL}/api/tournament/status/current`);
           if (response.ok) {
             const data = await response.json();
             if (data.status === 'running') {
@@ -10825,7 +10798,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                 console.log('📋 Polling current tournament status');
                 const pollCurrentStatus = setInterval(async () => {
                   try {
-                    const statusResponse = await fetch('${API_BASE_URL}/api/tournament/status/current');
+                    const statusResponse = await fetch(`${API_BASE_URL}/api/tournament/status/current`);
                     if (statusResponse.ok) {
                       const statusData = await statusResponse.json();
                       if (statusData.status === 'running') {
@@ -11921,6 +11894,149 @@ Be realistic and conservative. Base confidence on data quality.`;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // PATTERN CARD COMPONENT (extracted to fix hooks violation)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    function PatternCard({ pattern, stock, historicalData }) {
+      const [showAIAnalysis, setShowAIAnalysis] = useState(false);
+      const [aiAnalysis, setAiAnalysis] = useState(null);
+      const [analyzing, setAnalyzing] = useState(false);
+
+      const analyzePattern = async () => {
+        setAnalyzing(true);
+        try {
+          const analysis = await generatePatternAnalysis(pattern, stock, historicalData);
+          setAiAnalysis(analysis);
+          setShowAIAnalysis(true);
+        } catch (err) {
+          console.error('Pattern analysis error:', err);
+          setAiAnalysis(generateFallbackAnalysis(pattern));
+          setShowAIAnalysis(true);
+        } finally {
+          setAnalyzing(false);
+        }
+      };
+
+      return (
+        <div className="glass-card p-5 rounded-xl border border-cyan-500/20">
+          <div className="flex items-start justify-between mb-3">
+            <div>
+              <h4 className="text-lg font-bold text-white">{pattern.pattern.name}</h4>
+              <p className="text-sm text-slate-400 mt-1">{pattern.pattern.description}</p>
+            </div>
+            <div className="text-right">
+              <div className={`text-2xl font-bold ${pattern.confidence > 0.75 ? 'text-green-400' : pattern.confidence > 0.65 ? 'text-yellow-400' : 'text-orange-400'}`}>
+                {(pattern.confidence * 100).toFixed(0)}%
+              </div>
+              <div className="text-xs text-slate-500">Confidence</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <div>
+              <div className="text-xs text-slate-500 mb-1">Type</div>
+              <div className={`text-sm font-semibold ${pattern.pattern.type === 'reversal' ? 'text-red-400' : 'text-green-400'}`}>
+                {pattern.pattern.type === 'reversal' ? 'Reversal' : 'Continuation'}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500 mb-1">Reliability</div>
+              <div className="text-sm font-semibold text-cyan-400">
+                {(pattern.pattern.reliability * 100).toFixed(0)}%
+              </div>
+            </div>
+            {pattern.targetPrice && (
+              <div>
+                <div className="text-xs text-slate-500 mb-1">Target Price</div>
+                <div className="text-sm font-semibold text-white">${pattern.targetPrice.toFixed(2)}</div>
+              </div>
+            )}
+            <div>
+              <div className="text-xs text-slate-500 mb-1">Implications</div>
+              <div className={`text-sm font-semibold ${pattern.implications?.includes('Bullish') ? 'text-green-400' : pattern.implications?.includes('Bearish') ? 'text-red-400' : 'text-slate-400'}`}>
+                {pattern.implications || 'Neutral'}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-slate-700/30">
+            {!showAIAnalysis ? (
+              <button
+                onClick={analyzePattern}
+                disabled={analyzing}
+                className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
+              >
+                {analyzing ? (
+                  <>
+                    <div className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                    <span>AI Analyzing Pattern...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>🤖</span>
+                    <span>Get AI Analysis</span>
+                  </>
+                )}
+              </button>
+            ) : aiAnalysis && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-purple-400">🤖 AI Analysis</span>
+                  <button onClick={() => setShowAIAnalysis(false)} className="text-xs text-slate-500 hover:text-slate-400">Hide</button>
+                </div>
+                <div className="bg-slate-800/50 rounded-lg p-3">
+                  <div className="text-xs text-slate-500 mb-1">Trading Signal</div>
+                  <div className={`text-lg font-bold ${aiAnalysis.signal === 'BUY' ? 'text-green-400' : aiAnalysis.signal === 'SELL' ? 'text-red-400' : 'text-yellow-400'}`}>
+                    {aiAnalysis.signal}
+                  </div>
+                </div>
+                <div className="bg-slate-800/50 rounded-lg p-3">
+                  <div className="text-xs text-slate-500 mb-2">Recommended Strategy</div>
+                  <div className="text-sm text-slate-300">{aiAnalysis.strategy}</div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-2">
+                    <div className="text-xs text-green-400 mb-1">Entry Point</div>
+                    <div className="text-sm font-bold text-white">${aiAnalysis.entryPoint?.toFixed(2)}</div>
+                  </div>
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-2">
+                    <div className="text-xs text-red-400 mb-1">Stop Loss</div>
+                    <div className="text-sm font-bold text-white">${aiAnalysis.stopLoss?.toFixed(2)}</div>
+                  </div>
+                </div>
+                <div className="bg-slate-800/50 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-slate-500">Risk Level</span>
+                    <span className={`text-sm font-bold ${aiAnalysis.riskLevel === 'Low' ? 'text-green-400' : aiAnalysis.riskLevel === 'Medium' ? 'text-yellow-400' : 'text-red-400'}`}>
+                      {aiAnalysis.riskLevel}
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-400">{aiAnalysis.riskNote}</div>
+                </div>
+                {aiAnalysis.keyFactors && (
+                  <div className="bg-slate-800/50 rounded-lg p-3">
+                    <div className="text-xs text-slate-500 mb-2">Key Factors</div>
+                    <ul className="space-y-1">
+                      {aiAnalysis.keyFactors.map((factor, i) => (
+                        <li key={i} className="text-xs text-slate-300 flex items-start gap-2">
+                          <span className="text-purple-400">•</span>
+                          <span>{factor}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3">
+                  <div className="text-xs text-slate-400 leading-relaxed">{aiAnalysis.summary}</div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // STOCK MODAL COMPONENT
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -11977,7 +12093,7 @@ Be realistic and conservative. Base confidence on data quality.`;
         const handleUpdate = (update) => {
           setLivePrice(update.price);
           setLiveChange(update.change);
-          setLiveChangePct(update.changesPercentage || update.change);
+          setLiveChangePct(update.changesPercentage || (update.change && update.price ? (update.change / update.price * 100) : 0));
           setIsLiveUpdating(true);
 
           // Add to price history for mini chart
@@ -15277,7 +15393,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                               {patterns.length} pattern{patterns.length !== 1 ? 's' : ''} detected
                             </span>
                             <button
-                              onClick={() => setActiveTab('patterns')}
+                              onClick={(e) => { e.stopPropagation(); setActiveTab('patterns'); }}
                               className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-white rounded text-sm font-medium"
                             >
                               View Patterns
@@ -15856,176 +15972,9 @@ Be realistic and conservative. Base confidence on data quality.`;
 
                         return (
                           <div className="space-y-4">
-                            {patterns.map((pattern, idx) => {
-                              const [showAIAnalysis, setShowAIAnalysis] = React.useState(false);
-                              const [aiAnalysis, setAiAnalysis] = React.useState(null);
-                              const [analyzing, setAnalyzing] = React.useState(false);
-
-                              const analyzePattern = async () => {
-                                setAnalyzing(true);
-                                try {
-                                  // Generate AI analysis for this specific pattern
-                                  const analysis = await generatePatternAnalysis(pattern, stock, historicalData);
-                                  setAiAnalysis(analysis);
-                                  setShowAIAnalysis(true);
-                                } catch (err) {
-                                  console.error('Pattern analysis error:', err);
-                                  setAiAnalysis(generateFallbackAnalysis(pattern));
-                                  setShowAIAnalysis(true);
-                                } finally {
-                                  setAnalyzing(false);
-                                }
-                              };
-
-                              return (
-                                <div key={idx} className="glass-card p-5 rounded-xl border border-cyan-500/20">
-                                  <div className="flex items-start justify-between mb-3">
-                                    <div>
-                                      <h4 className="text-lg font-bold text-white">{pattern.pattern.name}</h4>
-                                      <p className="text-sm text-slate-400 mt-1">{pattern.pattern.description}</p>
-                                    </div>
-                                    <div className="text-right">
-                                      <div className={`text-2xl font-bold ${pattern.confidence > 0.75 ? 'text-green-400' :
-                                          pattern.confidence > 0.65 ? 'text-yellow-400' :
-                                            'text-orange-400'
-                                        }`}>
-                                        {(pattern.confidence * 100).toFixed(0)}%
-                                      </div>
-                                      <div className="text-xs text-slate-500">Confidence</div>
-                                    </div>
-                                  </div>
-
-                                  <div className="grid grid-cols-2 gap-4 mt-4">
-                                    <div>
-                                      <div className="text-xs text-slate-500 mb-1">Type</div>
-                                      <div className={`text-sm font-semibold ${pattern.pattern.type === 'reversal' ? 'text-red-400' : 'text-green-400'
-                                        }`}>
-                                        {pattern.pattern.type === 'reversal' ? 'Reversal' : 'Continuation'}
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <div className="text-xs text-slate-500 mb-1">Reliability</div>
-                                      <div className="text-sm font-semibold text-cyan-400">
-                                        {(pattern.pattern.reliability * 100).toFixed(0)}%
-                                      </div>
-                                    </div>
-                                    {pattern.targetPrice && (
-                                      <div>
-                                        <div className="text-xs text-slate-500 mb-1">Target Price</div>
-                                        <div className="text-sm font-semibold text-white">
-                                          ${pattern.targetPrice.toFixed(2)}
-                                        </div>
-                                      </div>
-                                    )}
-                                    <div>
-                                      <div className="text-xs text-slate-500 mb-1">Implications</div>
-                                      <div className={`text-sm font-semibold ${pattern.implications?.includes('Bullish') ? 'text-green-400' :
-                                          pattern.implications?.includes('Bearish') ? 'text-red-400' :
-                                            'text-slate-400'
-                                        }`}>
-                                        {pattern.implications || 'Neutral'}
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* AI Analysis Button */}
-                                  <div className="mt-4 pt-4 border-t border-slate-700/30">
-                                    {!showAIAnalysis ? (
-                                      <button
-                                        onClick={analyzePattern}
-                                        disabled={analyzing}
-                                        className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-2"
-                                      >
-                                        {analyzing ? (
-                                          <>
-                                            <div className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                                            <span>AI Analyzing Pattern...</span>
-                                          </>
-                                        ) : (
-                                          <>
-                                            <span>🤖</span>
-                                            <span>Get AI Analysis</span>
-                                          </>
-                                        )}
-                                      </button>
-                                    ) : (
-                                      <div className="space-y-3">
-                                        <div className="flex items-center justify-between">
-                                          <span className="text-sm font-bold text-purple-400">🤖 AI Analysis</span>
-                                          <button
-                                            onClick={() => setShowAIAnalysis(false)}
-                                            className="text-xs text-slate-500 hover:text-slate-400"
-                                          >
-                                            Hide
-                                          </button>
-                                        </div>
-
-                                        {/* Trading Signal */}
-                                        <div className="bg-slate-800/50 rounded-lg p-3">
-                                          <div className="text-xs text-slate-500 mb-1">Trading Signal</div>
-                                          <div className={`text-lg font-bold ${aiAnalysis.signal === 'BUY' ? 'text-green-400' :
-                                              aiAnalysis.signal === 'SELL' ? 'text-red-400' :
-                                                'text-yellow-400'
-                                            }`}>
-                                            {aiAnalysis.signal}
-                                          </div>
-                                        </div>
-
-                                        {/* Strategy */}
-                                        <div className="bg-slate-800/50 rounded-lg p-3">
-                                          <div className="text-xs text-slate-500 mb-2">Recommended Strategy</div>
-                                          <div className="text-sm text-slate-300">{aiAnalysis.strategy}</div>
-                                        </div>
-
-                                        {/* Entry/Exit Points */}
-                                        <div className="grid grid-cols-2 gap-2">
-                                          <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-2">
-                                            <div className="text-xs text-green-400 mb-1">Entry Point</div>
-                                            <div className="text-sm font-bold text-white">${aiAnalysis.entryPoint?.toFixed(2)}</div>
-                                          </div>
-                                          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-2">
-                                            <div className="text-xs text-red-400 mb-1">Stop Loss</div>
-                                            <div className="text-sm font-bold text-white">${aiAnalysis.stopLoss?.toFixed(2)}</div>
-                                          </div>
-                                        </div>
-
-                                        {/* Risk Assessment */}
-                                        <div className="bg-slate-800/50 rounded-lg p-3">
-                                          <div className="flex items-center justify-between mb-2">
-                                            <span className="text-xs text-slate-500">Risk Level</span>
-                                            <span className={`text-sm font-bold ${aiAnalysis.riskLevel === 'Low' ? 'text-green-400' :
-                                                aiAnalysis.riskLevel === 'Medium' ? 'text-yellow-400' :
-                                                  'text-red-400'
-                                              }`}>
-                                              {aiAnalysis.riskLevel}
-                                            </span>
-                                          </div>
-                                          <div className="text-xs text-slate-400">{aiAnalysis.riskNote}</div>
-                                        </div>
-
-                                        {/* Key Factors */}
-                                        <div className="bg-slate-800/50 rounded-lg p-3">
-                                          <div className="text-xs text-slate-500 mb-2">Key Factors</div>
-                                          <ul className="space-y-1">
-                                            {aiAnalysis.keyFactors?.map((factor, i) => (
-                                              <li key={i} className="text-xs text-slate-300 flex items-start gap-2">
-                                                <span className="text-purple-400">•</span>
-                                                <span>{factor}</span>
-                                              </li>
-                                            ))}
-                                          </ul>
-                                        </div>
-
-                                        {/* AI Summary */}
-                                        <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3">
-                                          <div className="text-xs text-slate-400 leading-relaxed">{aiAnalysis.summary}</div>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
+                            {patterns.map((pattern, idx) => (
+                              <PatternCard key={idx} pattern={pattern} stock={stock} historicalData={historicalData} />
+                            ))}
                           </div>
                         );
                       })()}
@@ -19175,158 +19124,648 @@ Be realistic and conservative. Base confidence on data quality.`;
     const LiveHeatmap = RealtimeHeatmap;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // TOURNAMENT LEADERBOARD TAB COMPONENT
+    // TOURNAMENT LOGS TAB COMPONENT
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function TournamentLeaderboardTab({ leaderboard, isLoading, error, onRunTournament }) {
-      if (isLoading) {
-        return (
-          <div className="glass-card p-12 rounded-xl text-center">
-            <i className="fas fa-spinner animate-spin text-4xl text-purple-400 mb-4"></i>
-            <p className="text-slate-400">Loading tournament leaderboard...</p>
-          </div>
-        );
-      }
+    function TournamentLogsTab() {
+      const [trades, setTrades] = useState([]);
+      const [teams, setTeams] = useState([]);
+      const [portfolioHistory, setPortfolioHistory] = useState([]);
+      const [isLoading, setIsLoading] = useState(false);
+      const [tournamentRunning, setTournamentRunning] = useState(false);
+      const [lastUpdate, setLastUpdate] = useState(null);
+      const [marketStatus, setMarketStatus] = useState({ open: false, message: '' });
+      const [dataSource, setDataSource] = useState('');
+      const [watchlistCount, setWatchlistCount] = useState(0);
+      const [selectedTeam, setSelectedTeam] = useState(null);
+      const chartContainerRef = useRef(null);
+      const chartRef = useRef(null);
+      const seriesRef = useRef({});
 
-      if (error) {
-        return (
-          <div className="glass-card p-8 rounded-xl text-center border-red-500/30">
-            <i className="fas fa-exclamation-triangle text-4xl text-red-400 mb-4"></i>
-            <p className="text-red-300 mb-4">{error}</p>
-            <button onClick={onRunTournament} className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-semibold">
-              Try Again
-            </button>
-          </div>
-        );
-      }
+      const loadTournamentLogs = async () => {
+        setIsLoading(true);
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/tournament/results`);
+          if (response.ok) {
+            const data = await response.json();
+            setTrades(data.trades || []);
+            setTeams(data.teams || []);
+            setPortfolioHistory(data.portfolioHistory || []);
+            setTournamentRunning(data.status === 'running');
+            setMarketStatus({ open: data.marketOpen, message: data.marketMessage });
+            setDataSource(data.dataSource || 'Unknown');
+            setWatchlistCount(data.watchlistCount || 0);
+            setLastUpdate(new Date());
+          }
 
-      if (!leaderboard || leaderboard.length === 0) {
-        return (
-          <div className="glass-card p-12 rounded-xl text-center">
-            <i className="fas fa-trophy text-6xl text-slate-700 mb-4"></i>
-            <h3 className="text-xl font-bold text-white mb-2">No Tournament Data</h3>
-            <p className="text-slate-400 mb-4">Run an AI Tournament to see the leaderboard</p>
-            <button
-              onClick={onRunTournament}
-              className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-lg font-semibold flex items-center gap-2 mx-auto"
-            >
-              <i className="fas fa-play"></i>
-              Start AI Tournament
-            </button>
-          </div>
-        );
-      }
+          // Also check current status
+          const statusResponse = await fetch(`${API_BASE_URL}/api/tournament/status/current`);
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json();
+            setTournamentRunning(statusData.status === 'running');
+          }
+        } catch (err) {
+          console.error('Error loading tournament logs:', err);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      useEffect(() => {
+        loadTournamentLogs();
+        // Refresh every 30 seconds for more real-time updates
+        const interval = setInterval(loadTournamentLogs, 30000);
+        return () => clearInterval(interval);
+      }, []);
+
+      // Team colors for the chart
+      const teamColors = {
+        'Claude (Sonnet)': '#22c55e',    // Green
+        'Kimi': '#ef4444',               // Red
+        'DeepSeek V3': '#3b82f6',        // Blue
+        'Gemini Pro': '#f59e0b'          // Yellow/Orange
+      };
+
+      // Initialize and update chart
+      useEffect(() => {
+        if (!chartContainerRef.current || !window.LightweightCharts || portfolioHistory.length < 2) return;
+
+        // Clean up existing chart
+        if (chartRef.current) {
+          chartRef.current.remove();
+          chartRef.current = null;
+          seriesRef.current = {};
+        }
+
+        // Create new chart
+        const chart = window.LightweightCharts.createChart(chartContainerRef.current, {
+          width: chartContainerRef.current.clientWidth,
+          height: 300,
+          layout: {
+            background: { type: 'solid', color: 'transparent' },
+            textColor: '#9ca3af'
+          },
+          grid: {
+            vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
+            horzLines: { color: 'rgba(255, 255, 255, 0.05)' }
+          },
+          crosshair: {
+            mode: window.LightweightCharts.CrosshairMode.Normal
+          },
+          rightPriceScale: {
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+            scaleMargins: { top: 0.1, bottom: 0.1 }
+          },
+          timeScale: {
+            borderColor: 'rgba(255, 255, 255, 0.1)',
+            timeVisible: true
+          }
+        });
+
+        chartRef.current = chart;
+
+        // Get unique team names from history
+        const teamNames = portfolioHistory.length > 0
+          ? portfolioHistory[0].teams.map(t => t.name)
+          : [];
+
+        // Create a line series for each team
+        teamNames.forEach(teamName => {
+          const series = chart.addLineSeries({
+            color: teamColors[teamName] || '#888888',
+            lineWidth: 2,
+            title: teamName,
+            priceFormat: {
+              type: 'custom',
+              formatter: (price) => '$' + price.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+            }
+          });
+
+          // Prepare data for this team
+          const data = portfolioHistory.map((point, idx) => {
+            const teamData = point.teams.find(t => t.name === teamName);
+            return {
+              time: idx, // Use index as time for simplicity
+              value: teamData ? teamData.portfolioValue : 50000
+            };
+          });
+
+          series.setData(data);
+          seriesRef.current[teamName] = series;
+        });
+
+        // Fit content
+        chart.timeScale().fitContent();
+
+        // Handle resize
+        const handleResize = () => {
+          if (chartContainerRef.current && chartRef.current) {
+            chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
+          }
+        };
+        window.addEventListener('resize', handleResize);
+
+        return () => {
+          window.removeEventListener('resize', handleResize);
+          if (chartRef.current) {
+            chartRef.current.remove();
+            chartRef.current = null;
+          }
+        };
+      }, [portfolioHistory]);
+
+      // Calculate team-specific stats
+      const getTeamStats = (teamName) => {
+        const teamTrades = trades.filter(t => t.team === teamName);
+        const buys = teamTrades.filter(t => t.action === 'BUY');
+        const sells = teamTrades.filter(t => t.action === 'SELL');
+        const totalBuyValue = buys.reduce((sum, t) => sum + (t.price * t.shares), 0);
+        const totalSellValue = sells.reduce((sum, t) => sum + (t.price * t.shares), 0);
+
+        // Get unique symbols traded
+        const symbolsTraded = [...new Set(teamTrades.map(t => t.symbol))];
+
+        return {
+          totalTrades: teamTrades.length,
+          buyCount: buys.length,
+          sellCount: sells.length,
+          totalBuyValue,
+          totalSellValue,
+          symbolsTraded,
+          recentTrades: teamTrades.slice(0, 10)
+        };
+      };
 
       return (
-        <div className="space-y-6">
-          <div className="glass-card p-6 rounded-xl border border-purple-500/30 bg-gradient-to-br from-purple-500/5 to-pink-500/5">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                <i className="fas fa-trophy text-yellow-400"></i>
-                AI Tournament Leaderboard
-              </h3>
+        <div className="space-y-6 animate-slide-up">
+          {/* Header */}
+          <div className="glass-card p-6 rounded-xl border border-purple-500/30">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                  <i className="fas fa-robot text-purple-400"></i>
+                  AI Trading Tournament
+                  {tournamentRunning && (
+                    <span className="ml-2 px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded-full flex items-center gap-1">
+                      <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                      LIVE
+                    </span>
+                  )}
+                </h3>
+                <p className="text-slate-400 text-sm mt-1">
+                  AI teams trade autonomously during US market hours (9:30 AM - 4:00 PM ET)
+                </p>
+                <div className="flex items-center gap-4 mt-2 text-xs">
+                  <span className={`px-2 py-1 rounded ${marketStatus.open ? 'bg-green-500/20 text-green-400' : 'bg-orange-500/20 text-orange-400'}`}>
+                    <i className={`fas ${marketStatus.open ? 'fa-door-open' : 'fa-door-closed'} mr-1`}></i>
+                    {marketStatus.message || 'Loading...'}
+                  </span>
+                  {dataSource && (
+                    <span className="px-2 py-1 rounded bg-cyan-500/20 text-cyan-400">
+                      <i className="fas fa-database mr-1"></i>
+                      {dataSource}
+                    </span>
+                  )}
+                  {watchlistCount > 0 && (
+                    <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-400">
+                      <i className="fas fa-list mr-1"></i>
+                      {watchlistCount} Stocks
+                    </span>
+                  )}
+                </div>
+              </div>
+
               <button
-                onClick={onRunTournament}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-semibold text-sm flex items-center gap-2 transition"
+                onClick={loadTournamentLogs}
+                disabled={isLoading}
+                className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-semibold text-sm flex items-center gap-2 transition disabled:opacity-50"
               >
-                <i className="fas fa-redo"></i>
-                Refresh Data
+                <i className={`fas fa-sync-alt ${isLoading ? 'animate-spin' : ''}`}></i>
+                Refresh
               </button>
             </div>
 
-            <div className="space-y-3">
-              {leaderboard.map((team, idx) => {
-                const isTop3 = idx < 3;
-                return (
-                  <div
-                    key={team.team_id || idx}
-                    className={`rounded-lg p-4 border transition hover:scale-[1.02] cursor-pointer ${isTop3
-                        ? 'bg-slate-800/70 border-purple-500/50 shadow-purple-500/10 shadow-lg'
-                        : 'bg-slate-800/50 border-slate-700/50 hover:border-purple-500/30'
-                      }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
+            {lastUpdate && (
+              <p className="text-slate-500 text-xs mb-4">
+                Last updated: {lastUpdate.toLocaleTimeString()} | Auto-refresh every 30s
+              </p>
+            )}
+
+            {/* Team Stats Cards */}
+            {teams.length > 0 && (
+              <div className="mb-6">
+                <h4 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                  <i className="fas fa-trophy text-yellow-400"></i>
+                  Team Standings
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {teams.sort((a, b) => b.portfolioValue - a.portfolioValue).map((team, idx) => {
+                    const stats = getTeamStats(team.name);
+                    const totalPnL = (team.realizedPnL || 0) + (team.unrealizedPnL || 0);
+                    const pnlPercent = ((totalPnL / 50000) * 100).toFixed(2);
+                    const isPositive = totalPnL >= 0;
+                    const holdingsCount = team.holdings?.length || Object.keys(team.holdings || {}).length || 0;
+
+                    return (
+                      <div
+                        key={team.id}
+                        onClick={() => setSelectedTeam(selectedTeam === team.name ? null : team.name)}
+                        className={`p-4 rounded-xl border cursor-pointer transition-all hover:scale-[1.02] ${
+                          selectedTeam === team.name
+                            ? 'border-purple-500 bg-purple-500/10'
+                            : 'border-slate-700 bg-slate-800/50 hover:border-slate-600'
+                        }`}
+                      >
                         {/* Rank Badge */}
-                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl transition ${idx === 0 ? 'bg-yellow-500/20 text-yellow-400 ring-2 ring-yellow-500/40' :
-                            idx === 1 ? 'bg-slate-500/20 text-slate-400 ring-2 ring-slate-500/40' :
-                              idx === 2 ? 'bg-orange-500/20 text-orange-400 ring-2 ring-orange-500/40' :
-                                'bg-slate-700/20 text-slate-500'
+                        <div className="flex items-center justify-between mb-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                            idx === 0 ? 'bg-yellow-500/20 text-yellow-400' :
+                            idx === 1 ? 'bg-slate-400/20 text-slate-300' :
+                            idx === 2 ? 'bg-orange-600/20 text-orange-400' :
+                            'bg-slate-700 text-slate-400'
                           }`}>
-                          {idx + 1}
+                            #{idx + 1}
+                          </div>
+                          <span className="text-xs text-slate-500">{team.strategy}</span>
                         </div>
 
-                        {/* Team Info */}
-                        <div>
-                          <div className="font-bold text-white text-lg">
-                            {team.name || `AI Team ${team.team_id}`}
+                        {/* Team Name */}
+                        <h5 className="font-bold text-white mb-1">{team.name}</h5>
+                        <p className="text-xs text-slate-500 mb-3">{team.model}</p>
+
+                        {/* Portfolio Value */}
+                        <div className="mb-3">
+                          <p className="text-2xl font-bold text-white">
+                            ${team.portfolioValue?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                          </p>
+                          <p className={`text-sm font-semibold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                            {isPositive ? '+' : ''}{pnlPercent}% ({isPositive ? '+' : ''}${totalPnL.toFixed(2)})
+                          </p>
+                        </div>
+
+                        {/* P/L Breakdown */}
+                        <div className="grid grid-cols-2 gap-2 text-xs mb-2">
+                          <div className="bg-slate-900/50 p-2 rounded">
+                            <p className="text-slate-500">Cash</p>
+                            <p className="text-cyan-400 font-semibold">${(team.cash || 50000).toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
                           </div>
-                          <div className="text-sm text-slate-400 flex items-center gap-2">
-                            <i className="fas fa-robot"></i>
-                            {team.model || 'Custom Strategy'}
-                            {team.status === 'running' && (
-                              <span className="px-2 py-0.5 bg-green-500/20 text-green-300 rounded text-xs">
-                                <i className="fas fa-spinner animate-spin mr-1"></i>
-                                Active
-                              </span>
-                            )}
+                          <div className="bg-slate-900/50 p-2 rounded">
+                            <p className="text-slate-500">Invested</p>
+                            <p className="text-amber-400 font-semibold">${(team.invested || 0).toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
                           </div>
+                          <div className="bg-slate-900/50 p-2 rounded">
+                            <p className="text-slate-500">Realized P/L</p>
+                            <p className={`font-semibold ${(team.realizedPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              {(team.realizedPnL || 0) >= 0 ? '+' : ''}${(team.realizedPnL || 0).toFixed(2)}
+                            </p>
+                          </div>
+                          <div className="bg-slate-900/50 p-2 rounded">
+                            <p className="text-slate-500">Unrealized P/L</p>
+                            <p className={`font-semibold ${(team.unrealizedPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              {(team.unrealizedPnL || 0) >= 0 ? '+' : ''}${(team.unrealizedPnL || 0).toFixed(2)}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Quick Stats */}
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="bg-slate-900/50 p-2 rounded">
+                            <p className="text-slate-500">Trades</p>
+                            <p className="text-white font-semibold">{team.totalTrades || 0}</p>
+                          </div>
+                          <div className="bg-slate-900/50 p-2 rounded">
+                            <p className="text-slate-500">Holdings</p>
+                            <p className="text-amber-400 font-semibold">{holdingsCount}</p>
+                          </div>
+                        </div>
+
+                        {/* Expand indicator */}
+                        <div className="mt-3 text-center">
+                          <i className={`fas fa-chevron-${selectedTeam === team.name ? 'up' : 'down'} text-slate-500 text-xs`}></i>
+                          <span className="text-slate-500 text-xs ml-1">View Holdings</span>
                         </div>
                       </div>
+                    );
+                  })}
+                </div>
 
-                      {/* Performance */}
+                {/* Selected Team Details */}
+                {selectedTeam && (
+                  <div className="mt-4 p-4 rounded-xl border border-purple-500/30 bg-purple-500/5">
+                    <h5 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                      <i className="fas fa-chart-bar text-purple-400"></i>
+                      {selectedTeam} - Live P/L Tracker
+                    </h5>
+                    {(() => {
+                      const teamData = teams.find(t => t.name === selectedTeam);
+                      const stats = getTeamStats(selectedTeam);
+                      const holdings = teamData?.holdings || [];
+                      const tradeHistory = teamData?.tradeHistory || [];
+
+                      return (
+                        <div className="space-y-4">
+                          {/* Portfolio Summary */}
+                          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                            <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                              <p className="text-slate-500 text-xs mb-1">Portfolio Value</p>
+                              <p className="text-white font-bold text-lg">
+                                ${(teamData?.portfolioValue || 50000).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                              </p>
+                            </div>
+                            <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                              <p className="text-slate-500 text-xs mb-1">Cash Available</p>
+                              <p className="text-cyan-400 font-bold text-lg">
+                                ${(teamData?.cash || 50000).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                              </p>
+                            </div>
+                            <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                              <p className="text-slate-500 text-xs mb-1">Invested</p>
+                              <p className="text-amber-400 font-bold text-lg">
+                                ${(teamData?.invested || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                              </p>
+                            </div>
+                            <div className="bg-slate-800/50 p-3 rounded-lg border border-green-500/30">
+                              <p className="text-slate-500 text-xs mb-1">Realized P/L</p>
+                              <p className={`font-bold text-lg ${(teamData?.realizedPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {(teamData?.realizedPnL || 0) >= 0 ? '+' : ''}${(teamData?.realizedPnL || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                              </p>
+                            </div>
+                            <div className="bg-slate-800/50 p-3 rounded-lg border border-blue-500/30">
+                              <p className="text-slate-500 text-xs mb-1">Unrealized P/L</p>
+                              <p className={`font-bold text-lg ${(teamData?.unrealizedPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {(teamData?.unrealizedPnL || 0) >= 0 ? '+' : ''}${(teamData?.unrealizedPnL || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Total P/L Banner */}
+                          <div className={`p-3 rounded-lg ${(teamData?.totalPnL || 0) >= 0 ? 'bg-green-500/10 border border-green-500/30' : 'bg-red-500/10 border border-red-500/30'}`}>
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-400 font-medium">Total Profit/Loss</span>
+                              <span className={`text-2xl font-bold ${(teamData?.totalPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {(teamData?.totalPnL || 0) >= 0 ? '+' : ''}${(teamData?.totalPnL || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                <span className="text-sm ml-2">
+                                  ({(((teamData?.totalPnL || 0) / 50000) * 100).toFixed(2)}%)
+                                </span>
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Current Holdings Table */}
+                          <div>
+                            <p className="text-slate-400 text-sm mb-2 flex items-center gap-2">
+                              <i className="fas fa-briefcase text-amber-400"></i>
+                              Current Holdings ({holdings.length} positions)
+                            </p>
+                            {holdings.length > 0 ? (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="text-slate-500 border-b border-slate-700">
+                                      <th className="text-left p-2">Symbol</th>
+                                      <th className="text-right p-2">Shares</th>
+                                      <th className="text-right p-2">Avg Cost</th>
+                                      <th className="text-right p-2">Current</th>
+                                      <th className="text-right p-2">Market Value</th>
+                                      <th className="text-right p-2">P/L</th>
+                                      <th className="text-right p-2">P/L %</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {holdings.map((holding, i) => (
+                                      <tr key={holding.symbol} className={`border-b border-slate-800 ${i % 2 === 0 ? 'bg-slate-800/30' : ''}`}>
+                                        <td className="p-2">
+                                          <span className="text-cyan-400 font-mono font-bold">{holding.symbol}</span>
+                                        </td>
+                                        <td className="text-right p-2 text-white">{holding.shares}</td>
+                                        <td className="text-right p-2 text-slate-400">${holding.avgCost?.toFixed(2)}</td>
+                                        <td className="text-right p-2 text-white">${holding.currentPrice?.toFixed(2)}</td>
+                                        <td className="text-right p-2 text-amber-400 font-semibold">
+                                          ${holding.marketValue?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                        </td>
+                                        <td className={`text-right p-2 font-semibold ${(holding.unrealizedPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                          {(holding.unrealizedPnL || 0) >= 0 ? '+' : ''}${holding.unrealizedPnL?.toFixed(2)}
+                                        </td>
+                                        <td className={`text-right p-2 font-semibold ${(holding.pnlPercent || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                          {(holding.pnlPercent || 0) >= 0 ? '+' : ''}{holding.pnlPercent?.toFixed(2)}%
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <div className="text-center py-4 text-slate-500 bg-slate-800/30 rounded-lg">
+                                <i className="fas fa-inbox text-2xl mb-2"></i>
+                                <p>No current holdings</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Trade History Table */}
+                          <div>
+                            <p className="text-slate-400 text-sm mb-2 flex items-center gap-2">
+                              <i className="fas fa-history text-purple-400"></i>
+                              Trade History (Last 20 trades)
+                            </p>
+                            {tradeHistory.length > 0 ? (
+                              <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                                <table className="w-full text-sm">
+                                  <thead className="sticky top-0 bg-slate-900">
+                                    <tr className="text-slate-500 border-b border-slate-700">
+                                      <th className="text-left p-2">Time</th>
+                                      <th className="text-left p-2">Action</th>
+                                      <th className="text-left p-2">Symbol</th>
+                                      <th className="text-right p-2">Shares</th>
+                                      <th className="text-right p-2">Price</th>
+                                      <th className="text-right p-2">Value</th>
+                                      <th className="text-right p-2">P/L</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {tradeHistory.map((trade, i) => (
+                                      <tr key={i} className={`border-b border-slate-800 ${trade.action === 'BUY' ? 'bg-green-500/5' : 'bg-red-500/5'}`}>
+                                        <td className="p-2 text-slate-500 text-xs">{trade.time}</td>
+                                        <td className="p-2">
+                                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                                            trade.action === 'BUY' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                                          }`}>
+                                            {trade.action}
+                                          </span>
+                                        </td>
+                                        <td className="p-2 text-cyan-400 font-mono">{trade.symbol}</td>
+                                        <td className="text-right p-2 text-white">{trade.shares}</td>
+                                        <td className="text-right p-2 text-slate-400">${trade.price?.toFixed(2)}</td>
+                                        <td className="text-right p-2 text-white">${trade.value?.toFixed(2)}</td>
+                                        <td className={`text-right p-2 font-semibold ${
+                                          trade.action === 'SELL'
+                                            ? ((trade.realizedPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400')
+                                            : 'text-slate-500'
+                                        }`}>
+                                          {trade.action === 'SELL'
+                                            ? `${(trade.realizedPnL || 0) >= 0 ? '+' : ''}$${(trade.realizedPnL || 0).toFixed(2)}`
+                                            : '-'
+                                          }
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <div className="text-center py-4 text-slate-500 bg-slate-800/30 rounded-lg">
+                                <i className="fas fa-clock text-2xl mb-2"></i>
+                                <p>No trades yet</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Volume Stats */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t border-slate-700">
+                            <div className="bg-slate-800/50 p-2 rounded-lg">
+                              <p className="text-slate-500 text-xs mb-1">Buy Volume</p>
+                              <p className="text-green-400 font-bold">
+                                ${stats.totalBuyValue.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                              </p>
+                            </div>
+                            <div className="bg-slate-800/50 p-2 rounded-lg">
+                              <p className="text-slate-500 text-xs mb-1">Sell Volume</p>
+                              <p className="text-red-400 font-bold">
+                                ${stats.totalSellValue.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                              </p>
+                            </div>
+                            <div className="bg-slate-800/50 p-2 rounded-lg">
+                              <p className="text-slate-500 text-xs mb-1">Total Trades</p>
+                              <p className="text-white font-bold">{teamData?.totalTrades || 0}</p>
+                            </div>
+                            <div className="bg-slate-800/50 p-2 rounded-lg">
+                              <p className="text-slate-500 text-xs mb-1">Unique Symbols</p>
+                              <p className="text-cyan-400 font-bold">{stats.symbolsTraded.length}</p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Portfolio Performance Chart */}
+            {portfolioHistory.length >= 2 && (
+              <div className="mb-6">
+                <h4 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                  <i className="fas fa-chart-line text-cyan-400"></i>
+                  Portfolio Performance
+                  <span className="text-xs text-slate-500 font-normal ml-2">Real-time tracking</span>
+                </h4>
+                <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                  {/* Chart Legend */}
+                  <div className="flex flex-wrap gap-4 mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                      <span className="text-sm text-slate-400">Claude (Sonnet)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                      <span className="text-sm text-slate-400">Kimi</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                      <span className="text-sm text-slate-400">DeepSeek V3</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                      <span className="text-sm text-slate-400">Gemini Pro</span>
+                    </div>
+                  </div>
+                  {/* Chart Container */}
+                  <div ref={chartContainerRef} className="w-full h-[300px]"></div>
+                  <p className="text-xs text-slate-500 mt-2 text-center">
+                    Starting Capital: $50,000 | {portfolioHistory.length} data points
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Trade Cards with AI Reasoning */}
+            <h4 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+              <i className="fas fa-exchange-alt text-purple-400"></i>
+              Trade Activity Log
+            </h4>
+            <div className="space-y-4 max-h-[600px] overflow-y-auto">
+              {isLoading && trades.length === 0 ? (
+                <div className="text-center py-12">
+                  <i className="fas fa-spinner animate-spin text-3xl text-purple-400 mb-3"></i>
+                  <p className="text-slate-400">Loading trade activity...</p>
+                </div>
+              ) : trades.length === 0 ? (
+                <div className="text-center py-12">
+                  <i className="fas fa-chart-line text-5xl text-slate-700 mb-4"></i>
+                  <h4 className="text-lg font-semibold text-white mb-2">No Trades Yet</h4>
+                  <p className="text-slate-500 max-w-md mx-auto">
+                    The AI tournament runs automatically during US market hours.
+                    Check back when the market is open to see live trading activity.
+                  </p>
+                  <div className="mt-4 p-3 bg-slate-800/50 rounded-lg inline-block">
+                    <p className="text-slate-400 text-sm">
+                      <i className="fas fa-clock mr-2"></i>
+                      Market Hours: Mon-Fri, 9:30 AM - 4:00 PM ET
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                trades.slice(0, 50).map((trade, idx) => (
+                  <div
+                    key={idx}
+                    className={`p-4 rounded-lg border ${
+                      trade.action === 'BUY'
+                        ? 'bg-green-500/5 border-green-500/30'
+                        : 'bg-red-500/5 border-red-500/30'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                          trade.action === 'BUY' ? 'bg-green-500/20' : 'bg-red-500/20'
+                        }`}>
+                          <i className={`fas ${trade.action === 'BUY' ? 'fa-arrow-up text-green-400' : 'fa-arrow-down text-red-400'}`}></i>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white">{trade.team}</span>
+                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                              trade.action === 'BUY' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                            }`}>
+                              {trade.action}
+                            </span>
+                          </div>
+                          <p className="text-slate-400 text-sm">
+                            {trade.shares} shares of <span className="text-cyan-400 font-semibold">{trade.symbol}</span> @ ${trade.price?.toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
                       <div className="text-right">
-                        <div className={`text-3xl font-bold mb-1 ${team.return >= 0 ? 'text-green-400' : 'text-red-400'
-                          }`}>
-                          {team.return ? `${team.return.toFixed(2)}%` : '0.00%'}
-                        </div>
-                        <div className="text-sm text-slate-400">
-                          <div>ROI: ${team.roi?.toFixed(2) || '0.00'}</div>
-                          <div>Trades: {team.trades || 0}</div>
-                          <div>Win Rate: {team.win_rate ? `${team.win_rate}%` : '0%'}</div>
-                        </div>
+                        <p className="text-slate-500 text-xs">{trade.time || trade.timestamp}</p>
+                        <p className="text-white font-semibold">${(trade.price * trade.shares).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
                       </div>
                     </div>
 
-                    {/* Progress Bar for Running Tournament */}
-                    {team.current_day && team.total_days && (
-                      <div className="mt-3">
-                        <div className="w-full bg-slate-700 rounded-full h-2">
-                          <div
-                            className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"
-                            style={{ width: `${(team.current_day / team.total_days) * 100}%` }}
-                          ></div>
-                        </div>
-                        <div className="text-xs text-slate-500 mt-1">
-                          Day {team.current_day} of {team.total_days}
+                    {/* AI Reasoning */}
+                    {trade.reasoning && (
+                      <div className="mt-3 p-3 bg-slate-800/50 rounded-lg border-l-2 border-purple-500">
+                        <div className="flex items-start gap-2">
+                          <i className="fas fa-brain text-purple-400 mt-0.5"></i>
+                          <div>
+                            <p className="text-xs text-purple-400 font-semibold mb-1">AI Analysis</p>
+                            <p className="text-slate-300 text-sm">{trade.reasoning}</p>
+                          </div>
                         </div>
                       </div>
                     )}
                   </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Stats Summary */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="glass-card p-4 rounded-lg text-center">
-              <div className="text-2xl font-bold text-green-400">
-                {leaderboard[0]?.return ? `${leaderboard[0].return.toFixed(2)}%` : '0%'}
-              </div>
-              <div className="text-xs text-slate-400">Best Performance</div>
-            </div>
-            <div className="glass-card p-4 rounded-lg text-center">
-              <div className="text-2xl font-bold text-purple-400">
-                {leaderboard.reduce((sum, t) => sum + (t.trades || 0), 0)}
-              </div>
-              <div className="text-xs text-slate-400">Total Trades</div>
-            </div>
-            <div className="glass-card p-4 rounded-lg text-center">
-              <div className="text-2xl font-bold text-cyan-400">
-                {leaderboard.filter(t => (t.win_rate || 0) > 50).length}
-              </div>
-              <div className="text-xs text-slate-400">Profitable Teams</div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -19578,7 +20017,7 @@ Be realistic and conservative. Base confidence on data quality.`;
       useEffect(() => {
         const checkTournamentStatus = async () => {
           try {
-            const response = await fetch('${API_BASE_URL}/api/tournament/status/current');
+            const response = await fetch(`${API_BASE_URL}/api/tournament/status/current`);
             if (response.ok) {
               const data = await response.json();
               const isRunning = data.status === 'running';
@@ -19606,50 +20045,8 @@ Be realistic and conservative. Base confidence on data quality.`;
         return () => clearInterval(interval);
       }, [tournamentRunning]); // Include tournamentRunning to detect changes
 
-      // Main Page Tabs - NEW STATE
-      const [activeMainTab, setActiveMainTab] = useState('screener'); // 'screener', 'leaderboard', 'portfolio'
-
-      // Tournament Leaderboard State - NEW
-      const [tournamentLeaderboardData, setTournamentLeaderboardData] = useState([]);
-      const [tournamentLoading, setTournamentLoading] = useState(false);
-      const [tournamentError, setTournamentError] = useState(null);
-
-      // ===== LOAD TOURNAMENT LEADERBOARD - NEW FUNCTION =====
-      const loadTournamentLeaderboard = useCallback(async () => {
-        setTournamentLoading(true);
-        setTournamentError(null);
-
-        try {
-          const response = await fetch('${API_BASE_URL}/api/tournament/results');
-          if (!response.ok) {
-            throw new Error(`Failed to load: ${response.status}`);
-          }
-
-          const data = await response.json();
-          setTournamentLeaderboardData(data.leaderboard || []);
-
-          // Also check if tournament is running
-          if (data.status === 'running') {
-            console.log('🏁 Tournament in progress');
-          }
-        } catch (err) {
-          console.error('Leaderboard load error:', err);
-          setTournamentError(err.message);
-        } finally {
-          setTournamentLoading(false);
-        }
-      }, []);
-
-      // ===== AUTO-REFRESH LEADERBOARD WHEN TAB IS ACTIVE =====
-      useEffect(() => {
-        if (activeMainTab === 'leaderboard') {
-          loadTournamentLeaderboard();
-
-          // Poll every 30 seconds when on leaderboard tab
-          const interval = setInterval(loadTournamentLeaderboard, 30000);
-          return () => clearInterval(interval);
-        }
-      }, [activeMainTab, loadTournamentLeaderboard]);
+      // Main Page Tabs - STATE
+      const [activeMainTab, setActiveMainTab] = useState('screener'); // 'screener', 'tournament', 'portfolio'
 
       // Subscribe to alert updates
       useEffect(() => {
@@ -20215,6 +20612,7 @@ Be realistic and conservative. Base confidence on data quality.`;
 
             // Price Data
             price: quote.price,
+            change: quote.change || 0,
             changePct: quote.changesPercentage || 0,
             volume: quote.volume,
             avgVolume: profile?.averageVolume || 0,
@@ -21156,7 +21554,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                   ...updated[index],
                   price: update.price,
                   change: update.change,
-                  changePct: update.changesPercentage || update.change,
+                  changePct: update.changesPercentage || (update.change && update.price ? (update.change / update.price * 100) : 0),
                   volume: update.volume,
                   quoteFetchedAt: update.quoteFetchedAt
                 };
@@ -21529,14 +21927,14 @@ Be realistic and conservative. Base confidence on data quality.`;
                 </button>
 
                 <button
-                  onClick={() => setActiveMainTab('leaderboard')}
-                  className={`px-4 py-3 font-semibold transition flex items-center gap-2 ${activeMainTab === 'leaderboard'
+                  onClick={() => setActiveMainTab('tournament')}
+                  className={`px-4 py-3 font-semibold transition flex items-center gap-2 ${activeMainTab === 'tournament'
                       ? 'text-purple-400 border-b-2 border-purple-400'
                       : 'text-slate-400 hover:text-white'
                     }`}
                 >
-                  <i className="fas fa-trophy"></i>
-                  AI Tournament Leaderboard
+                  <i className="fas fa-scroll"></i>
+                  Tournament Logs
                 </button>
 
                 <button
@@ -22266,17 +22664,9 @@ Be realistic and conservative. Base confidence on data quality.`;
               </>
             )}
 
-            {/* LEADERBOARD TAB - NEW */}
-            {activeMainTab === 'leaderboard' && (
-              <TournamentLeaderboardTab
-                leaderboard={tournamentLeaderboardData}
-                isLoading={tournamentLoading}
-                error={tournamentError}
-                onRunTournament={() => {
-                  const portfolioSymbols = portfolio && Array.isArray(portfolio) ? portfolio.map(p => p.symbol).filter(Boolean) : watchlist;
-                  setShowAITournament(true);
-                }}
-              />
+            {/* TOURNAMENT LOGS TAB */}
+            {activeMainTab === 'tournament' && (
+              <TournamentLogsTab />
             )}
 
             {/* PORTFOLIO TAB */}

@@ -1746,15 +1746,17 @@ Please provide a clear, structured analysis in markdown format.`;
     // ═══════════════════════════════════════════════════════════════════════════
 
     const CACHE_CONFIG = {
-      // Cache duration in milliseconds
-      STOCK_DATA: 60 * 60 * 1000,            // 1 HOUR for fundamentals (was 24h)
-      QUOTE_DATA: 60 * 60 * 1000,            // 1 HOUR for quotes
-      CHART_DATA: 60 * 60 * 1000,           // 1 hour for charts
-      NEWS_DATA: 30 * 60 * 1000,            // 30 minutes for news
-      SENTIMENT_DATA: 30 * 60 * 1000,       // 30 minutes for sentiment
+      // Cache duration in milliseconds - EXTENDED FOR BETTER PERFORMANCE
+      STOCK_DATA: 7 * 24 * 60 * 60 * 1000,   // 7 DAYS for fundamentals (company profile, ratios, etc.)
+      QUOTE_DATA_MARKET_OPEN: 5 * 60 * 1000, // 5 minutes during market hours
+      QUOTE_DATA_MARKET_CLOSED: 4 * 60 * 60 * 1000, // 4 hours when market closed
+      CHART_DATA: 24 * 60 * 60 * 1000,       // 24 hours for historical charts
+      NEWS_DATA: 6 * 60 * 60 * 1000,         // 6 hours for news articles
+      SENTIMENT_DATA: 2 * 60 * 60 * 1000,    // 2 hours for sentiment data
+      EARNINGS_DATA: 30 * 24 * 60 * 60 * 1000, // 30 days for earnings (changes quarterly)
       MARKET_CLOSED: 7 * 24 * 60 * 60 * 1000, // 7 days when market closed
       MAX_CACHE_SIZE: 500,
-      CACHE_VERSION: 'v4',                   // Bump version to force cache reset
+      CACHE_VERSION: 'v5',                   // Bumped for new cache durations
       OFFLINE_MODE: true
     };
 
@@ -1779,17 +1781,23 @@ Please provide a clear, structured analysis in markdown format.`;
         return true;
       },
 
-      // Get appropriate cache duration - User-defined fixed intervals (independent of market hours)
+      // Get appropriate cache duration - Smart intervals based on data type and market hours
       getCacheDuration(type = 'STOCK_DATA') {
+        // For quotes, use market-aware duration
+        if (type === 'QUOTE_DATA') {
+          return this.isMarketOpen() 
+            ? CACHE_CONFIG.QUOTE_DATA_MARKET_OPEN 
+            : CACHE_CONFIG.QUOTE_DATA_MARKET_CLOSED;
+        }
+
         const intervals = {
-          'QUOTE_DATA': CACHE_CONFIG.QUOTE_DATA,
           'STOCK_DATA': CACHE_CONFIG.STOCK_DATA,
           'CHART_DATA': CACHE_CONFIG.CHART_DATA,
           'NEWS_DATA': CACHE_CONFIG.NEWS_DATA,
-          'SENTIMENT_DATA': CACHE_CONFIG.SENTIMENT_DATA
+          'SENTIMENT_DATA': CACHE_CONFIG.SENTIMENT_DATA,
+          'EARNINGS_DATA': CACHE_CONFIG.EARNINGS_DATA
         };
 
-        // Return fixed interval
         return intervals[type] || CACHE_CONFIG.STOCK_DATA;
       },
 
@@ -2163,8 +2171,8 @@ Please provide a clear, structured analysis in markdown format.`;
         return data;
       },
 
-      // Set data with TTL
-      async set(store, key, value, ttl = 3600000) {
+      // Set data with TTL (default 24 hours instead of 1 hour)
+      async set(store, key, value, ttl = 24 * 60 * 60 * 1000) {
         const data = {
           id: key,
           symbol: key.split('_')[0],
@@ -2340,8 +2348,8 @@ Please provide a clear, structured analysis in markdown format.`;
       pendingRequests: new Map(),
       batchQueue: [],
       batchTimer: null,
-      BATCH_DELAY: 50, // 50ms batching window
-      MAX_BATCH_SIZE: 10,
+      BATCH_DELAY: 30, // 30ms batching window (faster response)
+      MAX_BATCH_SIZE: 25, // Increased from 10 to 25 (FMP supports up to 100)
 
       // Deduplicate requests
       async fetchUnique(url, options = {}) {
@@ -2406,18 +2414,30 @@ Please provide a clear, structured analysis in markdown format.`;
           byEndpoint[item.endpoint].push(item);
         });
 
-        // Execute batches
-        for (const [endpoint, items] of Object.entries(byEndpoint)) {
+        // Execute batches in parallel (multiple endpoints at once)
+        const batchPromises = Object.entries(byEndpoint).map(async ([endpoint, items]) => {
           const allSymbols = items.flatMap(i => i.symbols);
           const uniqueSymbols = [...new Set(allSymbols)];
 
           try {
-            // Use batch endpoint if available
-            const batchUrl = `https://financialmodelingprep.com/stable/${endpoint}?symbols=${uniqueSymbols.join(',')}&apikey=${FMP_API_KEY}`;
-            console.log(`🚀 Batch fetching ${uniqueSymbols.length} symbols for ${endpoint}`);
+            // Split into chunks if > 50 symbols (FMP works best with <50 at a time)
+            const chunks = [];
+            for (let i = 0; i < uniqueSymbols.length; i += 50) {
+              chunks.push(uniqueSymbols.slice(i, i + 50));
+            }
 
-            const response = await this.fetchUnique(batchUrl);
-            const data = await response.json();
+            // Fetch all chunks in parallel
+            const chunkResults = await Promise.all(
+              chunks.map(async (chunk) => {
+                const batchUrl = `https://financialmodelingprep.com/stable/${endpoint}?symbols=${chunk.join(',')}&apikey=${FMP_API_KEY}`;
+                console.log(`🚀 Batch fetching ${chunk.length} symbols for ${endpoint}`);
+                const response = await this.fetchUnique(batchUrl);
+                return await response.json();
+              })
+            );
+
+            // Combine all chunk results
+            const data = chunkResults.flat();
 
             // Resolve individual promises
             items.forEach(item => {
@@ -2431,7 +2451,10 @@ Please provide a clear, structured analysis in markdown format.`;
             console.error(`❌ Batch fetch failed for ${endpoint}:`, error);
             items.forEach(item => item.resolve({ data: null, success: false }));
           }
-        }
+        });
+
+        // Wait for all batches to complete
+        await Promise.all(batchPromises);
       },
 
       // Priority-based loading
@@ -2514,7 +2537,7 @@ Please provide a clear, structured analysis in markdown format.`;
           const data = await response.json();
 
           // Cache for 24 hours (chart data is stable)
-          await AdvancedStorage.set('chartData', cacheKey, data, 24 * 60 * 60 * 1000);
+          await AdvancedStorage.set('chartData', cacheKey, data, CACHE_CONFIG.CHART_DATA);
           console.log(`💾 Cached chart data for ${symbol} (${timeframe})`);
         } catch (error) {
           console.warn(`⚠️ Failed to prefetch chart for ${symbol}:`, error);
@@ -2558,7 +2581,7 @@ Please provide a clear, structured analysis in markdown format.`;
             `https://financialmodelingprep.com/stable/earnings?symbol=${symbol}&apikey=${FMP_API_KEY}`
           );
           const data = await response.json();
-          await AdvancedStorage.set('stockData', `${symbol}_earnings`, data, 24 * 60 * 60 * 1000);
+          await AdvancedStorage.set('stockData', `${symbol}_earnings`, data, CACHE_CONFIG.EARNINGS_DATA);
         } catch (error) {
           console.warn(`⚠️ Failed to prefetch earnings for ${symbol}:`, error);
         }
@@ -2693,8 +2716,8 @@ Please provide a clear, structured analysis in markdown format.`;
         const response = await RequestManager.batchFetch('quote', symbol);
         const data = Array.isArray(response.data) ? response.data[0] : response.data;
 
-        // Cache critical data for 5 minutes (market hours)
-        const ttl = Cache.isMarketOpen() ? 5 * 60 * 1000 : 60 * 60 * 1000;
+        // Cache critical data (quotes) - varies by market hours
+        const ttl = Cache.getCacheDuration('QUOTE_DATA');
         await AdvancedStorage.set('stockData', symbol, { critical: data }, ttl);
 
         return data;
@@ -2714,7 +2737,7 @@ Please provide a clear, structured analysis in markdown format.`;
           ...ratios[0]
         };
 
-        await AdvancedStorage.set('stockData', `${symbol}_fundamentals`, data, 60 * 60 * 1000);
+        await AdvancedStorage.set('stockData', `${symbol}_fundamentals`, data, CACHE_CONFIG.STOCK_DATA);
         return data;
       },
 
@@ -2735,7 +2758,7 @@ Please provide a clear, structured analysis in markdown format.`;
           macd: taData[0]?.macd
         };
 
-        await AdvancedStorage.set('stockData', `${symbol}_technical`, data, 5 * 60 * 1000);
+        await AdvancedStorage.set('stockData', `${symbol}_technical`, data, Cache.getCacheDuration('QUOTE_DATA'));
         return data;
       },
 
@@ -19333,14 +19356,15 @@ Be realistic and conservative. Base confidence on data quality.`;
               <div className="mb-6">
                 <h4 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
                   <i className="fas fa-trophy text-yellow-400"></i>
-                  Team Standings & Live P/L
+                  Team Standings
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {teams.sort((a, b) => b.portfolioValue - a.portfolioValue).map((team, idx) => {
-                    const totalPnL = (team.totalPnL || (team.portfolioValue - 50000));
+                    const stats = getTeamStats(team.name);
+                    const totalPnL = (team.realizedPnL || 0) + (team.unrealizedPnL || 0);
                     const pnlPercent = ((totalPnL / 50000) * 100).toFixed(2);
                     const isPositive = totalPnL >= 0;
-                    const holdingsCount = team.holdings ? team.holdings.length : 0;
+                    const holdingsCount = team.holdings?.length || Object.keys(team.holdings || {}).length || 0;
 
                     return (
                       <div
@@ -19383,11 +19407,11 @@ Be realistic and conservative. Base confidence on data quality.`;
                         <div className="grid grid-cols-2 gap-2 text-xs mb-2">
                           <div className="bg-slate-900/50 p-2 rounded">
                             <p className="text-slate-500">Cash</p>
-                            <p className="text-cyan-400 font-semibold">${(team.cash || 50000).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</p>
+                            <p className="text-cyan-400 font-semibold">${(team.cash || 50000).toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
                           </div>
                           <div className="bg-slate-900/50 p-2 rounded">
                             <p className="text-slate-500">Invested</p>
-                            <p className="text-purple-400 font-semibold">${(team.invested || 0).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</p>
+                            <p className="text-amber-400 font-semibold">${(team.invested || 0).toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
                           </div>
                           <div className="bg-slate-900/50 p-2 rounded">
                             <p className="text-slate-500">Realized P/L</p>
