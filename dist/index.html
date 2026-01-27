@@ -12128,7 +12128,7 @@ Be realistic and conservative. Base confidence on data quality.`;
         const handleUpdate = (update) => {
           setLivePrice(update.price);
           setLiveChange(update.change);
-          setLiveChangePct(update.changesPercentage || update.change);
+          setLiveChangePct(update.changesPercentage || (update.change && update.price ? (update.change / update.price * 100) : 0));
           setIsLiveUpdating(true);
 
           // Add to price history for mini chart
@@ -20646,6 +20646,7 @@ Be realistic and conservative. Base confidence on data quality.`;
 
             // Price Data
             price: quote.price,
+            change: quote.change || 0,
             changePct: quote.changesPercentage || 0,
             volume: quote.volume,
             avgVolume: profile?.averageVolume || 0,
@@ -21587,7 +21588,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                   ...updated[index],
                   price: update.price,
                   change: update.change,
-                  changePct: update.changesPercentage || update.change,
+                  changePct: update.changesPercentage || (update.change && update.price ? (update.change / update.price * 100) : 0),
                   volume: update.volume,
                   quoteFetchedAt: update.quoteFetchedAt
                 };
