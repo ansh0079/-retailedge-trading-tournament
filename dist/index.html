@@ -19391,15 +19391,14 @@ Be realistic and conservative. Base confidence on data quality.`;
               <div className="mb-6">
                 <h4 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
                   <i className="fas fa-trophy text-yellow-400"></i>
-                  Team Standings
+                  Team Standings & Live P/L
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {teams.sort((a, b) => b.portfolioValue - a.portfolioValue).map((team, idx) => {
-                    const stats = getTeamStats(team.name);
-                    const pnl = team.portfolioValue - 50000;
-                    const pnlPercent = ((pnl / 50000) * 100).toFixed(2);
-                    const isPositive = pnl >= 0;
-                    const cashRemaining = 50000 - stats.totalBuyValue + stats.totalSellValue;
+                    const totalPnL = (team.totalPnL || (team.portfolioValue - 50000));
+                    const pnlPercent = ((totalPnL / 50000) * 100).toFixed(2);
+                    const isPositive = totalPnL >= 0;
+                    const holdingsCount = team.holdings ? team.holdings.length : 0;
 
                     return (
                       <div
@@ -19434,33 +19433,50 @@ Be realistic and conservative. Base confidence on data quality.`;
                             ${team.portfolioValue?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                           </p>
                           <p className={`text-sm font-semibold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                            {isPositive ? '+' : ''}{pnlPercent}% ({isPositive ? '+' : ''}${pnl.toFixed(2)})
+                            {isPositive ? '+' : ''}{pnlPercent}% ({isPositive ? '+' : ''}${totalPnL.toFixed(2)})
                           </p>
+                        </div>
+
+                        {/* P/L Breakdown */}
+                        <div className="grid grid-cols-2 gap-2 text-xs mb-2">
+                          <div className="bg-slate-900/50 p-2 rounded">
+                            <p className="text-slate-500">Cash</p>
+                            <p className="text-cyan-400 font-semibold">${(team.cash || 50000).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</p>
+                          </div>
+                          <div className="bg-slate-900/50 p-2 rounded">
+                            <p className="text-slate-500">Invested</p>
+                            <p className="text-purple-400 font-semibold">${(team.invested || 0).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</p>
+                          </div>
+                          <div className="bg-slate-900/50 p-2 rounded">
+                            <p className="text-slate-500">Realized P/L</p>
+                            <p className={`font-semibold ${(team.realizedPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              {(team.realizedPnL || 0) >= 0 ? '+' : ''}${(team.realizedPnL || 0).toFixed(2)}
+                            </p>
+                          </div>
+                          <div className="bg-slate-900/50 p-2 rounded">
+                            <p className="text-slate-500">Unrealized P/L</p>
+                            <p className={`font-semibold ${(team.unrealizedPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              {(team.unrealizedPnL || 0) >= 0 ? '+' : ''}${(team.unrealizedPnL || 0).toFixed(2)}
+                            </p>
+                          </div>
                         </div>
 
                         {/* Quick Stats */}
                         <div className="grid grid-cols-2 gap-2 text-xs">
                           <div className="bg-slate-900/50 p-2 rounded">
                             <p className="text-slate-500">Trades</p>
-                            <p className="text-white font-semibold">{team.totalTrades || stats.totalTrades}</p>
+                            <p className="text-white font-semibold">{team.totalTrades || 0}</p>
                           </div>
                           <div className="bg-slate-900/50 p-2 rounded">
-                            <p className="text-slate-500">Stocks</p>
-                            <p className="text-cyan-400 font-semibold">{stats.symbolsTraded.length}</p>
-                          </div>
-                          <div className="bg-slate-900/50 p-2 rounded">
-                            <p className="text-slate-500">Buys</p>
-                            <p className="text-green-400 font-semibold">{stats.buyCount}</p>
-                          </div>
-                          <div className="bg-slate-900/50 p-2 rounded">
-                            <p className="text-slate-500">Sells</p>
-                            <p className="text-red-400 font-semibold">{stats.sellCount}</p>
+                            <p className="text-slate-500">Holdings</p>
+                            <p className="text-amber-400 font-semibold">{holdingsCount}</p>
                           </div>
                         </div>
 
                         {/* Expand indicator */}
                         <div className="mt-3 text-center">
                           <i className={`fas fa-chevron-${selectedTeam === team.name ? 'up' : 'down'} text-slate-500 text-xs`}></i>
+                          <span className="text-slate-500 text-xs ml-1">View Holdings</span>
                         </div>
                       </div>
                     );
@@ -19472,70 +19488,193 @@ Be realistic and conservative. Base confidence on data quality.`;
                   <div className="mt-4 p-4 rounded-xl border border-purple-500/30 bg-purple-500/5">
                     <h5 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
                       <i className="fas fa-chart-bar text-purple-400"></i>
-                      {selectedTeam} - Detailed Stats
+                      {selectedTeam} - Live P/L Tracker
                     </h5>
                     {(() => {
+                      const teamData = teams.find(t => t.name === selectedTeam);
                       const stats = getTeamStats(selectedTeam);
+                      const holdings = teamData?.holdings || [];
+                      const tradeHistory = teamData?.tradeHistory || [];
+
                       return (
                         <div className="space-y-4">
-                          {/* Trading Volume */}
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="bg-slate-800/50 p-3 rounded-lg">
-                              <p className="text-slate-500 text-xs mb-1">Total Buy Volume</p>
-                              <p className="text-green-400 font-bold text-lg">
-                                ${stats.totalBuyValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                          {/* Portfolio Summary */}
+                          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                            <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                              <p className="text-slate-500 text-xs mb-1">Portfolio Value</p>
+                              <p className="text-white font-bold text-lg">
+                                ${(teamData?.portfolioValue || 50000).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                               </p>
                             </div>
-                            <div className="bg-slate-800/50 p-3 rounded-lg">
-                              <p className="text-slate-500 text-xs mb-1">Total Sell Volume</p>
-                              <p className="text-red-400 font-bold text-lg">
-                                ${stats.totalSellValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                            <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                              <p className="text-slate-500 text-xs mb-1">Cash Available</p>
+                              <p className="text-cyan-400 font-bold text-lg">
+                                ${(teamData?.cash || 50000).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                               </p>
                             </div>
-                            <div className="bg-slate-800/50 p-3 rounded-lg">
-                              <p className="text-slate-500 text-xs mb-1">Net Flow</p>
-                              <p className={`font-bold text-lg ${stats.totalSellValue - stats.totalBuyValue >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                ${(stats.totalSellValue - stats.totalBuyValue).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                            <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                              <p className="text-slate-500 text-xs mb-1">Invested</p>
+                              <p className="text-amber-400 font-bold text-lg">
+                                ${(teamData?.invested || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                               </p>
                             </div>
-                            <div className="bg-slate-800/50 p-3 rounded-lg">
-                              <p className="text-slate-500 text-xs mb-1">Symbols Traded</p>
-                              <p className="text-cyan-400 font-bold text-lg">{stats.symbolsTraded.length}</p>
+                            <div className="bg-slate-800/50 p-3 rounded-lg border border-green-500/30">
+                              <p className="text-slate-500 text-xs mb-1">Realized P/L</p>
+                              <p className={`font-bold text-lg ${(teamData?.realizedPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {(teamData?.realizedPnL || 0) >= 0 ? '+' : ''}${(teamData?.realizedPnL || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                              </p>
+                            </div>
+                            <div className="bg-slate-800/50 p-3 rounded-lg border border-blue-500/30">
+                              <p className="text-slate-500 text-xs mb-1">Unrealized P/L</p>
+                              <p className={`font-bold text-lg ${(teamData?.unrealizedPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {(teamData?.unrealizedPnL || 0) >= 0 ? '+' : ''}${(teamData?.unrealizedPnL || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                              </p>
                             </div>
                           </div>
 
-                          {/* Symbols Breakdown */}
-                          <div>
-                            <p className="text-slate-400 text-sm mb-2">Stocks Traded:</p>
-                            <div className="flex flex-wrap gap-2">
-                              {stats.symbolsTraded.map(symbol => (
-                                <span key={symbol} className="px-2 py-1 bg-slate-700 text-cyan-400 rounded text-xs font-mono">
-                                  {symbol}
+                          {/* Total P/L Banner */}
+                          <div className={`p-3 rounded-lg ${(teamData?.totalPnL || 0) >= 0 ? 'bg-green-500/10 border border-green-500/30' : 'bg-red-500/10 border border-red-500/30'}`}>
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-400 font-medium">Total Profit/Loss</span>
+                              <span className={`text-2xl font-bold ${(teamData?.totalPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {(teamData?.totalPnL || 0) >= 0 ? '+' : ''}${(teamData?.totalPnL || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                <span className="text-sm ml-2">
+                                  ({(((teamData?.totalPnL || 0) / 50000) * 100).toFixed(2)}%)
                                 </span>
-                              ))}
+                              </span>
                             </div>
                           </div>
 
-                          {/* Recent Trades */}
+                          {/* Current Holdings Table */}
                           <div>
-                            <p className="text-slate-400 text-sm mb-2">Recent Trades:</p>
-                            <div className="space-y-2 max-h-48 overflow-y-auto">
-                              {stats.recentTrades.map((trade, i) => (
-                                <div key={i} className={`flex items-center justify-between p-2 rounded ${
-                                  trade.action === 'BUY' ? 'bg-green-500/10' : 'bg-red-500/10'
-                                }`}>
-                                  <div className="flex items-center gap-2">
-                                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                                      trade.action === 'BUY' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                                    }`}>
-                                      {trade.action}
-                                    </span>
-                                    <span className="text-white font-mono">{trade.symbol}</span>
-                                    <span className="text-slate-400 text-sm">{trade.shares} @ ${trade.price?.toFixed(2)}</span>
-                                  </div>
-                                  <span className="text-slate-500 text-xs">{trade.time}</span>
-                                </div>
-                              ))}
+                            <p className="text-slate-400 text-sm mb-2 flex items-center gap-2">
+                              <i className="fas fa-briefcase text-amber-400"></i>
+                              Current Holdings ({holdings.length} positions)
+                            </p>
+                            {holdings.length > 0 ? (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="text-slate-500 border-b border-slate-700">
+                                      <th className="text-left p-2">Symbol</th>
+                                      <th className="text-right p-2">Shares</th>
+                                      <th className="text-right p-2">Avg Cost</th>
+                                      <th className="text-right p-2">Current</th>
+                                      <th className="text-right p-2">Market Value</th>
+                                      <th className="text-right p-2">P/L</th>
+                                      <th className="text-right p-2">P/L %</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {holdings.map((holding, i) => (
+                                      <tr key={holding.symbol} className={`border-b border-slate-800 ${i % 2 === 0 ? 'bg-slate-800/30' : ''}`}>
+                                        <td className="p-2">
+                                          <span className="text-cyan-400 font-mono font-bold">{holding.symbol}</span>
+                                        </td>
+                                        <td className="text-right p-2 text-white">{holding.shares}</td>
+                                        <td className="text-right p-2 text-slate-400">${holding.avgCost?.toFixed(2)}</td>
+                                        <td className="text-right p-2 text-white">${holding.currentPrice?.toFixed(2)}</td>
+                                        <td className="text-right p-2 text-amber-400 font-semibold">
+                                          ${holding.marketValue?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                        </td>
+                                        <td className={`text-right p-2 font-semibold ${(holding.unrealizedPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                          {(holding.unrealizedPnL || 0) >= 0 ? '+' : ''}${holding.unrealizedPnL?.toFixed(2)}
+                                        </td>
+                                        <td className={`text-right p-2 font-semibold ${(holding.pnlPercent || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                          {(holding.pnlPercent || 0) >= 0 ? '+' : ''}{holding.pnlPercent?.toFixed(2)}%
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <div className="text-center py-4 text-slate-500 bg-slate-800/30 rounded-lg">
+                                <i className="fas fa-inbox text-2xl mb-2"></i>
+                                <p>No current holdings</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Trade History Table */}
+                          <div>
+                            <p className="text-slate-400 text-sm mb-2 flex items-center gap-2">
+                              <i className="fas fa-history text-purple-400"></i>
+                              Trade History (Last 20 trades)
+                            </p>
+                            {tradeHistory.length > 0 ? (
+                              <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                                <table className="w-full text-sm">
+                                  <thead className="sticky top-0 bg-slate-900">
+                                    <tr className="text-slate-500 border-b border-slate-700">
+                                      <th className="text-left p-2">Time</th>
+                                      <th className="text-left p-2">Action</th>
+                                      <th className="text-left p-2">Symbol</th>
+                                      <th className="text-right p-2">Shares</th>
+                                      <th className="text-right p-2">Price</th>
+                                      <th className="text-right p-2">Value</th>
+                                      <th className="text-right p-2">P/L</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {tradeHistory.map((trade, i) => (
+                                      <tr key={i} className={`border-b border-slate-800 ${trade.action === 'BUY' ? 'bg-green-500/5' : 'bg-red-500/5'}`}>
+                                        <td className="p-2 text-slate-500 text-xs">{trade.time}</td>
+                                        <td className="p-2">
+                                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                                            trade.action === 'BUY' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                                          }`}>
+                                            {trade.action}
+                                          </span>
+                                        </td>
+                                        <td className="p-2 text-cyan-400 font-mono">{trade.symbol}</td>
+                                        <td className="text-right p-2 text-white">{trade.shares}</td>
+                                        <td className="text-right p-2 text-slate-400">${trade.price?.toFixed(2)}</td>
+                                        <td className="text-right p-2 text-white">${trade.value?.toFixed(2)}</td>
+                                        <td className={`text-right p-2 font-semibold ${
+                                          trade.action === 'SELL'
+                                            ? ((trade.realizedPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400')
+                                            : 'text-slate-500'
+                                        }`}>
+                                          {trade.action === 'SELL'
+                                            ? `${(trade.realizedPnL || 0) >= 0 ? '+' : ''}$${(trade.realizedPnL || 0).toFixed(2)}`
+                                            : '-'
+                                          }
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <div className="text-center py-4 text-slate-500 bg-slate-800/30 rounded-lg">
+                                <i className="fas fa-clock text-2xl mb-2"></i>
+                                <p>No trades yet</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Volume Stats */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t border-slate-700">
+                            <div className="bg-slate-800/50 p-2 rounded-lg">
+                              <p className="text-slate-500 text-xs mb-1">Buy Volume</p>
+                              <p className="text-green-400 font-bold">
+                                ${stats.totalBuyValue.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                              </p>
+                            </div>
+                            <div className="bg-slate-800/50 p-2 rounded-lg">
+                              <p className="text-slate-500 text-xs mb-1">Sell Volume</p>
+                              <p className="text-red-400 font-bold">
+                                ${stats.totalSellValue.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                              </p>
+                            </div>
+                            <div className="bg-slate-800/50 p-2 rounded-lg">
+                              <p className="text-slate-500 text-xs mb-1">Total Trades</p>
+                              <p className="text-white font-bold">{teamData?.totalTrades || 0}</p>
+                            </div>
+                            <div className="bg-slate-800/50 p-2 rounded-lg">
+                              <p className="text-slate-500 text-xs mb-1">Unique Symbols</p>
+                              <p className="text-cyan-400 font-bold">{stats.symbolsTraded.length}</p>
                             </div>
                           </div>
                         </div>

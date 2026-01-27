@@ -342,7 +342,8 @@ let tournamentState = {
   watchlist: FULL_WATCHLIST,
   marketCheckInterval: null,
   tradeInterval: null,
-  portfolioHistory: [] // Track portfolio values over time for charting
+  portfolioHistory: [], // Track portfolio values over time for charting
+  portfolioUpdateInterval: null // For live P/L updates
 };
 
 // Team configurations with distinct AI personalities
@@ -687,20 +688,30 @@ async function getRealTimePrice(symbol) {
 }
 
 async function simulateTrade(team) {
-  const symbol = tournamentState.watchlist[Math.floor(Math.random() * tournamentState.watchlist.length)];
-
   // Get competitive position to influence trading behavior
-  const position = getCompetitivePosition(team);
+  const competitivePos = getCompetitivePosition(team);
 
   // Trailing teams may be more aggressive (more buys), leading teams more defensive (more sells)
   let buyProbability = 0.5;
-  if (position.isTrailing) {
+  if (competitivePos.isTrailing) {
     buyProbability = 0.65; // Trailing teams buy more aggressively
-  } else if (position.isLeading) {
+  } else if (competitivePos.isLeading) {
     buyProbability = 0.4; // Leading teams take profits more often
   }
 
-  const action = Math.random() < buyProbability ? 'BUY' : 'SELL';
+  // Determine action - but can only sell if we have holdings
+  const holdingsSymbols = Object.keys(team.holdings).filter(s => team.holdings[s].shares > 0);
+  let action, symbol;
+
+  if (holdingsSymbols.length === 0 || Math.random() < buyProbability) {
+    // BUY - pick random symbol from watchlist
+    action = 'BUY';
+    symbol = tournamentState.watchlist[Math.floor(Math.random() * tournamentState.watchlist.length)];
+  } else {
+    // SELL - pick from holdings
+    action = 'SELL';
+    symbol = holdingsSymbols[Math.floor(Math.random() * holdingsSymbols.length)];
+  }
 
   // Get real-time price from FMP API
   let price = await getRealTimePrice(symbol);
@@ -715,15 +726,41 @@ async function simulateTrade(team) {
   let baseShares = 5 + Math.random() * 45; // 5-50 shares base
 
   // Trailing aggressive/momentum teams take larger positions
-  if (position.isTrailing && (team.strategy === 'aggressive' || team.strategy === 'momentum')) {
+  if (competitivePos.isTrailing && (team.strategy === 'aggressive' || team.strategy === 'momentum')) {
     baseShares *= 1.3; // 30% larger positions when trailing
   }
   // Leading conservative teams take smaller positions
-  if (position.isLeading && team.strategy === 'conservative') {
+  if (competitivePos.isLeading && team.strategy === 'conservative') {
     baseShares *= 0.8; // 20% smaller positions when leading
   }
 
-  const shares = Math.floor(baseShares);
+  let shares = Math.floor(baseShares);
+  const tradeValue = price * shares;
+
+  // For BUY: check if team has enough cash
+  if (action === 'BUY') {
+    if (team.cash < tradeValue) {
+      // Reduce shares to what we can afford (minimum 1 share)
+      shares = Math.floor(team.cash / price);
+      if (shares < 1) {
+        console.log(`[Tournament] ${team.name} cannot afford to buy ${symbol} - insufficient cash`);
+        return null;
+      }
+    }
+  }
+
+  // For SELL: check if team has enough shares
+  if (action === 'SELL') {
+    const holding = team.holdings[symbol];
+    if (!holding || holding.shares < shares) {
+      shares = holding ? holding.shares : 0;
+      if (shares < 1) {
+        console.log(`[Tournament] ${team.name} has no ${symbol} shares to sell`);
+        return null;
+      }
+    }
+  }
+
   const reasoning = generateReasoning(team, action, symbol);
 
   return {
@@ -738,9 +775,9 @@ async function simulateTrade(team) {
     shares,
     reasoning,
     competitiveContext: {
-      rank: position.rank,
-      position: position.position,
-      gapToLeader: position.isLeading ? 0 : position.gapPercent
+      rank: competitivePos.rank,
+      position: competitivePos.position,
+      gapToLeader: competitivePos.isLeading ? 0 : competitivePos.gapPercent
     }
   };
 }
@@ -769,19 +806,94 @@ async function executeTradingRound() {
       // Skip if trade failed (no price available)
       if (!trade) continue;
 
+      const tradeValue = trade.price * trade.shares;
+
+      // Execute trade and update holdings
+      if (trade.action === 'BUY') {
+        // Deduct cash
+        team.cash -= tradeValue;
+
+        // Update or create holding
+        if (!team.holdings[trade.symbol]) {
+          team.holdings[trade.symbol] = {
+            shares: 0,
+            avgCost: 0,
+            totalCost: 0,
+            currentPrice: trade.price,
+            marketValue: 0,
+            unrealizedPnL: 0
+          };
+        }
+
+        const holding = team.holdings[trade.symbol];
+        const newTotalCost = holding.totalCost + tradeValue;
+        const newShares = holding.shares + trade.shares;
+        holding.avgCost = newTotalCost / newShares;
+        holding.totalCost = newTotalCost;
+        holding.shares = newShares;
+        holding.currentPrice = trade.price;
+        holding.marketValue = holding.shares * holding.currentPrice;
+        holding.unrealizedPnL = holding.marketValue - holding.totalCost;
+
+        trade.costBasis = holding.avgCost;
+
+      } else {
+        // SELL - realize P/L
+        const holding = team.holdings[trade.symbol];
+        if (holding && holding.shares >= trade.shares) {
+          const costBasis = holding.avgCost * trade.shares;
+          const proceeds = tradeValue;
+          const realizedPnL = proceeds - costBasis;
+
+          // Add cash from sale
+          team.cash += proceeds;
+
+          // Update holding
+          holding.totalCost -= costBasis;
+          holding.shares -= trade.shares;
+
+          if (holding.shares === 0) {
+            delete team.holdings[trade.symbol];
+          } else {
+            holding.marketValue = holding.shares * holding.currentPrice;
+            holding.unrealizedPnL = holding.marketValue - holding.totalCost;
+          }
+
+          // Track realized P/L
+          team.realizedPnL += realizedPnL;
+
+          trade.realizedPnL = realizedPnL;
+          trade.costBasis = holding ? holding.avgCost : 0;
+        }
+      }
+
+      // Recalculate portfolio value and unrealized P/L
+      let totalMarketValue = 0;
+      let totalUnrealizedPnL = 0;
+      for (const [sym, pos] of Object.entries(team.holdings)) {
+        totalMarketValue += pos.marketValue;
+        totalUnrealizedPnL += pos.unrealizedPnL;
+      }
+      team.invested = totalMarketValue;
+      team.unrealizedPnL = totalUnrealizedPnL;
+      team.portfolioValue = team.cash + totalMarketValue;
+
+      // Add to team's trade history
+      team.tradeHistory.unshift({
+        ...trade,
+        cashAfter: team.cash,
+        portfolioValueAfter: team.portfolioValue
+      });
+
+      // Keep only last 50 trades per team
+      if (team.tradeHistory.length > 50) {
+        team.tradeHistory = team.tradeHistory.slice(0, 50);
+      }
+
+      team.totalTrades++;
       tournamentState.trades.unshift(trade);
 
-      // Update team stats
-      const tradeValue = trade.price * trade.shares;
-      if (trade.action === 'BUY') {
-        team.invested += tradeValue;
-      } else {
-        team.realized += (Math.random() - 0.4) * tradeValue * 0.15;
-      }
-      team.totalTrades++;
-      team.portfolioValue = 50000 + team.realized + (Math.random() - 0.45) * 1500;
-
-      console.log(`[Tournament] ${team.name} ${trade.action} ${trade.shares} ${trade.symbol} @ $${trade.price.toFixed(2)} (Real-time)`);
+      console.log(`[Tournament] ${team.name} ${trade.action} ${trade.shares} ${trade.symbol} @ $${trade.price.toFixed(2)} | Cash: $${team.cash.toFixed(2)} | Portfolio: $${team.portfolioValue.toFixed(2)}`);
     }
   }
 
@@ -823,8 +935,11 @@ function startTournament() {
     portfolioValue: 50000,
     cash: 50000,
     invested: 0,
-    realized: 0,
-    totalTrades: 0
+    realizedPnL: 0,
+    unrealizedPnL: 0,
+    totalTrades: 0,
+    holdings: {}, // { symbol: { shares, avgCost, currentPrice, marketValue, unrealizedPnL } }
+    tradeHistory: [] // Detailed trade history for this team
   }));
 
   // Record initial portfolio values
@@ -845,8 +960,51 @@ function startTournament() {
     }
   }, 120000 + Math.random() * 180000); // Random 2-5 min interval
 
+  // Update portfolio values with live prices every 30 seconds
+  tournamentState.portfolioUpdateInterval = setInterval(async () => {
+    if (tournamentState.running) {
+      await updatePortfolioValues();
+    }
+  }, 30000);
+
   // Initial trade round
   executeTradingRound();
+}
+
+// Update all team portfolio values with current market prices
+async function updatePortfolioValues() {
+  // Get all unique symbols held by all teams
+  const allSymbols = new Set();
+  for (const team of tournamentState.teams) {
+    Object.keys(team.holdings).forEach(s => allSymbols.add(s));
+  }
+
+  if (allSymbols.size === 0) return;
+
+  // Fetch current prices for all held symbols
+  const prices = await fetchRealTimePrices([...allSymbols]);
+
+  // Update each team's holdings and portfolio value
+  for (const team of tournamentState.teams) {
+    let totalMarketValue = 0;
+    let totalUnrealizedPnL = 0;
+
+    for (const [symbol, position] of Object.entries(team.holdings)) {
+      const currentPrice = prices[symbol] || position.currentPrice;
+      position.currentPrice = currentPrice;
+      position.marketValue = position.shares * currentPrice;
+      position.unrealizedPnL = position.marketValue - (position.shares * position.avgCost);
+
+      totalMarketValue += position.marketValue;
+      totalUnrealizedPnL += position.unrealizedPnL;
+    }
+
+    team.invested = totalMarketValue;
+    team.unrealizedPnL = totalUnrealizedPnL;
+    team.portfolioValue = team.cash + totalMarketValue;
+  }
+
+  console.log('[Tournament] Portfolio values updated with live prices');
 }
 
 function stopTournament() {
@@ -858,6 +1016,10 @@ function stopTournament() {
   if (tournamentState.tradeInterval) {
     clearInterval(tournamentState.tradeInterval);
     tournamentState.tradeInterval = null;
+  }
+  if (tournamentState.portfolioUpdateInterval) {
+    clearInterval(tournamentState.portfolioUpdateInterval);
+    tournamentState.portfolioUpdateInterval = null;
   }
 }
 
@@ -925,9 +1087,24 @@ app.get('/api/tournament/results', async (req, res) => {
         id: t.id,
         name: t.name,
         model: t.model,
+        strategy: t.strategy,
         portfolioValue: Math.round(t.portfolioValue * 100) / 100,
+        cash: Math.round(t.cash * 100) / 100,
+        invested: Math.round(t.invested * 100) / 100,
+        realizedPnL: Math.round((t.realizedPnL || 0) * 100) / 100,
+        unrealizedPnL: Math.round((t.unrealizedPnL || 0) * 100) / 100,
+        totalPnL: Math.round(((t.realizedPnL || 0) + (t.unrealizedPnL || 0)) * 100) / 100,
         totalTrades: t.totalTrades,
-        strategy: t.strategy
+        holdings: Object.entries(t.holdings || {}).map(([symbol, pos]) => ({
+          symbol,
+          shares: pos.shares,
+          avgCost: Math.round(pos.avgCost * 100) / 100,
+          currentPrice: Math.round(pos.currentPrice * 100) / 100,
+          marketValue: Math.round(pos.marketValue * 100) / 100,
+          unrealizedPnL: Math.round(pos.unrealizedPnL * 100) / 100,
+          pnlPercent: Math.round((pos.unrealizedPnL / (pos.avgCost * pos.shares)) * 10000) / 100
+        })),
+        tradeHistory: (t.tradeHistory || []).slice(0, 20) // Last 20 trades
       }))
     });
   } catch (error) {
