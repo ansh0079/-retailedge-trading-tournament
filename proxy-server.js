@@ -341,7 +341,8 @@ let tournamentState = {
   trades: [],
   watchlist: FULL_WATCHLIST,
   marketCheckInterval: null,
-  tradeInterval: null
+  tradeInterval: null,
+  portfolioHistory: [] // Track portfolio values over time for charting
 };
 
 // Team configurations with distinct AI personalities
@@ -432,6 +433,99 @@ const REASONING_TEMPLATES = {
   }
 };
 
+// Competitive awareness reasoning based on ranking
+const COMPETITIVE_REASONING = {
+  leading: {
+    aggressive: [
+      "Currently in the lead. Pressing the advantage with calculated aggression to extend the gap.",
+      "Holding first place. Not getting complacent - continuing momentum plays to stay ahead.",
+      "Leading the pack. Taking measured risks to maintain dominance over competitors."
+    ],
+    balanced: [
+      "In first place. Maintaining disciplined approach that got us here. No need to change strategy.",
+      "Leading the tournament. Staying focused on fundamentals while protecting gains.",
+      "Ahead of competitors. Balanced approach working well - continuing steady execution."
+    ],
+    conservative: [
+      "Currently leading. Protecting gains with defensive positioning. No need for unnecessary risks.",
+      "In first place. Shifting slightly more conservative to lock in the lead.",
+      "Ahead of the pack. Quality over quantity now - preserving capital advantage."
+    ],
+    momentum: [
+      "Leading the tournament. Momentum is on our side - riding the winners.",
+      "In first place. Technical edge working - continuing trend-following approach.",
+      "Ahead of competitors. Strong relative performance - no reason to deviate."
+    ]
+  },
+  trailing: {
+    aggressive: [
+      "Behind in standings. Time to be more aggressive - need higher-beta plays to catch up.",
+      "Trailing the leader. Increasing position sizes on high-conviction plays to close the gap.",
+      "Need to make up ground. Taking calculated risks on momentum names to recover."
+    ],
+    balanced: [
+      "Behind competitors. Slightly increasing risk tolerance while maintaining discipline.",
+      "Trailing in standings. Looking for quality opportunities to improve position without overreaching.",
+      "Need to catch up. Adjusting risk parameters modestly while staying true to fundamentals."
+    ],
+    conservative: [
+      "Behind but not panicking. Sticking to quality names - one good trade can change everything.",
+      "Trailing leaders. Patience is key - opportunities will come without chasing.",
+      "Behind in standings. Maintaining discipline - conservative approach can still win."
+    ],
+    momentum: [
+      "Trailing competitors. Scanning for breakout setups to quickly close the gap.",
+      "Behind in standings. Need to catch the next big mover - watching for volume surges.",
+      "Need to recover ground. Looking for high-momentum plays with clear technical patterns."
+    ]
+  },
+  middle: {
+    aggressive: [
+      "Mid-pack position. Seeing opportunity to move up with aggressive positioning on this trade.",
+      "Currently in the middle. Time to make a push - this setup could leap us ahead.",
+      "Not leading but not trailing badly. Aggressive move here could change our position."
+    ],
+    balanced: [
+      "Middle of the pack. Steady execution will get us to the top - no need to force trades.",
+      "Mid-tier position. Continuing balanced approach - consistent gains add up.",
+      "In the middle standings. Focused on quality setups that align with strategy."
+    ],
+    conservative: [
+      "Middle position. Patient accumulation of quality names will pay off over time.",
+      "Mid-pack. Not chasing - letting opportunities come to us with defensive names.",
+      "Currently in middle. Conservative plays compounding - staying the course."
+    ],
+    momentum: [
+      "Mid-standings position. Following the momentum wherever it leads for an edge.",
+      "In the middle of the pack. Technical setups look good - executing on signals.",
+      "Middle position. Trend-following strategy will separate us from the pack."
+    ]
+  }
+};
+
+// Get team's competitive position
+function getCompetitivePosition(team) {
+  const sortedTeams = [...tournamentState.teams].sort((a, b) => b.portfolioValue - a.portfolioValue);
+  const rank = sortedTeams.findIndex(t => t.id === team.id) + 1;
+  const totalTeams = sortedTeams.length;
+
+  const leader = sortedTeams[0];
+  const gap = leader.portfolioValue - team.portfolioValue;
+  const gapPercent = ((gap / 50000) * 100).toFixed(2);
+
+  return {
+    rank,
+    totalTeams,
+    isLeading: rank === 1,
+    isTrailing: rank === totalTeams,
+    isMiddle: rank > 1 && rank < totalTeams,
+    gap,
+    gapPercent,
+    leader: leader.name,
+    position: rank === 1 ? 'leading' : (rank >= totalTeams - 1 ? 'trailing' : 'middle')
+  };
+}
+
 // Check if US market is open (9:30 AM - 4:00 PM ET, Mon-Fri)
 function isMarketOpen() {
   const now = new Date();
@@ -491,7 +585,29 @@ function getMarketStatus() {
 
 function generateReasoning(team, action, symbol) {
   const templates = REASONING_TEMPLATES[action][team.strategy];
-  return templates[Math.floor(Math.random() * templates.length)];
+  const baseReasoning = templates[Math.floor(Math.random() * templates.length)];
+
+  // Add competitive awareness (50% chance to include competitive context)
+  if (tournamentState.teams.length >= 2 && Math.random() < 0.5) {
+    const position = getCompetitivePosition(team);
+    const competitiveTemplates = COMPETITIVE_REASONING[position.position][team.strategy];
+    const competitiveNote = competitiveTemplates[Math.floor(Math.random() * competitiveTemplates.length)];
+
+    // Add specific competitor reference for more dynamic reasoning
+    if (position.isTrailing && position.gap > 0) {
+      return `${baseReasoning} [Tournament Awareness: ${competitiveNote} ${position.leader} leads by ${position.gapPercent}%.]`;
+    } else if (position.isLeading) {
+      const secondPlace = tournamentState.teams
+        .filter(t => t.id !== team.id)
+        .sort((a, b) => b.portfolioValue - a.portfolioValue)[0];
+      const leadGap = ((team.portfolioValue - secondPlace.portfolioValue) / 50000 * 100).toFixed(2);
+      return `${baseReasoning} [Tournament Awareness: ${competitiveNote} Leading ${secondPlace.name} by ${leadGap}%.]`;
+    } else {
+      return `${baseReasoning} [Tournament Awareness: ${competitiveNote}]`;
+    }
+  }
+
+  return baseReasoning;
 }
 
 // Fetch real-time prices from FMP API
@@ -572,7 +688,19 @@ async function getRealTimePrice(symbol) {
 
 async function simulateTrade(team) {
   const symbol = tournamentState.watchlist[Math.floor(Math.random() * tournamentState.watchlist.length)];
-  const action = Math.random() > 0.5 ? 'BUY' : 'SELL';
+
+  // Get competitive position to influence trading behavior
+  const position = getCompetitivePosition(team);
+
+  // Trailing teams may be more aggressive (more buys), leading teams more defensive (more sells)
+  let buyProbability = 0.5;
+  if (position.isTrailing) {
+    buyProbability = 0.65; // Trailing teams buy more aggressively
+  } else if (position.isLeading) {
+    buyProbability = 0.4; // Leading teams take profits more often
+  }
+
+  const action = Math.random() < buyProbability ? 'BUY' : 'SELL';
 
   // Get real-time price from FMP API
   let price = await getRealTimePrice(symbol);
@@ -583,7 +711,19 @@ async function simulateTrade(team) {
     return null;
   }
 
-  const shares = Math.floor(5 + Math.random() * 45); // 5-50 shares
+  // Adjust position size based on competitive position and strategy
+  let baseShares = 5 + Math.random() * 45; // 5-50 shares base
+
+  // Trailing aggressive/momentum teams take larger positions
+  if (position.isTrailing && (team.strategy === 'aggressive' || team.strategy === 'momentum')) {
+    baseShares *= 1.3; // 30% larger positions when trailing
+  }
+  // Leading conservative teams take smaller positions
+  if (position.isLeading && team.strategy === 'conservative') {
+    baseShares *= 0.8; // 20% smaller positions when leading
+  }
+
+  const shares = Math.floor(baseShares);
   const reasoning = generateReasoning(team, action, symbol);
 
   return {
@@ -596,7 +736,12 @@ async function simulateTrade(team) {
     symbol,
     price: Math.round(price * 100) / 100,
     shares,
-    reasoning
+    reasoning,
+    competitiveContext: {
+      rank: position.rank,
+      position: position.position,
+      gapToLeader: position.isLeading ? 0 : position.gapPercent
+    }
   };
 }
 
@@ -644,6 +789,23 @@ async function executeTradingRound() {
   if (tournamentState.trades.length > 200) {
     tournamentState.trades = tournamentState.trades.slice(0, 200);
   }
+
+  // Record portfolio history for charting
+  const historyPoint = {
+    timestamp: new Date().toISOString(),
+    time: new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' }),
+    teams: tournamentState.teams.map(t => ({
+      id: t.id,
+      name: t.name,
+      portfolioValue: Math.round(t.portfolioValue * 100) / 100
+    }))
+  };
+  tournamentState.portfolioHistory.push(historyPoint);
+
+  // Keep only last 100 history points (enough for a good chart)
+  if (tournamentState.portfolioHistory.length > 100) {
+    tournamentState.portfolioHistory = tournamentState.portfolioHistory.slice(-100);
+  }
 }
 
 function startTournament() {
@@ -654,6 +816,7 @@ function startTournament() {
 
   tournamentState.running = true;
   tournamentState.experimentId = `tournament_${Date.now()}`;
+  tournamentState.portfolioHistory = []; // Reset history on new tournament
   tournamentState.teams = [1, 2, 3, 4].map(id => ({
     id,
     ...TEAM_CONFIGS[id],
@@ -663,6 +826,17 @@ function startTournament() {
     realized: 0,
     totalTrades: 0
   }));
+
+  // Record initial portfolio values
+  tournamentState.portfolioHistory.push({
+    timestamp: new Date().toISOString(),
+    time: new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' }),
+    teams: tournamentState.teams.map(t => ({
+      id: t.id,
+      name: t.name,
+      portfolioValue: 50000
+    }))
+  });
 
   // Execute trades every 2-5 minutes during market hours
   tournamentState.tradeInterval = setInterval(async () => {
@@ -746,6 +920,7 @@ app.get('/api/tournament/results', async (req, res) => {
       dataSource: 'Real-time FMP API',
       watchlistCount: tournamentState.watchlist.length,
       trades: tournamentState.trades,
+      portfolioHistory: tournamentState.portfolioHistory,
       teams: tournamentState.teams.map(t => ({
         id: t.id,
         name: t.name,
