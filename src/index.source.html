@@ -7093,78 +7093,36 @@ Please provide a clear, structured analysis in markdown format.`;
           const isBrowser = typeof window !== 'undefined';
 
           const newsPromises = [
-            // NewsFilter.io - Primary news source (free, no API key required)
-            fetch('https://api.newsfilter.io/public/actions', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                type: 'filterArticles',
-                queryString: `symbols:${symbol}`,
-                from: 0,
-                size: 30
-              })
-            })
-              .then(r => r.ok ? r.json() : { articles: [] })
-              .catch(() => ({ articles: [] })),
-
-            // Marketaux - Secondary news source with sentiment
-            fetch(`https://api.marketaux.com/v1/news/all?symbols=${symbol}&filter_entities=true&language=en&limit=50&api_token=${API_KEYS.MARKETAUX}`)
-              .then(r => r.ok ? r.json() : { data: [] })
-              .catch(() => ({ data: [] })),
-
-            // Finnhub News - Skip in browser due to CORS restrictions
-            ...(isBrowser ? [Promise.resolve([])] : [
-              fetch(`https://finnhub.io/api/v1/company-news?symbol=${symbol}&from=${this.getDateDaysAgo(7)}&to=${this.getToday()}&token=${API_KEYS.FINNHUB}`)
-                .then(async r => {
-                  if (!r.ok) return [];
-                  const text = await r.text();
-                  // Check if response is HTML (error page) instead of JSON
-                  if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
-                    console.warn('⚠️ Finnhub returned HTML instead of JSON (likely error page)');
-                    return [];
-                  }
-                  try {
-                    return JSON.parse(text);
-                  } catch (e) {
-                    console.warn('⚠️ Finnhub response is not valid JSON:', e.message);
-                    return [];
-                  }
-                })
-                .catch(() => [])
-            ]),
-
-            // FMP Articles (general market news)
-            fetch(`https://financialmodelingprep.com/stable/fmp-articles?page=0&limit=20&apikey=${API_KEYS.FMP}`)
+            // FMP Stock News - Primary source (paid API, stock-specific news)
+            fetch(`https://financialmodelingprep.com/stable/news/stock?symbols=${symbol}&limit=30&apikey=${API_KEYS.FMP}`)
               .then(r => r.ok ? r.json() : [])
               .catch(() => []),
 
-            // FMP General Latest News
-            fetch(`https://financialmodelingprep.com/stable/news/general-latest?page=0&limit=20&apikey=${API_KEYS.FMP}`)
-              .then(r => r.ok ? r.json() : [])
-              .catch(() => [])
+            // Marketaux - Secondary news source with sentiment
+            fetch(`https://api.marketaux.com/v1/news/all?symbols=${symbol}&filter_entities=true&language=en&limit=20&api_token=${API_KEYS.MARKETAUX}`)
+              .then(r => r.ok ? r.json() : { data: [] })
+              .catch(() => ({ data: [] }))
           ];
 
-          const [newsFilterResponse, marketauxResponse, finnhubNews, fmpArticles, fmpGeneralNews] = await Promise.all(newsPromises);
+          const [fmpStockNews, marketauxResponse] = await Promise.all(newsPromises);
 
-          const newsFilterArticles = newsFilterResponse?.articles || [];
           const marketauxNews = marketauxResponse?.data || [];
 
-          console.log(`📊 News sources: NewsFilter=${newsFilterArticles.length}, Marketaux=${marketauxNews.length}, Finnhub=${finnhubNews?.length || 0}, FMP Articles=${fmpArticles?.length || 0}, FMP General=${fmpGeneralNews?.length || 0}`);
+          console.log(`📊 News sources: FMP Stock News=${fmpStockNews?.length || 0}, Marketaux=${marketauxNews.length}`);
 
           // Combine and normalize news from all sources
           let allNews = [];
 
-          // Process NewsFilter.io news (primary source - free, reliable)
-          newsFilterArticles.forEach(item => {
+          // Process FMP Stock News (primary source - paid, stock-specific)
+          (fmpStockNews || []).forEach(item => {
             allNews.push({
               title: item.title,
-              description: item.description || '',
+              description: item.text || item.content || '',
               url: item.url,
-              source: item.source?.name || 'NewsFilter',
-              publishedAt: item.publishedAt,
-              image: null, // NewsFilter doesn't provide images
-              symbol: symbol,
-              symbols: item.symbols || []
+              source: item.site || item.source || 'FMP',
+              publishedAt: item.publishedDate || item.date,
+              image: item.image,
+              symbol: symbol
             });
           });
 
@@ -7182,58 +7140,13 @@ Please provide a clear, structured analysis in markdown format.`;
             });
           });
 
-          // Process FMP Articles (filter by symbol relevance)
-          (fmpArticles || []).forEach(item => {
-            const text = (item.title + ' ' + (item.text || '')).toLowerCase();
-            if (text.includes(symbol.toLowerCase())) {
-              allNews.push({
-                title: item.title,
-                description: item.text || item.content || '',
-                url: item.url,
-                source: item.site || 'FMP',
-                publishedAt: item.publishedDate || item.date,
-                image: item.image,
-                symbol: symbol
-              });
-            }
-          });
-
-          // Process FMP General News (filter by symbol relevance)
-          (fmpGeneralNews || []).forEach(item => {
-            const text = (item.title + ' ' + (item.text || '')).toLowerCase();
-            if (text.includes(symbol.toLowerCase())) {
-              allNews.push({
-                title: item.title,
-                description: item.text || item.content || '',
-                url: item.url,
-                source: item.site || 'MarketNews',
-                publishedAt: item.publishedDate || item.date,
-                image: item.image,
-                symbol: symbol
-              });
-            }
-          });
-
-          // Process Finnhub news
-          (finnhubNews || []).forEach(item => {
-            allNews.push({
-              title: item.headline,
-              description: item.summary || '',
-              url: item.url,
-              source: item.source || 'Finnhub',
-              publishedAt: new Date(item.datetime * 1000).toISOString(),
-              image: item.image,
-              symbol: symbol
-            });
-          });
-
           // Remove duplicates by URL
           const uniqueNews = allNews.filter((news, index, self) =>
             index === self.findIndex(n => n.url === news.url)
           );
 
-          // Keep only articles from the last 30 days
-          const cutoff = Date.now() - (30 * 24 * 60 * 60 * 1000);
+          // Keep only articles from the last 3 months
+          const cutoff = Date.now() - (90 * 24 * 60 * 60 * 1000);
           const recentNews = uniqueNews.filter(n => {
             const t = new Date(n.publishedAt).getTime();
             return Number.isFinite(t) && t >= cutoff;
