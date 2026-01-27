@@ -1999,25 +1999,189 @@ Please provide a clear, structured analysis in markdown format.`;
     // ═══════════════════════════════════════════════════════════════════════════
 
     const CACHE_CONFIG = {
-      // EXTENDED CACHE DURATIONS - Data persists much longer for instant loading
-      STOCK_DATA: 30 * 24 * 60 * 60 * 1000,      // 30 DAYS - Fundamentals rarely change
-      QUOTE_DATA_MARKET_OPEN: 60 * 60 * 1000,    // 60 minutes during market hours
-      QUOTE_DATA_MARKET_CLOSED: 24 * 60 * 60 * 1000, // 24 hours when closed
-      CHART_DATA: 7 * 24 * 60 * 60 * 1000,       // 7 DAYS - Historical doesn't change
-      NEWS_DATA: 24 * 60 * 60 * 1000,            // 24 hours
-      SENTIMENT_DATA: 6 * 60 * 60 * 1000,        // 6 hours
+      // ULTRA-EXTENDED CACHE DURATIONS - 90 days for most data
+      STOCK_DATA: 90 * 24 * 60 * 60 * 1000,      // 90 DAYS - Fundamentals rarely change
+      QUOTE_DATA_MARKET_OPEN: 15 * 60 * 1000,    // 15 minutes during market hours
+      QUOTE_DATA_MARKET_CLOSED: 48 * 60 * 60 * 1000, // 48 hours when closed
+      CHART_DATA: 30 * 24 * 60 * 60 * 1000,      // 30 DAYS - Historical doesn't change
+      NEWS_DATA: 12 * 60 * 60 * 1000,            // 12 hours
+      SENTIMENT_DATA: 24 * 60 * 60 * 1000,       // 24 hours
       EARNINGS_DATA: 90 * 24 * 60 * 60 * 1000,   // 90 days - Earnings are quarterly
-      PROFILE_DATA: 30 * 24 * 60 * 60 * 1000,    // 30 days - Company profiles are stable
+      PROFILE_DATA: 90 * 24 * 60 * 60 * 1000,    // 90 days - Company profiles are stable
       MARKET_CLOSED: 7 * 24 * 60 * 60 * 1000,    // 7 days when market closed
-      MAX_CACHE_SIZE: 1000,                      // Increased from 500
-      CACHE_VERSION: 'v6',                       // Bump version for extended durations
+      MAX_CACHE_SIZE: 2000,                      // Increased from 1000
+      CACHE_VERSION: 'v7',                       // Bump version for 90-day cache
       OFFLINE_MODE: true,
       
       // Aggressive prefetching settings
       PREFETCH_ENABLED: true,
       PREFETCH_BATCH_SIZE: 20,                   // Load 20 stocks at once
-      BACKGROUND_REFRESH_INTERVAL: 5 * 60 * 1000 // Check for updates every 5 min
+      BACKGROUND_REFRESH_INTERVAL: 10 * 60 * 1000 // Check for updates every 10 min
     };
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // REFRESH THROTTLER - Prevent Unnecessary API Calls
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    class RefreshThrottler {
+      constructor() {
+        this.lastRefreshTime = parseInt(localStorage.getItem('re_last_refresh_time') || '0');
+        this.minRefreshInterval = 5 * 60 * 1000; // 5 minutes minimum between refreshes
+      }
+      
+      shouldRefresh(force = false) {
+        const now = Date.now();
+        
+        if (force) return true;
+        
+        // If less than min interval passed, use cache
+        if (now - this.lastRefreshTime < this.minRefreshInterval) {
+          console.log('⏱️ Refresh throttled - using cached data');
+          return false;
+        }
+        
+        this.lastRefreshTime = now;
+        localStorage.setItem('re_last_refresh_time', now.toString());
+        return true;
+      }
+      
+      markRefreshed() {
+        this.lastRefreshTime = Date.now();
+        localStorage.setItem('re_last_refresh_time', this.lastRefreshTime.toString());
+      }
+    }
+
+    const refreshThrottler = new RefreshThrottler();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SESSION PERSISTENCE - Instant Load Between Refreshes
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    const SessionPersistence = {
+      SESSION_KEY: 're_current_session_data_v2',
+      MAX_SESSION_AGE: 2 * 60 * 60 * 1000, // 2 hours
+      
+      saveSession(stocks, filters = {}, watchlist = [], viewState = {}) {
+        try {
+          const sessionData = {
+            stocks: stocks.map(s => ({
+              symbol: s.symbol,
+              price: s.price,
+              changePct: s.changePct,
+              pe: s.pe,
+              roe: s.roe,
+              aiScore: s.aiScore,
+              verdict: s.verdict,
+              sector: s.sector,
+              name: s.name,
+              marketCap: s.marketCap
+            })),
+            filters,
+            watchlist,
+            viewState,
+            timestamp: Date.now(),
+            version: 'v2'
+          };
+          
+          localStorage.setItem(this.SESSION_KEY, JSON.stringify(sessionData));
+          console.log('💾 Session data saved');
+        } catch (error) {
+          console.warn('Failed to save session:', error);
+        }
+      },
+      
+      loadSession() {
+        try {
+          const sessionJson = localStorage.getItem(this.SESSION_KEY);
+          if (!sessionJson) return null;
+          
+          const sessionData = JSON.parse(sessionJson);
+          
+          // Check if session is still valid
+          if (Date.now() - sessionData.timestamp > this.MAX_SESSION_AGE) {
+            this.clearSession();
+            return null;
+          }
+          
+          console.log('📂 Session loaded from storage');
+          return sessionData;
+        } catch (error) {
+          console.warn('Failed to load session:', error);
+          return null;
+        }
+      },
+      
+      clearSession() {
+        localStorage.removeItem(this.SESSION_KEY);
+      },
+      
+      hasValidSession() {
+        const session = this.loadSession();
+        return session !== null && session.stocks?.length > 0;
+      }
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // VISIBILITY-BASED OPTIMIZATIONS - Save resources when tab hidden
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    function setupVisibilityOptimizations() {
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          console.log('📴 Tab hidden - reducing background activity');
+          window.TAB_HIDDEN = true;
+        } else {
+          console.log('📱 Tab visible - restoring normal activity');
+          window.TAB_HIDDEN = false;
+        }
+      });
+    }
+
+    // Initialize visibility optimizations
+    setupVisibilityOptimizations();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CLEANUP OLD CACHE DATA - Weekly cleanup to prevent bloat
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    function cleanupOldCacheData() {
+      const cleanupKey = 're_last_cache_cleanup';
+      const lastCleanup = parseInt(localStorage.getItem(cleanupKey) || '0');
+      const oneWeek = 7 * 24 * 60 * 60 * 1000;
+      
+      if (Date.now() - lastCleanup > oneWeek) {
+        console.log('🧹 Running weekly cache cleanup...');
+        
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          
+          if (key && (key.startsWith('re_advanced_') || key.startsWith('re_cache_') || key.startsWith('v5_') || key.startsWith('v6_'))) {
+            try {
+              const data = JSON.parse(localStorage.getItem(key));
+              if (data && Date.now() - (data.timestamp || 0) > 90 * 24 * 60 * 60 * 1000) {
+                keysToRemove.push(key);
+              }
+            } catch {
+              // If can't parse, remove it
+              keysToRemove.push(key);
+            }
+          }
+        }
+        
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+        
+        localStorage.setItem(cleanupKey, Date.now().toString());
+        console.log(`🧹 Cleaned up ${keysToRemove.length} old cache entries`);
+      }
+    }
+
+    // Run cleanup on startup (delayed)
+    setTimeout(cleanupOldCacheData, 5000);
+
+    // Expose for manual use
+    window.SessionPersistence = SessionPersistence;
+    window.refreshThrottler = refreshThrottler;
 
     const Cache = {
       // Check if market is currently open (9:30 AM - 4:00 PM ET, Mon-Fri)
