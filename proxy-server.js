@@ -356,15 +356,15 @@ const TEAM_CONFIGS = {
     focuses: ['fundamentals', 'long-term value', 'risk management']
   },
   2: {
-    name: 'GPT-4 Turbo',
-    model: 'GPT-4-Turbo',
+    name: 'Kimi',
+    model: 'Kimi-K2',
     strategy: 'aggressive',
     personality: 'bold and trend-following',
     focuses: ['momentum', 'breakouts', 'market sentiment']
   },
   3: {
-    name: 'Kimi',
-    model: 'Kimi-K2',
+    name: 'DeepSeek V3',
+    model: 'DeepSeek-V3',
     strategy: 'conservative',
     personality: 'conservative and dividend-focused',
     focuses: ['stability', 'dividends', 'blue chips']

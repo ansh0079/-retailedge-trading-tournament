@@ -10698,8 +10698,8 @@ Be realistic and conservative. Base confidence on data quality.`;
       const getTeamName = (teamId) => {
         const names = {
           1: 'Team Alpha (Claude-3-Sonnet)',
-          2: 'Team Beta (GPT-4-Turbo)',
-          3: 'Team Gamma (Kimi-K2)',
+          2: 'Team Beta (Kimi-K2)',
+          3: 'Team Gamma (DeepSeek-V3)',
           4: 'Team Delta (Gemini-Pro)'
         };
         return names[teamId] || `Team ${teamId}`;
@@ -19216,8 +19216,8 @@ Be realistic and conservative. Base confidence on data quality.`;
       // Team colors for the chart
       const teamColors = {
         'Claude (Sonnet)': '#22c55e',    // Green
-        'GPT-4 Turbo': '#ef4444',        // Red
-        'Kimi': '#3b82f6',               // Blue
+        'Kimi': '#ef4444',               // Red
+        'DeepSeek V3': '#3b82f6',        // Blue
         'Gemini Pro': '#f59e0b'          // Yellow/Orange
       };
 
@@ -19703,11 +19703,11 @@ Be realistic and conservative. Base confidence on data quality.`;
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                      <span className="text-sm text-slate-400">GPT-4 Turbo</span>
+                      <span className="text-sm text-slate-400">Kimi</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                      <span className="text-sm text-slate-400">Kimi</span>
+                      <span className="text-sm text-slate-400">DeepSeek V3</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full bg-amber-500"></div>
