@@ -21,4 +21,10 @@ window.APP_CONFIG = {
     }
 };
 
+// Set API_BASE_URL for backend proxy
+window.API_BASE_URL = window.location.hostname === 'localhost' 
+    ? 'http://localhost:3002' 
+    : 'https://retailedge-trading-tournament-1.onrender.com';
+
 console.log('✅ Config loaded:', window.APP_CONFIG.serverUrl);
+console.log('✅ API_BASE_URL:', window.API_BASE_URL);

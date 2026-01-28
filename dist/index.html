@@ -958,6 +958,15 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script type="text/babel">
 
+    // CRITICAL: Ensure API_BASE_URL is always defined
+    if (!window.API_BASE_URL) {
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      window.API_BASE_URL = isLocalhost 
+        ? 'http://localhost:3002' 
+        : 'https://retailedge-trading-tournament-1.onrender.com';
+      console.warn('⚠️ API_BASE_URL was undefined, set to:', window.API_BASE_URL);
+    }
+
     // Fix: Add missing checkAndUnlockBadges function
     function checkAndUnlockBadges(portfolio, watchlist, goals, options) {
       // Placeholder: No badges unlocked
