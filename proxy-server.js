@@ -30,12 +30,15 @@ const FMP_API_KEY = process.env.FMP_API_KEY || 'h43nCTpMeyiIiNquebaqktc7ChUHMxIz
 async function fetchQuotesParallel(symbols, options = {}) {
   const { concurrency = 5, delayMs = 250 } = options;
   const results = [];
+  const errors = [];
 
   // Split into parallel batches
   const chunks = [];
   for (let i = 0; i < symbols.length; i += concurrency) {
     chunks.push(symbols.slice(i, i + concurrency));
   }
+
+  console.log(`[fetchQuotesParallel] Processing ${symbols.length} symbols in ${chunks.length} batches...`);
 
   for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
     const chunk = chunks[chunkIndex];
@@ -44,28 +47,49 @@ async function fetchQuotesParallel(symbols, options = {}) {
     const promises = chunk.map(async symbol => {
       try {
         const url = `https://financialmodelingprep.com/stable/quote/${symbol}?apikey=${FMP_API_KEY}`;
-        const response = await fetchWithRetry(url, { timeoutMs: 10000, retries: 1 });
+        const response = await fetchWithRetry(url, { timeoutMs: 10000, retries: 2 });
 
-        if (response.ok) {
-          const data = await response.json();
-          if (Array.isArray(data) && data.length > 0) {
-            return data[0];
-          }
+        if (!response.ok) {
+          errors.push({ symbol, error: `HTTP ${response.status}` });
+          return null;
+        }
+
+        // Get text first to check for errors
+        const text = await response.text();
+
+        // Check for Premium/HTML error responses
+        if (text.includes('Premium') || text.trim().startsWith('<')) {
+          errors.push({ symbol, error: 'Premium required' });
+          return null;
+        }
+
+        const data = JSON.parse(text);
+        if (Array.isArray(data) && data.length > 0) {
+          return data[0];
         }
         return null;
       } catch (error) {
-        console.warn(`[fetchQuotesParallel] Failed for ${symbol}:`, error.message);
+        errors.push({ symbol, error: error.message });
         return null;
       }
     });
 
     const batchResults = await Promise.all(promises);
-    results.push(...batchResults.filter(Boolean));
+    const valid = batchResults.filter(Boolean);
+    results.push(...valid);
+
+    // Log batch progress
+    console.log(`[fetchQuotesParallel] Batch ${chunkIndex + 1}/${chunks.length}: ${valid.length}/${chunk.length} OK`);
 
     // Delay between batches for rate limiting
     if (chunkIndex < chunks.length - 1) {
       await new Promise(r => setTimeout(r, delayMs));
     }
+  }
+
+  console.log(`[fetchQuotesParallel] Done: ${results.length}/${symbols.length} successful`);
+  if (errors.length > 0) {
+    console.log(`[fetchQuotesParallel] Errors (${errors.length}):`, errors.slice(0, 5).map(e => `${e.symbol}:${e.error}`).join(', '));
   }
 
   return results;
