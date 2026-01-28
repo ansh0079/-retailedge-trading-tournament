@@ -21610,6 +21610,22 @@ Be realistic and conservative. Base confidence on data quality.`;
           localStorage.setItem('curatedStocks', JSON.stringify(defaultList));
         }
         
+        // FIX: Validate that symbols are actual ticker symbols, not company names
+        // Ticker symbols are typically 1-5 characters (with exceptions like BRK.B)
+        const invalidSymbols = stocks.filter(s => {
+          const cleaned = String(s).toUpperCase().trim();
+          // Check if it looks like a company name (>8 chars without dots)
+          return cleaned.length > 8 && !cleaned.includes('.');
+        });
+        
+        if (invalidSymbols.length > 10) {
+          console.error(`🚨 Found ${invalidSymbols.length} invalid symbols (company names instead of tickers)`);
+          console.error('Sample invalid:', invalidSymbols.slice(0, 5));
+          console.warn('⚠️ Restoring default ticker list...');
+          stocks = defaultList;
+          localStorage.setItem('curatedStocks', JSON.stringify(defaultList));
+        }
+        
         // Remove duplicates and normalize (uppercase, trim)
         const uniqueStocks = [...new Set(stocks.map(s => String(s).toUpperCase().trim()).filter(s => s))];
         
