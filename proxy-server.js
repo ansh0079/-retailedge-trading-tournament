@@ -84,26 +84,26 @@ class AICostManager {
     // Cache stats
     this.cacheStats = { hits: 0, misses: 0 };
   }
-  
+
   loadSpendingData() {
     const dataFile = path.join(__dirname, 'ai_cost_data.json');
     try {
       if (fs.existsSync(dataFile)) {
         const data = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
         const today = new Date().toDateString();
-        
+
         // Reset daily spending if new day
         if (data.lastUpdated !== today) {
           data.today = 0;
           data.lastUpdated = today;
         }
-        
+
         return data;
       }
     } catch (error) {
       console.warn('Could not load cost data:', error.message);
     }
-    
+
     // Default structure
     return {
       today: 0,
@@ -119,7 +119,7 @@ class AICostManager {
       byModel: {}
     };
   }
-  
+
   saveSpendingData() {
     const dataFile = path.join(__dirname, 'ai_cost_data.json');
     try {
@@ -129,17 +129,17 @@ class AICostManager {
       console.error('Failed to save cost data:', error.message);
     }
   }
-  
+
   estimateCost(model, inputTokens, outputTokens = 500) {
     const pricing = this.aiPricing[model];
     if (!pricing) return 0;
-    
+
     const inputCost = (inputTokens / 1000) * pricing.input;
     const outputCost = (outputTokens / 1000) * pricing.output;
-    
+
     return inputCost + outputCost;
   }
-  
+
   canAffordAnalysis(priority = 'MEDIUM') {
     const remainingDaily = this.dailyBudget - this.spending.today;
     const remainingMonthly = this.monthlyBudget - this.spending.thisMonth;
@@ -225,43 +225,43 @@ class AICostManager {
 
   recordCost(teamName, model, inputTokens, outputTokens) {
     const cost = this.estimateCost(model, inputTokens, outputTokens);
-    
+
     this.spending.today += cost;
     this.spending.thisMonth += cost;
     this.spending.totalRequests++;
-    
+
     // Track by team
     if (this.spending.byTeam[teamName]) {
       this.spending.byTeam[teamName].cost += cost;
       this.spending.byTeam[teamName].requests++;
     }
-    
+
     // Track by model
     if (!this.spending.byModel[model]) {
       this.spending.byModel[model] = { cost: 0, requests: 0 };
     }
     this.spending.byModel[model].cost += cost;
     this.spending.byModel[model].requests++;
-    
+
     this.saveSpendingData();
-    
+
     console.log(`💰 [${teamName}] ${model}: $${cost.toFixed(4)} | Daily: $${this.spending.today.toFixed(4)} / $${this.dailyBudget} | Monthly: $${this.spending.thisMonth.toFixed(2)} / $${this.monthlyBudget}`);
-    
+
     // Check if we should pause tournament
     if (!this.canAffordAnalysis() && !this.tournamentPausedByBudget) {
       console.error('⛔ AI BUDGET EXCEEDED - Tournament should be paused!');
       this.tournamentPausedByBudget = true;
     }
-    
+
     return cost;
   }
-  
+
   estimateTokenCount(data) {
     // Rough estimation: 1 token ≈ 4 characters
     const jsonString = JSON.stringify(data);
     return Math.ceil(jsonString.length / 4);
   }
-  
+
   getSpendingReport() {
     const dailyPercent = (this.spending.today / this.dailyBudget) * 100;
     const monthlyPercent = (this.spending.thisMonth / this.monthlyBudget) * 100;
@@ -300,11 +300,11 @@ class AICostManager {
   recordCacheMiss() {
     this.cacheStats.misses++;
   }
-  
+
   resetIfNewMonth() {
     const now = new Date();
     const lastUpdate = new Date(this.spending.lastUpdated);
-    
+
     if (now.getMonth() !== lastUpdate.getMonth() || now.getFullYear() !== lastUpdate.getFullYear()) {
       console.log('📊 New month - resetting monthly AI budget');
       this.spending.thisMonth = 0;
@@ -705,10 +705,10 @@ async function fetchWithRetry(url, options = {}) {
 // Claude API proxy
 app.post('/api/claude', async (req, res) => {
   const { messages, model, max_tokens } = req.body;
-  
+
   if (!CLAUDE_API_KEY) {
-     console.log('⚠️ No Anthropic API key found.');
-     return res.status(500).json({ error: 'Claude API key not configured' });
+    console.log('⚠️ No Anthropic API key found.');
+    return res.status(500).json({ error: 'Claude API key not configured' });
   }
 
   try {
@@ -729,7 +729,7 @@ app.post('/api/claude', async (req, res) => {
         messages: messages
       })
     });
-    
+
     const data = await response.json();
     if (data.error) {
       console.error('Claude API error:', data.error);
@@ -747,7 +747,7 @@ app.post('/api/claude', async (req, res) => {
 app.get('/api/stocktwits/:symbol', async (req, res) => {
   const { symbol } = req.params;
   const url = `https://api.stocktwits.com/api/2/streams/symbol/${symbol}.json`;
-  
+
   try {
     console.log(`📡 Proxying StockTwits request for ${symbol}...`);
     const response = await fetchWithRetry(url, { timeoutMs: 15000, retries: 2 });
@@ -764,7 +764,7 @@ app.get('/api/reddit/:subreddit/search', async (req, res) => {
   const { subreddit } = req.params;
   const { q } = req.query;
   const url = `https://www.reddit.com/r/${subreddit}/search.json?q=${q}&restrict_sr=1&limit=25&sort=new`;
-  
+
   try {
     console.log(`📡 Proxying Reddit request for r/${subreddit} - ${q}...`);
     const response = await fetchWithRetry(url, {
@@ -800,7 +800,8 @@ app.post('/api/quotes/batch', async (req, res) => {
 
     console.log(`📊 Batch quote request for ${batchSymbols.length} symbols...`);
 
-    const url = `https://financialmodelingprep.com/stable/quote/${symbolString}?apikey=${FMP_API_KEY}`;
+    // FMP Batch Quote API endpoint (correct format)
+    const url = `https://financialmodelingprep.com/stable/batch-quote?symbols=${symbolString}&apikey=${FMP_API_KEY}`;
 
     const response = await fetchWithRetry(url, {
       timeoutMs: 30000,
@@ -837,7 +838,7 @@ app.get('/health', (req, res) => {
 // Start Enhanced Analysis Backend
 function startEnhancedAnalysisBackend() {
   console.log('\n📊 Starting Enhanced Analysis Backend...');
-  
+
   try {
     // Spawn Python process for enhanced analysis backend
     enhancedAnalysisBackend = spawn('python', ['enhanced_analysis_backend.py'], {
@@ -886,14 +887,14 @@ function startEnhancedAnalysisBackend() {
 // Enhanced Analysis proxy endpoint
 app.get('/api/enhanced/analyze/:symbol', async (req, res) => {
   const { symbol } = req.params;
-  
+
   try {
     console.log(`📊 Proxying enhanced analysis request for ${symbol}...`);
     const response = await fetchWithRetry(`http://localhost:5003/api/analyze/${symbol}`, {
       timeoutMs: 30000,
       retries: 1
     });
-    
+
     const data = await response.json();
     res.json(data);
   } catch (error) {
@@ -1450,7 +1451,7 @@ async function fetchMarketDataForAI(symbols) {
 // Call Claude API (Sonnet) for Team 1
 async function callClaudeAPI(prompt, teamName = 'Value Hunter') {
   if (!CLAUDE_API_KEY) return null;
-  
+
   // Check budget before making API call
   if (!costManager.canAffordAnalysis()) {
     console.warn(`⛔ [${teamName}] Budget exceeded - skipping Claude API call`);
@@ -1479,7 +1480,7 @@ async function callClaudeAPI(prompt, teamName = 'Value Hunter') {
       console.error('[Claude API] Error:', result.error.message);
       return null;
     }
-    
+
     // Track cost
     if (result.usage) {
       costManager.recordCost(
@@ -1489,7 +1490,7 @@ async function callClaudeAPI(prompt, teamName = 'Value Hunter') {
         result.usage.output_tokens || 0
       );
     }
-    
+
     return result.content?.[0]?.text || '';
   } catch (error) {
     console.error('[Claude API] Request failed:', error.message);
@@ -1533,7 +1534,7 @@ async function callKimiAPI(prompt) {
 // Call DeepSeek API (V3) for Team 3
 async function callDeepSeekAPI(prompt, teamName = 'Momentum Trader') {
   if (!DEEPSEEK_API_KEY) return null;
-  
+
   // Check budget before making API call
   if (!costManager.canAffordAnalysis()) {
     console.warn(`⛔ [${teamName}] Budget exceeded - skipping DeepSeek API call`);
@@ -1562,7 +1563,7 @@ async function callDeepSeekAPI(prompt, teamName = 'Momentum Trader') {
       console.error('[DeepSeek API] Error:', result.error.message || result.error);
       return null;
     }
-    
+
     // Track cost
     if (result.usage) {
       costManager.recordCost(
@@ -1626,7 +1627,7 @@ async function getAITradingDecision(team, marketData, competitivePosition) {
 
   // Build market data summary
   const marketSummary = marketData.slice(0, 8).map(s =>
-    `${s.symbol}: $${s.price?.toFixed(2)} (${s.changesPercentage >= 0 ? '+' : ''}${s.changesPercentage?.toFixed(2)}%) Vol: ${(s.volume/1000000).toFixed(1)}M P/E: ${s.pe?.toFixed(1) || 'N/A'}`
+    `${s.symbol}: $${s.price?.toFixed(2)} (${s.changesPercentage >= 0 ? '+' : ''}${s.changesPercentage?.toFixed(2)}%) Vol: ${(s.volume / 1000000).toFixed(1)}M P/E: ${s.pe?.toFixed(1) || 'N/A'}`
   ).join('\n');
 
   const prompt = `You are ${team.name}, an AI trading agent with a ${team.strategy} strategy. You are ${team.personality} and focus on ${team.focuses.join(', ')}.
@@ -1765,7 +1766,7 @@ function calculatePerformanceMetrics(team) {
   if (history.length > 2) {
     const returns = [];
     for (let i = 1; i < history.length; i++) {
-      const prevData = history[i-1].teams?.find(t => t.id === team.id);
+      const prevData = history[i - 1].teams?.find(t => t.id === team.id);
       const currData = history[i].teams?.find(t => t.id === team.id);
       if (prevData && currData && prevData.portfolioValue > 0) {
         returns.push((currData.portfolioValue - prevData.portfolioValue) / prevData.portfolioValue);
@@ -1924,8 +1925,8 @@ async function smartFilterStocks(watchlist) {
 
   // Return cached results if still valid
   if (filteredStocksCache.lastUpdate &&
-      (now - filteredStocksCache.lastUpdate) < filteredStocksCache.cacheDuration &&
-      filteredStocksCache.stocks.length > 0) {
+    (now - filteredStocksCache.lastUpdate) < filteredStocksCache.cacheDuration &&
+    filteredStocksCache.stocks.length > 0) {
     console.log(`[SmartFilter] Using cached results (${filteredStocksCache.stocks.length} stocks)`);
     return filteredStocksCache.stocks;
   }
@@ -2040,7 +2041,7 @@ async function smartFilterStocks(watchlist) {
   if (tier1Results.length > 0) {
     console.log('[SmartFilter] Tier 1 Top 10:');
     tier1Results.slice(0, 10).forEach((s, i) => {
-      console.log(`  ${i+1}. ${s.symbol}: Score ${s.score} - ${s.signals.join(', ')}`);
+      console.log(`  ${i + 1}. ${s.symbol}: Score ${s.score} - ${s.signals.join(', ')}`);
     });
   }
 
@@ -2149,7 +2150,7 @@ async function tier2AIFilter(tier1Stocks) {
 
   // Log selected stocks
   selected.forEach((s, i) => {
-    console.log(`  ${i+1}. ${s.symbol} | Score: ${s.score} | ${s.sector} | ${s.signals.slice(0, 2).join(', ')}`);
+    console.log(`  ${i + 1}. ${s.symbol} | Score: ${s.score} | ${s.sector} | ${s.signals.slice(0, 2).join(', ')}`);
   });
 
   // Log sector distribution
@@ -2219,7 +2220,7 @@ async function fetchRealTimePrices(symbols) {
 async function getRealTimePrice(symbol) {
   // Check cache first
   if (priceCache.prices[symbol] && priceCache.lastFetch &&
-      (Date.now() - priceCache.lastFetch) < priceCache.cacheDuration) {
+    (Date.now() - priceCache.lastFetch) < priceCache.cacheDuration) {
     return priceCache.prices[symbol];
   }
 
@@ -2907,7 +2908,7 @@ app.listen(PORT, () => {
   console.log(`   - Reddit: http://localhost:${PORT}/api/reddit/:subreddit/search?q=:query`);
   console.log(`   - Claude AI: http://localhost:${PORT}/api/claude/analyze`);
   console.log(`\n🔥 Ready to serve social sentiment data!`);
-  
+
   // Start AI backends after proxy is ready
   startEnhancedAnalysisBackend();
   // Autonomous Agent and Intelligent Agent removed
