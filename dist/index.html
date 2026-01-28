@@ -22529,6 +22529,10 @@ Be realistic and conservative. Base confidence on data quality.`;
                       cachedStocks.push({ symbol: quote.symbol, data: stockData });
                       loadedSymbols.add(quote.symbol.toUpperCase());
                       batchStocks.push(stockData);
+                      
+                      // FIX: Also populate allStocks for final processing
+                      allStocks.push(stockData);
+                      completedCount++;
                     });
                     
                     // Accumulate for batch display
@@ -22594,10 +22598,6 @@ Be realistic and conservative. Base confidence on data quality.`;
               }, 5000); // Save after 5 seconds, don't block
             }
           }
-
-          // Use function-scoped variables
-          allStocks = [];
-          completedCount = 0;
 
           // OPTIMIZATION: Batched stock updates instead of incremental
           let pendingStockUpdates = [];
