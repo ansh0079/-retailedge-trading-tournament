@@ -32,14 +32,94 @@
         "breakouts",
         "market sentiment"
       ],
-      "portfolioValue": 50000,
-      "cash": 50000,
-      "invested": 0,
+      "portfolioValue": 49997.602999999996,
+      "cash": 36883.649999999994,
+      "invested": 13113.953,
       "realizedPnL": 0,
-      "unrealizedPnL": 0,
-      "totalTrades": 0,
-      "holdings": {},
-      "tradeHistory": []
+      "unrealizedPnL": -2.397000000000844,
+      "totalTrades": 2,
+      "holdings": {
+        "MCD": {
+          "shares": 30,
+          "avgCost": 313.16,
+          "totalCost": 9394.800000000001,
+          "currentPrice": 313.0801,
+          "marketValue": 9392.403,
+          "unrealizedPnL": -2.397000000000844
+        },
+        "ABT": {
+          "shares": 35,
+          "avgCost": 106.33,
+          "totalCost": 3721.5499999999997,
+          "currentPrice": 106.33,
+          "marketValue": 3721.5499999999997,
+          "unrealizedPnL": 0
+        }
+      },
+      "tradeHistory": [
+        {
+          "time": "1:06:47 PM",
+          "timestamp": "2026-01-28T18:06:47.042Z",
+          "team": "Kimi",
+          "teamId": 2,
+          "model": "Kimi-K2",
+          "action": "BUY",
+          "symbol": "ABT",
+          "price": 106.33,
+          "shares": 35,
+          "reasoning": "Local analysis: Near 52-week low. [Local analysis: HOLD]",
+          "analysisSource": "local",
+          "aiGenerated": false,
+          "aiPriority": null,
+          "localScore": 55,
+          "localVerdict": "HOLD",
+          "filterScore": 40,
+          "filterSignals": [
+            "Near 52w low",
+            "Large cap",
+            "Near day low"
+          ],
+          "competitiveContext": {
+            "rank": 4,
+            "position": "trailing",
+            "gapToLeader": "0.00"
+          },
+          "costBasis": 106.33,
+          "cashAfter": 36883.649999999994,
+          "portfolioValueAfter": 49997.602999999996
+        },
+        {
+          "time": "1:01:13 PM",
+          "timestamp": "2026-01-28T18:01:13.365Z",
+          "team": "Kimi",
+          "teamId": 2,
+          "model": "Kimi-K2",
+          "action": "BUY",
+          "symbol": "MCD",
+          "price": 313.16,
+          "shares": 30,
+          "reasoning": "Local analysis: Near 52-week high. [Local analysis: HOLD]",
+          "analysisSource": "local",
+          "aiGenerated": false,
+          "aiPriority": null,
+          "localScore": 55,
+          "localVerdict": "HOLD",
+          "filterScore": 40,
+          "filterSignals": [
+            "Near 52w high",
+            "Large cap",
+            "Near day low"
+          ],
+          "competitiveContext": {
+            "rank": 2,
+            "position": "middle",
+            "gapToLeader": "0.00"
+          },
+          "costBasis": 313.16,
+          "cashAfter": 40605.2,
+          "portfolioValueAfter": 50000
+        }
+      ]
     },
     {
       "id": 3,
@@ -82,7 +162,66 @@
       "tradeHistory": []
     }
   ],
-  "trades": [],
+  "trades": [
+    {
+      "time": "1:06:47 PM",
+      "timestamp": "2026-01-28T18:06:47.042Z",
+      "team": "Kimi",
+      "teamId": 2,
+      "model": "Kimi-K2",
+      "action": "BUY",
+      "symbol": "ABT",
+      "price": 106.33,
+      "shares": 35,
+      "reasoning": "Local analysis: Near 52-week low. [Local analysis: HOLD]",
+      "analysisSource": "local",
+      "aiGenerated": false,
+      "aiPriority": null,
+      "localScore": 55,
+      "localVerdict": "HOLD",
+      "filterScore": 40,
+      "filterSignals": [
+        "Near 52w low",
+        "Large cap",
+        "Near day low"
+      ],
+      "competitiveContext": {
+        "rank": 4,
+        "position": "trailing",
+        "gapToLeader": "0.00"
+      },
+      "costBasis": 106.33
+    },
+    {
+      "time": "1:01:13 PM",
+      "timestamp": "2026-01-28T18:01:13.365Z",
+      "team": "Kimi",
+      "teamId": 2,
+      "model": "Kimi-K2",
+      "action": "BUY",
+      "symbol": "MCD",
+      "price": 313.16,
+      "shares": 30,
+      "reasoning": "Local analysis: Near 52-week high. [Local analysis: HOLD]",
+      "analysisSource": "local",
+      "aiGenerated": false,
+      "aiPriority": null,
+      "localScore": 55,
+      "localVerdict": "HOLD",
+      "filterScore": 40,
+      "filterSignals": [
+        "Near 52w high",
+        "Large cap",
+        "Near day low"
+      ],
+      "competitiveContext": {
+        "rank": 2,
+        "position": "middle",
+        "gapToLeader": "0.00"
+      },
+      "costBasis": 313.16
+    }
+  ],
   "portfolioHistory": [
     {
       "timestamp": "2026-01-28T14:30:10.729Z",
@@ -1643,7 +1782,111 @@
           "portfolioValue": 50000
         }
       ]
+    },
+    {
+      "timestamp": "2026-01-28T17:59:19.499Z",
+      "time": "12:59 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T18:01:13.366Z",
+      "time": "01:01 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T18:04:29.395Z",
+      "time": "01:04 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 49997
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T18:06:47.138Z",
+      "time": "01:06 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 49997.6
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
     }
   ],
-  "savedAt": "2026-01-28T17:55:38.959Z"
+  "savedAt": "2026-01-28T18:07:21.193Z"
 }
