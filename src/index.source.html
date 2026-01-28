@@ -21288,6 +21288,11 @@ Be realistic and conservative. Base confidence on data quality.`;
       }, [isDarkMode]);
       const [loading, setLoading] = useState(true);
       const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0 });
+      
+      // DEBUG: Track loading state changes
+      useEffect(() => {
+        console.log('🔄 LOADING STATE CHANGED:', loading);
+      }, [loading]);
       const [displayLimit, setDisplayLimit] = useState(50); // Start with 50 stocks for instant display
       const [search, setSearch] = useState('');
       const [debouncedSearch, setDebouncedSearch] = useState(''); // Debounced search for filtering
@@ -22726,6 +22731,13 @@ Be realistic and conservative. Base confidence on data quality.`;
             setLoading(false);
             setLoadingProgress({ current: processedStocks.length, total: uniqueCuratedStocks.length });
             console.log(`✅ ${processedStocks.length} stocks displayed instantly!`);
+            console.log('📊 Sample of loaded stocks:', processedStocks.slice(0, 3).map(s => ({
+              symbol: s.symbol,
+              name: s.name,
+              companyName: s.companyName,
+              price: s.price,
+              sector: s.sector
+            })));
             
             // OPTIMIZATION: Compute AI for remaining cached stocks in background using chunked idle processing
             if (needsAI > 50) {
@@ -23253,6 +23265,16 @@ Be realistic and conservative. Base confidence on data quality.`;
       // ─────────────────────────────────────────────────────────────────────────
 
       const filtered = useMemo(() => {
+        // DEBUG: Check if stocks array exists and has items
+        console.log('🔍 FILTERING DEBUG:', {
+          stocksCount: stocks.length,
+          search: debouncedSearch,
+          sector: selectedSector,
+          preset: selectedPreset,
+          watchlistOnly: showWatchlistOnly,
+          sampleStock: stocks[0]
+        });
+        
         // OPTIMIZATION: Single-pass filter instead of multiple chained filters
         // This is 5-10× faster for large datasets
         
@@ -24320,6 +24342,10 @@ Be realistic and conservative. Base confidence on data quality.`;
                           <div className="flex justify-between items-center mb-4">
                             <div className="text-sm text-slate-400">
                               Showing {filtered.length} of {stocks.length} stocks
+                              {/* DEBUG INFO */}
+                              <span className="ml-2 text-xs text-cyan-400">
+                                (Display Limit: {displayLimit || 100})
+                              </span>
                             </div>
                             <div className="flex gap-3">
                               <button
