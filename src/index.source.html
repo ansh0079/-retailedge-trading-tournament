@@ -961,11 +961,28 @@
     // CRITICAL: Ensure API_BASE_URL is always defined
     if (!window.API_BASE_URL) {
       const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      window.API_BASE_URL = isLocalhost 
-        ? 'http://localhost:3002' 
+      window.API_BASE_URL = isLocalhost
+        ? 'http://localhost:3002'
         : 'https://retailedge-trading-tournament-1.onrender.com';
       console.warn('⚠️ API_BASE_URL was undefined, set to:', window.API_BASE_URL);
     }
+
+    // FMP API Configuration - Use proxy server for all API calls
+    window.FMP_API_KEY = ''; // Not needed in frontend - proxy server handles authentication
+    window.USE_DEMO_DATA = false; // DISABLE demo mode - fetch real data from FMP
+
+    // Default stock symbols to load on app start
+    window.DEFAULT_STOCK_SYMBOLS = [
+      'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA', 'META', 'BRK.B', 'UNH', 'JPM',
+      'V', 'PG', 'MA', 'HD', 'CVX', 'LLY', 'ABBV', 'MRK', 'AVGO', 'COST',
+      'PEP', 'KO', 'ADBE', 'TMO', 'WMT', 'MCD', 'CSCO', 'ACN', 'ABT', 'CRM',
+      'NFLX', 'DIS', 'INTC', 'AMD', 'QCOM', 'ORCL', 'IBM', 'PYPL', 'SBUX', 'NKE'
+    ];
+
+    console.log('✅ API Configuration loaded');
+    console.log('   API Base URL:', window.API_BASE_URL);
+    console.log('   Demo Mode:', window.USE_DEMO_DATA ? 'ENABLED' : 'DISABLED');
+    console.log('   Default Stocks:', window.DEFAULT_STOCK_SYMBOLS.length, 'symbols');
 
     // Fix: Add missing checkAndUnlockBadges function
     function checkAndUnlockBadges(portfolio, watchlist, goals, options) {
@@ -1092,7 +1109,7 @@
           isExpired: Cache.isExpired ? Cache.isExpired(symbol, type) : false
         };
       }, [symbol, type]);
-      
+
       const [data, setData] = useState(initialCacheData.data);
       const [loading, setLoading] = useState(!initialCacheData.hasData);
       const [lastUpdated, setLastUpdated] = useState(initialCacheData.timestamp);
@@ -1128,15 +1145,15 @@
             console.log(`🔄 Background refresh for ${symbol}...`);
             const endpoint = type === 'quote' ? 'quote' : 'profile';
             const response = await fetch(`https://financialmodelingprep.com/stable/${endpoint}/${symbol}?apikey=${FMP_API_KEY}`);
-            
+
             if (response.ok) {
               const result = await response.json();
               const newData = Array.isArray(result) ? result[0] : result;
-              
+
               if (newData && isMounted) {
                 // Update cache
                 Cache.set(symbol, newData, type);
-                
+
                 // Only update state if data actually changed
                 if (JSON.stringify(newData) !== JSON.stringify(data)) {
                   setData(newData);
@@ -1156,10 +1173,10 @@
           if (!data) {
             await loadFromIndexedDB();
           }
-          
+
           // Always check for background refresh
           await backgroundRefresh();
-          
+
           if (isMounted) setLoading(false);
         };
 
@@ -1176,10 +1193,10 @@
         };
       }, [symbol, type]);
 
-      return { 
-        data, 
-        loading, 
-        lastUpdated, 
+      return {
+        data,
+        loading,
+        lastUpdated,
         isStale,
         refresh: () => {
           Cache.remove(symbol, type);
@@ -1203,24 +1220,24 @@
           const savedWatchlist = JSON.parse(localStorage.getItem('watchlist') || '[]');
           const savedPortfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
           const uniqueSymbols = [...new Set([
-            ...savedWatchlist, 
+            ...savedWatchlist,
             ...savedPortfolio.map(p => p.symbol)
           ])].filter(Boolean);
-          
+
           if (uniqueSymbols.length === 0) {
             setIsComplete(true);
             return;
           }
 
           console.log(`🔥 Starting cache warmup for ${uniqueSymbols.length} symbols...`);
-          
+
           // Process in batches
           const batchSize = 5;
           let completed = 0;
-          
+
           for (let i = 0; i < uniqueSymbols.length; i += batchSize) {
             const batch = uniqueSymbols.slice(i, i + batchSize);
-            
+
             // Check which symbols actually need fetching (not cached or stale)
             const symbolsNeedingFetch = batch.filter(sym => {
               const cached = Cache.get(sym, 'quote');
@@ -1252,7 +1269,7 @@
               }
               await new Promise(r => setTimeout(r, 500));
             }
-            
+
             completed += batch.length;
             setWarmupProgress(Math.round((completed / uniqueSymbols.length) * 100));
           }
@@ -1267,7 +1284,7 @@
       }, []);
 
       if (isComplete || warmupProgress === 0) return null;
-      
+
       return (
         <div className="fixed bottom-4 right-4 z-50 glass-card px-4 py-2 rounded-lg border border-cyan-500/20 shadow-lg">
           <div className="flex items-center gap-2 text-xs text-cyan-300">
@@ -1294,16 +1311,16 @@
               const age = Date.now() - timestamp;
               const maxAge = Cache.getCacheDuration(type === 'quote' ? 'QUOTE_DATA' : 'STOCK_DATA');
               const minutes = Math.floor(age / 60000);
-              
-              setStatus({ 
-                age: minutes, 
+
+              setStatus({
+                age: minutes,
                 isCached: true,
                 isStale: age > maxAge
               });
             }
           }
         };
-        
+
         checkStatus();
         const interval = setInterval(checkStatus, 60000);
         return () => clearInterval(interval);
@@ -2028,7 +2045,7 @@ Please provide a clear, structured analysis in markdown format.`;
       MAX_CACHE_SIZE: 2000,                      // Increased from 1000
       CACHE_VERSION: 'v7',                       // Bump version for 90-day cache
       OFFLINE_MODE: true,
-      
+
       // Aggressive prefetching settings
       PREFETCH_ENABLED: true,
       PREFETCH_BATCH_SIZE: 20,                   // Load 20 stocks at once
@@ -2044,23 +2061,23 @@ Please provide a clear, structured analysis in markdown format.`;
         this.lastRefreshTime = parseInt(localStorage.getItem('re_last_refresh_time') || '0');
         this.minRefreshInterval = 5 * 60 * 1000; // 5 minutes minimum between refreshes
       }
-      
+
       shouldRefresh(force = false) {
         const now = Date.now();
-        
+
         if (force) return true;
-        
+
         // If less than min interval passed, use cache
         if (now - this.lastRefreshTime < this.minRefreshInterval) {
           console.log('⏱️ Refresh throttled - using cached data');
           return false;
         }
-        
+
         this.lastRefreshTime = now;
         localStorage.setItem('re_last_refresh_time', now.toString());
         return true;
       }
-      
+
       markRefreshed() {
         this.lastRefreshTime = Date.now();
         localStorage.setItem('re_last_refresh_time', this.lastRefreshTime.toString());
@@ -2072,25 +2089,25 @@ Please provide a clear, structured analysis in markdown format.`;
     // ═══════════════════════════════════════════════════════════════════════════
     // VIEWPORT LOADER - Only Load Visible Stocks (HUGE Performance Win!)
     // ═══════════════════════════════════════════════════════════════════════════
-    
+
     const ViewportLoader = {
       observer: null,
       visibleSymbols: new Set(),
       loadedDetailSymbols: new Set(),
       pendingLoads: new Map(),
       callbacks: new Map(),
-      
+
       init() {
         if (typeof IntersectionObserver === 'undefined') {
           console.warn('IntersectionObserver not supported');
           return;
         }
-        
+
         this.observer = new IntersectionObserver((entries) => {
           entries.forEach(entry => {
             const symbol = entry.target.dataset?.symbol;
             if (!symbol) return;
-            
+
             if (entry.isIntersecting) {
               this.onSymbolVisible(symbol);
             } else {
@@ -2101,10 +2118,10 @@ Please provide a clear, structured analysis in markdown format.`;
           rootMargin: '100px', // Start loading 100px before visible
           threshold: 0.01
         });
-        
+
         console.log('👀 ViewportLoader initialized');
       },
-      
+
       observe(element, symbol, onVisible) {
         if (!this.observer || !element) return;
         element.dataset.symbol = symbol;
@@ -2113,7 +2130,7 @@ Please provide a clear, structured analysis in markdown format.`;
         }
         this.observer.observe(element);
       },
-      
+
       unobserve(element) {
         if (!this.observer || !element) return;
         this.observer.unobserve(element);
@@ -2123,39 +2140,39 @@ Please provide a clear, structured analysis in markdown format.`;
           this.callbacks.delete(symbol);
         }
       },
-      
+
       onSymbolVisible(symbol) {
         this.visibleSymbols.add(symbol);
-        
+
         // Skip if already loaded detailed data
         if (this.loadedDetailSymbols.has(symbol)) return;
-        
+
         // Skip if already pending
         if (this.pendingLoads.has(symbol)) return;
-        
+
         this.pendingLoads.set(symbol, true);
-        
+
         // Call the callback if registered
         const callback = this.callbacks.get(symbol);
         if (callback) {
           callback(symbol);
         }
-        
+
         // Mark as loaded after a delay
         setTimeout(() => {
           this.loadedDetailSymbols.add(symbol);
           this.pendingLoads.delete(symbol);
         }, 500);
       },
-      
+
       isVisible(symbol) {
         return this.visibleSymbols.has(symbol);
       },
-      
+
       getVisibleSymbols() {
         return Array.from(this.visibleSymbols);
       },
-      
+
       destroy() {
         if (this.observer) {
           this.observer.disconnect();
@@ -2166,7 +2183,7 @@ Please provide a clear, structured analysis in markdown format.`;
         this.callbacks.clear();
       }
     };
-    
+
     // Initialize ViewportLoader
     ViewportLoader.init();
     window.ViewportLoader = ViewportLoader;
@@ -2174,20 +2191,20 @@ Please provide a clear, structured analysis in markdown format.`;
     // ═══════════════════════════════════════════════════════════════════════════
     // DEBOUNCED LOCALSTORAGE - Batch writes to avoid blocking main thread
     // ═══════════════════════════════════════════════════════════════════════════
-    
+
     const DebouncedStorage = {
       pending: new Map(),
       timers: new Map(),
-      
+
       setItem(key, value, delay = 1000) {
         // Store pending write
         this.pending.set(key, value);
-        
+
         // Clear existing timer
         if (this.timers.has(key)) {
           clearTimeout(this.timers.get(key));
         }
-        
+
         // Schedule write
         const timer = setTimeout(() => {
           try {
@@ -2201,10 +2218,10 @@ Please provide a clear, structured analysis in markdown format.`;
             console.warn('DebouncedStorage write failed:', err);
           }
         }, delay);
-        
+
         this.timers.set(key, timer);
       },
-      
+
       flush() {
         // Write all pending immediately
         this.pending.forEach((value, key) => {
@@ -2219,31 +2236,31 @@ Please provide a clear, structured analysis in markdown format.`;
         this.timers.clear();
       }
     };
-    
+
     // Flush on page unload
     window.addEventListener('beforeunload', () => DebouncedStorage.flush());
 
     // ═══════════════════════════════════════════════════════════════════════════
     // BATCHED LOCALSTORAGE - Debounced writes to avoid blocking UI
     // ═══════════════════════════════════════════════════════════════════════════
-    
+
     const BatchedLocalStorage = {
       pendingWrites: new Map(),
       writeTimer: null,
       DEBOUNCE_MS: 500,
-      
+
       set(key, value) {
         // Queue the write
         this.pendingWrites.set(key, value);
-        
+
         // Debounce actual write
         if (this.writeTimer) clearTimeout(this.writeTimer);
         this.writeTimer = setTimeout(() => this.flush(), this.DEBOUNCE_MS);
       },
-      
+
       flush() {
         if (this.pendingWrites.size === 0) return;
-        
+
         // Batch write all pending
         requestIdleCallback(() => {
           this.pendingWrites.forEach((value, key) => {
@@ -2256,7 +2273,7 @@ Please provide a clear, structured analysis in markdown format.`;
           this.pendingWrites.clear();
         }, { timeout: 1000 });
       },
-      
+
       // Immediate write (for critical data)
       setImmediate(key, value) {
         try {
@@ -2266,7 +2283,7 @@ Please provide a clear, structured analysis in markdown format.`;
         }
       }
     };
-    
+
     window.BatchedLocalStorage = BatchedLocalStorage;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -2276,7 +2293,7 @@ Please provide a clear, structured analysis in markdown format.`;
     const SessionPersistence = {
       SESSION_KEY: 're_current_session_data_v2',
       MAX_SESSION_AGE: 2 * 60 * 60 * 1000, // 2 hours
-      
+
       saveSession(stocks, filters = {}, watchlist = [], viewState = {}) {
         try {
           const sessionData = {
@@ -2298,27 +2315,27 @@ Please provide a clear, structured analysis in markdown format.`;
             timestamp: Date.now(),
             version: 'v2'
           };
-          
+
           localStorage.setItem(this.SESSION_KEY, JSON.stringify(sessionData));
           console.log('💾 Session data saved');
         } catch (error) {
           console.warn('Failed to save session:', error);
         }
       },
-      
+
       loadSession() {
         try {
           const sessionJson = localStorage.getItem(this.SESSION_KEY);
           if (!sessionJson) return null;
-          
+
           const sessionData = JSON.parse(sessionJson);
-          
+
           // Check if session is still valid
           if (Date.now() - sessionData.timestamp > this.MAX_SESSION_AGE) {
             this.clearSession();
             return null;
           }
-          
+
           console.log('📂 Session loaded from storage');
           return sessionData;
         } catch (error) {
@@ -2326,11 +2343,11 @@ Please provide a clear, structured analysis in markdown format.`;
           return null;
         }
       },
-      
+
       clearSession() {
         localStorage.removeItem(this.SESSION_KEY);
       },
-      
+
       hasValidSession() {
         const session = this.loadSession();
         return session !== null && session.stocks?.length > 0;
@@ -2345,12 +2362,12 @@ Please provide a clear, structured analysis in markdown format.`;
       // FIX: Ensure listener is added only once
       if (window.VISIBILITY_LISTENER_ATTACHED) return;
       window.VISIBILITY_LISTENER_ATTACHED = true;
-      
+
       const handleVisibilityChange = () => {
         if (document.hidden) {
           console.log('📴 Tab hidden - pausing background activity');
           window.TAB_HIDDEN = true;
-          
+
           // OPTIMIZATION: Pause all active intervals when tab is hidden
           if (window.ACTIVE_INTERVALS) {
             window.PAUSED_INTERVALS = [...window.ACTIVE_INTERVALS];
@@ -2360,7 +2377,7 @@ Please provide a clear, structured analysis in markdown format.`;
         } else {
           console.log('📱 Tab visible - restoring normal activity');
           window.TAB_HIDDEN = false;
-          
+
           // OPTIMIZATION: Resume intervals when tab becomes visible
           if (window.PAUSED_INTERVALS && window.PAUSED_INTERVALS.length > 0) {
             console.log('🔄 Resuming background tasks...');
@@ -2368,9 +2385,9 @@ Please provide a clear, structured analysis in markdown format.`;
           }
         }
       };
-      
+
       document.addEventListener('visibilitychange', handleVisibilityChange);
-      
+
       // Cleanup on page unload
       window.addEventListener('beforeunload', () => {
         document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -2389,14 +2406,14 @@ Please provide a clear, structured analysis in markdown format.`;
       const cleanupKey = 're_last_cache_cleanup';
       const lastCleanup = parseInt(localStorage.getItem(cleanupKey) || '0');
       const oneWeek = 7 * 24 * 60 * 60 * 1000;
-      
+
       if (Date.now() - lastCleanup > oneWeek) {
         console.log('🧹 Running weekly cache cleanup...');
-        
+
         const keysToRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          
+
           if (key && (key.startsWith('re_advanced_') || key.startsWith('re_cache_') || key.startsWith('v5_') || key.startsWith('v6_'))) {
             try {
               const data = JSON.parse(localStorage.getItem(key));
@@ -2409,9 +2426,9 @@ Please provide a clear, structured analysis in markdown format.`;
             }
           }
         }
-        
+
         keysToRemove.forEach(key => localStorage.removeItem(key));
-        
+
         localStorage.setItem(cleanupKey, Date.now().toString());
         console.log(`🧹 Cleaned up ${keysToRemove.length} old cache entries`);
       }
@@ -2438,7 +2455,7 @@ Please provide a clear, structured analysis in markdown format.`;
           _loadOrder: index
         }));
       },
-      
+
       // Merge real data into placeholder
       mergeWithPlaceholder(placeholder, realData) {
         if (!realData) return placeholder;
@@ -2563,7 +2580,7 @@ Please provide a clear, structured analysis in markdown format.`;
       // BATCH GET - Optimized for checking many symbols at once
       getBatch(symbols, type = 'stock') {
         const results = { cached: [], uncached: [] };
-        
+
         symbols.forEach(symbol => {
           const data = this.get(symbol, type);
           if (data) {
@@ -2572,7 +2589,7 @@ Please provide a clear, structured analysis in markdown format.`;
             results.uncached.push(symbol);
           }
         });
-        
+
         return results;
       },
 
@@ -3246,11 +3263,11 @@ Please provide a clear, structured analysis in markdown format.`;
       async loadAllFromCache() {
         console.log('⚡ INSTANT LOAD: Loading all stocks from cache...');
         const startTime = performance.now();
-        
+
         try {
           // Get all cached stock data from IndexedDB
           const cachedStocks = [];
-          
+
           if (AdvancedStorage.db) {
             const tx = AdvancedStorage.db.transaction('stockData', 'readonly');
             const store = tx.objectStore('stockData');
@@ -3259,7 +3276,7 @@ Please provide a clear, structured analysis in markdown format.`;
               request.onsuccess = () => resolve(request.result);
               request.onerror = () => reject(request.error);
             });
-            
+
             // Filter for quote data (critical data)
             allData.forEach(item => {
               if (item.data?.critical && item.id && !item.id.includes('_')) {
@@ -3270,7 +3287,7 @@ Please provide a clear, structured analysis in markdown format.`;
               }
             });
           }
-          
+
           // Also check localStorage for any additional cached data
           const localKeys = Object.keys(localStorage).filter(k => k.startsWith('re_advanced_stockData_'));
           localKeys.forEach(key => {
@@ -3287,11 +3304,11 @@ Please provide a clear, structured analysis in markdown format.`;
               }
             } catch (e) { /* ignore */ }
           });
-          
+
           const duration = performance.now() - startTime;
           console.log(`⚡ INSTANT LOAD: Loaded ${cachedStocks.length} stocks from cache in ${duration.toFixed(0)}ms`);
           this.instantLoadComplete = true;
-          
+
           return cachedStocks;
         } catch (error) {
           console.warn('Instant load from cache failed:', error);
@@ -3315,12 +3332,12 @@ Please provide a clear, structured analysis in markdown format.`;
             const cached = await AdvancedStorage.get('stockData', symbol);
             return { symbol, cached: !!cached };
           });
-          
+
           const results = await Promise.all(watchlistChecks);
           results.forEach(({ symbol, cached }) => {
             if (!cached) uncachedWatchlist.push(symbol);
           });
-          
+
           if (uncachedWatchlist.length > 0) {
             console.log(`📋 Fetching ${uncachedWatchlist.length} uncached watchlist stocks`);
             await RequestManager.loadWithPriority(uncachedWatchlist, 'high');
@@ -3336,19 +3353,19 @@ Please provide a clear, structured analysis in markdown format.`;
 
         // Priority 2: Popular S&P 500 stocks - only fetch if not cached
         const popularStocks = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'META', 'NVDA', 'NFLX', 'AMD', 'COIN'];
-        
+
         // OPTIMIZED: Parallel cache checks instead of sequential
         const uncachedPopular = [];
         const popularChecks = popularStocks.map(async (symbol) => {
           const cached = await AdvancedStorage.get('stockData', symbol);
           return { symbol, cached: !!cached };
         });
-        
+
         const popularResults = await Promise.all(popularChecks);
         popularResults.forEach(({ symbol, cached }) => {
           if (!cached) uncachedPopular.push(symbol);
         });
-        
+
         if (uncachedPopular.length > 0) {
           console.log(`📈 Fetching ${uncachedPopular.length} uncached popular stocks`);
           await RequestManager.loadWithPriority(uncachedPopular, 'medium');
@@ -3390,12 +3407,12 @@ Please provide a clear, structured analysis in markdown format.`;
           console.log('📊 Skipping sector prefetch - no loaded stocks yet');
           return;
         }
-        
+
         const sectors = [...new Set(loadedStocks.map(s => s.sector).filter(Boolean))];
         for (const sector of sectors) {
           const sectorStocks = loadedStocks.filter(s => s.sector === sector);
           if (sectorStocks.length === 0) continue;
-          
+
           const avgMetrics = {
             pe: sectorStocks.reduce((sum, s) => sum + (parseFloat(s.pe) || 0), 0) / sectorStocks.length,
             roe: sectorStocks.reduce((sum, s) => sum + (parseFloat(s.roe) || 0), 0) / sectorStocks.length,
@@ -3439,7 +3456,7 @@ Please provide a clear, structured analysis in markdown format.`;
 
     // Expose PrefetchManager for instant load feature
     window.PrefetchManager = PrefetchManager;
-    
+
     // DELAYED WARMUP: Start only AFTER main loading completes (60 seconds)
     // This prevents API conflicts during initial load
     setTimeout(() => {
@@ -3541,7 +3558,7 @@ Please provide a clear, structured analysis in markdown format.`;
     const OptimizedStockLoader = {
       // Stale-while-revalidate: serve cached data instantly, refresh in background
       STALE_WHILE_REVALIDATE: true,
-      
+
       // Load critical data first, then enhance
       async loadStock(symbol) {
         const startTime = performance.now();
@@ -3571,17 +3588,17 @@ Please provide a clear, structured analysis in markdown format.`;
       async loadCriticalData(symbol) {
         // STALE-WHILE-REVALIDATE: Return cached data immediately, refresh in background
         const cached = await AdvancedStorage.get('stockData', symbol);
-        
+
         if (cached && cached.critical) {
           // Check if data is stale (older than quote cache duration)
           const isStale = cached.timestamp && (Date.now() - cached.timestamp > Cache.getCacheDuration('QUOTE_DATA'));
-          
+
           if (this.STALE_WHILE_REVALIDATE && isStale) {
             // Return stale data immediately, refresh in background
             console.log(`⚡ Serving stale data for ${symbol}, refreshing in background...`);
             this.refreshInBackground(symbol);
           }
-          
+
           return cached.critical;
         }
 
@@ -3591,25 +3608,25 @@ Please provide a clear, structured analysis in markdown format.`;
 
         // Cache with timestamp for stale checking
         const ttl = Cache.getCacheDuration('QUOTE_DATA');
-        await AdvancedStorage.set('stockData', symbol, { 
-          critical: data, 
-          timestamp: Date.now() 
+        await AdvancedStorage.set('stockData', symbol, {
+          critical: data,
+          timestamp: Date.now()
         }, ttl);
 
         return data;
       },
-      
+
       // Background refresh without blocking UI
       async refreshInBackground(symbol) {
         try {
           const response = await RequestManager.batchFetch('quote', symbol);
           const data = Array.isArray(response.data) ? response.data[0] : response.data;
-          
+
           if (data) {
             const ttl = Cache.getCacheDuration('QUOTE_DATA');
-            await AdvancedStorage.set('stockData', symbol, { 
-              critical: data, 
-              timestamp: Date.now() 
+            await AdvancedStorage.set('stockData', symbol, {
+              critical: data,
+              timestamp: Date.now()
             }, ttl);
             console.log(`🔄 Background refresh complete for ${symbol}`);
           }
@@ -3655,7 +3672,7 @@ Please provide a clear, structured analysis in markdown format.`;
 
         return await this.fetchTechnicalData(symbol);
       },
-      
+
       async fetchTechnicalData(symbol) {
         // Use multiple sources for technicals
         const [taData, quote] = await Promise.all([
@@ -3670,11 +3687,11 @@ Please provide a clear, structured analysis in markdown format.`;
           macd: taData[0]?.macd,
           timestamp: Date.now()
         };
-        
+
         await AdvancedStorage.set('stockData', `${symbol}_technical`, data, Cache.getCacheDuration('QUOTE_DATA'));
         return data;
       },
-      
+
       async refreshTechnicalInBackground(symbol) {
         try {
           await this.fetchTechnicalData(symbol);
@@ -3949,15 +3966,13 @@ Please provide a clear, structured analysis in markdown format.`;
       }
 
       async processBatch(symbols, endpoint) {
-        // Use batch endpoint if available
+        // Use backend proxy for batch quotes
         if (endpoint === 'quote' && symbols.length > 1) {
           try {
-            const symbolList = symbols.join(',');
-            const url = `https://financialmodelingprep.com/stable/quote/${symbolList}?apikey=${API_KEYS.FMP}`;
-
-            const response = await fetchWithRetry(url, {
-              timeoutMs: 15000,
-              retries: 1
+            const response = await fetch(`${window.API_BASE_URL}/api/quotes/batch`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ symbols })
             });
 
             if (response.ok) {
@@ -4138,10 +4153,9 @@ Please provide a clear, structured analysis in markdown format.`;
         const fields = this.getFieldsForPriority(priority);
 
         // Build API call with only needed fields
-        const url = `https://financialmodelingprep.com/stable/quote/${symbol}?apikey=${API_KEYS.FMP}`;
-
+        // Use backend proxy for single quote
         try {
-          const response = await fetchWithRetry(url, { timeoutMs: 8000 });
+          const response = await fetch(`${window.API_BASE_URL}/api/quote/${symbol}`);
           if (response.ok) {
             const data = await response.json();
             return this.filterDataByPriority(Array.isArray(data) ? data[0] : data, fields);
@@ -8793,23 +8807,23 @@ Be realistic and conservative. Base confidence on data quality.`;
     // AI ANALYSIS CACHE - Avoid recalculating for same stock data
     // ═══════════════════════════════════════════════════════════════════════════
     const aiAnalysisCache = new Map();
-    
+
     // ═══════════════════════════════════════════════════════════════════════════
     // DEBOUNCED LOCALSTORAGE - Batch writes to prevent blocking
     // ═══════════════════════════════════════════════════════════════════════════
     const debouncedLocalStorage = {
       timers: {},
       pendingWrites: {},
-      
+
       setItem(key, value, delay = 1000) {
         // Store the value to write
         this.pendingWrites[key] = value;
-        
+
         // Clear existing timer
         if (this.timers[key]) {
           clearTimeout(this.timers[key]);
         }
-        
+
         // Set new timer
         this.timers[key] = setTimeout(() => {
           try {
@@ -8821,7 +8835,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           }
         }, delay);
       },
-      
+
       setItemImmediate(key, value) {
         // Immediate write (for critical data)
         if (this.timers[key]) {
@@ -8835,7 +8849,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           console.warn('localStorage write failed:', e);
         }
       },
-      
+
       flush() {
         // Write all pending immediately
         Object.keys(this.pendingWrites).forEach(key => {
@@ -8850,17 +8864,17 @@ Be realistic and conservative. Base confidence on data quality.`;
         this.pendingWrites = {};
       }
     };
-    
+
     // Flush on page unload
     window.addEventListener('beforeunload', () => debouncedLocalStorage.flush());
-    
+
     function generateAIAnalysis(stock) {
       // Check cache first (use symbol + price + changePct as key)
       const cacheKey = `${stock.symbol}_${stock.price}_${stock.changePct}_${stock.pe}_${stock.roe}`;
       if (aiAnalysisCache.has(cacheKey)) {
         return aiAnalysisCache.get(cacheKey);
       }
-      
+
       const { score, subscores } = computeAIScore(stock);
       const { verdict, stance } = verdictFromScore(score);
       const confidence = confidenceFromScore(score, subscores);
@@ -8882,7 +8896,7 @@ Be realistic and conservative. Base confidence on data quality.`;
       const beta = num(stock.beta, 1);
       const volume = num(stock.volume, 0);
       const avgVolume = num(stock.avgVolume, 1);
-      
+
       // Advanced calculations
       const peg = growth > 0 && pe > 0 ? pe / growth : null; // PEG ratio
       const volumeRatio = avgVolume > 0 ? volume / avgVolume : 1;
@@ -8897,7 +8911,7 @@ Be realistic and conservative. Base confidence on data quality.`;
       // ═══════════════════════════════════════════════════════════════════════════
       // ENHANCED BULLISH FACTORS (More Sophisticated)
       // ═══════════════════════════════════════════════════════════════════════════
-      
+
       // Deep Value + Quality Combo (Warren Buffett style)
       if (pe > 0 && pe < 12 && roe > 18 && debt < 0.5 && growth > 8) {
         bullFactors.push({
@@ -8907,7 +8921,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           category: "fundamental"
         });
       }
-      
+
       // PEG Ratio Value (Growth at reasonable price)
       else if (peg !== null && peg < 1 && peg > 0.1 && growth > 10) {
         bullFactors.push({
@@ -8917,7 +8931,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           category: "fundamental"
         });
       }
-      
+
       // Classic Value Play
       else if (pe > 0 && pe < 15) {
         bullFactors.push({
@@ -8944,7 +8958,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           category: "fundamental"
         });
       }
-      
+
       // Balance Sheet Strength
       if (debt < 0.3 && roe > 15 && marketCap > 1e9) {
         bullFactors.push({
@@ -8988,7 +9002,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           category: "technical"
         });
       }
-      
+
       // Volume Confirmation
       if (volumeRatio > 1.5 && changePct > 3) {
         bullFactors.push({
@@ -8998,7 +9012,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           category: "technical"
         });
       }
-      
+
       // Low Volatility + Growth (Steady compounder)
       if (beta < 0.9 && roe > 15 && growth > 10 && debt < 0.5) {
         bullFactors.push({
@@ -9012,7 +9026,7 @@ Be realistic and conservative. Base confidence on data quality.`;
       // ═══════════════════════════════════════════════════════════════════════════
       // ENHANCED BEARISH FACTORS (Better Risk Detection)
       // ═══════════════════════════════════════════════════════════════════════════
-      
+
       // Value Trap Detection
       if (pe > 0 && pe < 10 && roe < 8 && growth < 0) {
         bearFactors.push({
@@ -9022,7 +9036,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           category: "fundamental"
         });
       }
-      
+
       // Expensive Growth with Execution Risk
       else if (pe > 50 && peg !== null && peg > 3 && growth < 25) {
         bearFactors.push({
@@ -9032,7 +9046,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           category: "fundamental"
         });
       }
-      
+
       // Classic Overvaluation
       else if (pe > 35) {
         bearFactors.push({
@@ -9059,7 +9073,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           category: "fundamental"
         });
       }
-      
+
       // Debt Warning
       if (debt > 2 && roe < 12) {
         bearFactors.push({
@@ -9076,7 +9090,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           category: "fundamental"
         });
       }
-      
+
       // Low Margins + High Valuation
       if (margin < 5 && pe > 20) {
         bearFactors.push({
@@ -9103,7 +9117,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           category: "technical"
         });
       }
-      
+
       // Falling Knife
       if (changePct < -15 && volumeRatio > 2) {
         bearFactors.push({
@@ -9120,12 +9134,12 @@ Be realistic and conservative. Base confidence on data quality.`;
           category: "technical"
         });
       }
-      
+
       // High Volatility Risk
       if (beta > 1.8 && marketCap < 10e9) {
         bearFactors.push({
           factor: "Elevated Volatility Risk",
-          detail: `Beta of ${beta.toFixed(2)} with smaller market cap (${(marketCap/1e9).toFixed(1)}B) amplifies downside risk.`,
+          detail: `Beta of ${beta.toFixed(2)} with smaller market cap (${(marketCap / 1e9).toFixed(1)}B) amplifies downside risk.`,
           importance: "medium",
           category: "risk"
         });
@@ -9200,7 +9214,7 @@ Be realistic and conservative. Base confidence on data quality.`;
       // ═══════════════════════════════════════════════════════════════════════════
       const riskReasons = [];
       let riskLevel = 'Medium';
-      
+
       // High volatility
       if (beta > 1.8) {
         riskReasons.push(`High volatility (β ${beta.toFixed(2)})`);
@@ -9208,7 +9222,7 @@ Be realistic and conservative. Base confidence on data quality.`;
       } else if (beta > 1.4) {
         riskReasons.push(`Above-average volatility (β ${beta.toFixed(2)})`);
       }
-      
+
       // Debt concerns
       if (debt > 2) {
         riskReasons.push(`Elevated debt (${debt.toFixed(2)}× equity)`);
@@ -9216,7 +9230,7 @@ Be realistic and conservative. Base confidence on data quality.`;
       } else if (debt > 1.5) {
         riskReasons.push(`Moderate debt (${debt.toFixed(2)}× equity)`);
       }
-      
+
       // Valuation risk
       if (pe > 50) {
         riskReasons.push(`Extreme valuation (P/E ${pe.toFixed(1)})`);
@@ -9225,42 +9239,42 @@ Be realistic and conservative. Base confidence on data quality.`;
         riskReasons.push(`Premium valuation (P/E ${pe.toFixed(1)})`);
         if (riskLevel === 'Medium') riskLevel = 'Medium-High';
       }
-      
+
       // Profitability concerns
       if (roe < 5 && roe > 0) {
         riskReasons.push(`Weak profitability (ROE ${roe.toFixed(1)}%)`);
         if (riskLevel === 'Medium') riskLevel = 'Medium-High';
       }
-      
+
       // Negative growth
       if (growth < -10) {
         riskReasons.push(`Revenue declining ${Math.abs(growth).toFixed(1)}%`);
         riskLevel = 'High';
       }
-      
+
       // Technical breakdown
       if (changePct < -15) {
         riskReasons.push(`Severe downtrend (-${Math.abs(changePct).toFixed(1)}%)`);
         if (riskLevel === 'Medium') riskLevel = 'Medium-High';
       }
-      
+
       // Low liquidity (small cap + low volume)
       if (marketCap < 1e9 && volumeRatio < 0.5) {
         riskReasons.push('Low liquidity (small-cap, thin volume)');
         if (riskLevel === 'Medium') riskLevel = 'Medium-High';
       }
-      
+
       // Default if no risks found
       if (riskReasons.length === 0) {
         riskReasons.push('Standard market risk');
         riskLevel = 'Low-Medium';
       }
-      
+
       const riskAssessment = {
         level: riskLevel,
         score: subscores.risk,
         reasons: riskReasons,
-        summary: riskReasons.length > 2 
+        summary: riskReasons.length > 2
           ? `${riskLevel} risk: ${riskReasons.slice(0, 2).join(', ')} +${riskReasons.length - 2} more`
           : `${riskLevel} risk: ${riskReasons.join(', ')}`
       };
@@ -9269,46 +9283,46 @@ Be realistic and conservative. Base confidence on data quality.`;
       // ENHANCED: Quick Key Factors Summary
       // ═══════════════════════════════════════════════════════════════════════════
       const keyFactors = [];
-      
+
       // Valuation
       if (pe > 0 && pe < 12) keyFactors.push('🔵 Deep Value');
       else if (pe > 0 && pe < 18) keyFactors.push('💎 Value');
       else if (pe > 40) keyFactors.push('⚠️ Expensive');
-      
+
       // Quality
       if (roe > 25) keyFactors.push('⭐ Elite ROE');
       else if (roe > 18) keyFactors.push('✅ Strong ROE');
       else if (roe < 8 && roe > 0) keyFactors.push('⚠️ Weak ROE');
-      
+
       // Growth
       if (growth > 25) keyFactors.push('🚀 High Growth');
       else if (growth > 15) keyFactors.push('📈 Growing');
       else if (growth < -5) keyFactors.push('📉 Declining');
-      
+
       // Balance sheet
       if (debt < 0.3 && marketCap > 1e9) keyFactors.push('💪 Strong Balance Sheet');
       else if (debt > 2) keyFactors.push('⚠️ High Debt');
-      
+
       // Momentum
       if (changePct > 10) keyFactors.push('🔥 Strong Momentum');
       else if (changePct > 5) keyFactors.push('📊 Positive Momentum');
       else if (changePct < -10) keyFactors.push('🔴 Weak Momentum');
-      
+
       // Technical
       if (rsi < 30) keyFactors.push('💡 Oversold');
       else if (rsi > 75) keyFactors.push('🔴 Overbought');
       else if (rsi > 55 && rsi < 68) keyFactors.push('✅ Healthy Trend');
-      
+
       // Volume
       if (volumeRatio > 2) keyFactors.push('📢 High Volume');
-      
+
       // Size
       if (isMegaCap) keyFactors.push('🏢 Mega-Cap');
       else if (marketCap < 2e9) keyFactors.push('🔬 Small-Cap');
-      
+
       // PEG (if calculable)
       if (peg !== null && peg < 1 && peg > 0.1) keyFactors.push('💰 Growth at Value');
-      
+
       // Fallback
       if (keyFactors.length === 0) keyFactors.push('📊 Market Average');
 
@@ -9329,14 +9343,14 @@ Be realistic and conservative. Base confidence on data quality.`;
         riskAssessment, // NEW: Detailed risk with reasons
         keyFactors, // NEW: Quick visual summary
       };
-      
+
       // Cache result (limit cache size to 2000 entries)
       if (aiAnalysisCache.size > 2000) {
         const firstKey = aiAnalysisCache.keys().next().value;
         aiAnalysisCache.delete(firstKey);
       }
       aiAnalysisCache.set(cacheKey, result);
-      
+
       return result;
     }
 
@@ -9710,8 +9724,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                 key={p.id}
                 onClick={() => setSelectedPlatform(p.id)}
                 className={`px-4 py-2 rounded-lg font-semibold text-sm transition ${selectedPlatform === p.id
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border border-slate-700'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border border-slate-700'
                   }`}
               >
                 <span className="mr-2">{p.icon}</span>
@@ -9758,9 +9772,9 @@ Be realistic and conservative. Base confidence on data quality.`;
                     >
                       <td className="p-3">
                         <div className={`font-bold ${idx === 0 ? 'text-yellow-400' :
-                            idx === 1 ? 'text-slate-400' :
-                              idx === 2 ? 'text-orange-400' :
-                                'text-slate-300'
+                          idx === 1 ? 'text-slate-400' :
+                            idx === 2 ? 'text-orange-400' :
+                              'text-slate-300'
                           }`}>
                           #{idx + 1}
                         </div>
@@ -9781,16 +9795,16 @@ Be realistic and conservative. Base confidence on data quality.`;
                       </td>
                       <td className="p-3">
                         <div className={`font-semibold ${item.mentionChange > 50 ? 'text-green-400' :
-                            item.mentionChange > 0 ? 'text-green-300' :
-                              'text-red-400'
+                          item.mentionChange > 0 ? 'text-green-300' :
+                            'text-red-400'
                           }`}>
                           {item.mentionChange > 0 ? '+' : ''}{item.mentionChange?.toFixed(0) || 0}%
                         </div>
                       </td>
                       <td className="p-3">
                         <div className={`font-semibold ${item.sentimentScore > 50 ? 'text-green-400' :
-                            item.sentimentScore > 0 ? 'text-yellow-400' :
-                              'text-red-400'
+                          item.sentimentScore > 0 ? 'text-yellow-400' :
+                            'text-red-400'
                           }`}>
                           {item.sentimentScore > 0 ? '+' : ''}{item.sentimentScore || 0}%
                         </div>
@@ -10003,15 +10017,15 @@ Be realistic and conservative. Base confidence on data quality.`;
                       </td>
                       <td className="p-3">
                         <div className={`font-bold ${analysis.aiScore >= 80 ? 'text-green-400' :
-                            analysis.aiScore >= 60 ? 'text-yellow-400' :
-                              'text-red-400'
+                          analysis.aiScore >= 60 ? 'text-yellow-400' :
+                            'text-red-400'
                           }`}>
                           {analysis.aiScore}/100
                         </div>
                         <div className={`text-xs ${analysis.verdict === 'STRONG BUY' || analysis.verdict === 'BUY'
-                            ? 'text-green-400' :
-                            analysis.verdict === 'SELL' ? 'text-red-400' :
-                              'text-slate-400'
+                          ? 'text-green-400' :
+                          analysis.verdict === 'SELL' ? 'text-red-400' :
+                            'text-slate-400'
                           }`}>
                           {analysis.verdict}
                         </div>
@@ -10330,8 +10344,8 @@ Be realistic and conservative. Base confidence on data quality.`;
               <button
                 onClick={() => setSelectedTab('tutorials')}
                 className={`px-4 py-2 font-semibold transition ${selectedTab === 'tutorials'
-                    ? 'text-cyan-400 border-b-2 border-cyan-400'
-                    : 'text-slate-400 hover:text-white'
+                  ? 'text-cyan-400 border-b-2 border-cyan-400'
+                  : 'text-slate-400 hover:text-white'
                   }`}
               >
                 <i className="fas fa-book mr-2"></i>Tutorials
@@ -10339,8 +10353,8 @@ Be realistic and conservative. Base confidence on data quality.`;
               <button
                 onClick={() => setSelectedTab('case-studies')}
                 className={`px-4 py-2 font-semibold transition ${selectedTab === 'case-studies'
-                    ? 'text-cyan-400 border-b-2 border-cyan-400'
-                    : 'text-slate-400 hover:text-white'
+                  ? 'text-cyan-400 border-b-2 border-cyan-400'
+                  : 'text-slate-400 hover:text-white'
                   }`}
               >
                 <i className="fas fa-trophy mr-2"></i>Case Studies
@@ -11671,8 +11685,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                             <p className="text-slate-300 text-sm">{update.message}</p>
                             {update.status && (
                               <span className={`inline-block mt-2 px-2 py-1 rounded text-xs font-medium ${update.status === 'running' ? 'bg-blue-500/20 text-blue-300' :
-                                  update.status === 'complete' ? 'bg-green-500/20 text-green-300' :
-                                    'bg-slate-500/20 text-slate-300'
+                                update.status === 'complete' ? 'bg-green-500/20 text-green-300' :
+                                  'bg-slate-500/20 text-slate-300'
                                 }`}>
                                 {update.status}
                               </span>
@@ -11713,8 +11727,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                             </h4>
                             <div className="flex items-center gap-3">
                               <span className={`px-3 py-1 rounded-lg text-xs font-bold ${agentOutput.action === 'BUY' || agentOutput.action === 'STRONG_BUY' ? 'bg-green-500/20 text-green-400' :
-                                  agentOutput.action === 'SELL' || agentOutput.action === 'STRONG_SELL' ? 'bg-red-500/20 text-red-400' :
-                                    'bg-yellow-500/20 text-yellow-400'
+                                agentOutput.action === 'SELL' || agentOutput.action === 'STRONG_SELL' ? 'bg-red-500/20 text-red-400' :
+                                  'bg-yellow-500/20 text-yellow-400'
                                 }`}>
                                 {agentOutput.action}
                               </span>
@@ -11921,7 +11935,7 @@ Be realistic and conservative. Base confidence on data quality.`;
             console.log('📴 Skipping tournament poll - tab hidden');
             return;
           }
-          
+
           try {
             const response = await fetch(statusUrl);
             if (response.ok) {
@@ -11966,7 +11980,7 @@ Be realistic and conservative. Base confidence on data quality.`;
             pollIntervalRef.current = null;
           }
         }, 600000); // 10 minutes
-        
+
         // Return cleanup function
         return () => {
           clearTimeout(timeoutId);
@@ -12079,7 +12093,7 @@ Be realistic and conservative. Base confidence on data quality.`;
         leaderboardSSE.onmessage = (event) => {
           // Skip processing when tab is hidden to reduce overhead
           if (document.hidden) return;
-          
+
           const data = JSON.parse(event.data);
           if (data.leaderboard) {
             setLeaderboard(data.leaderboard);
@@ -12111,7 +12125,7 @@ Be realistic and conservative. Base confidence on data quality.`;
         logsSSE.onmessage = (event) => {
           // Skip processing when tab is hidden
           if (document.hidden) return;
-          
+
           const data = JSON.parse(event.data);
           if (data.message) {
             addLog(data.message, data.type);
@@ -12198,13 +12212,13 @@ Be realistic and conservative. Base confidence on data quality.`;
         return () => {
           // CRITICAL FIX: Cleanup ALL resources when modal closes
           console.log('📋 Modal unmounting - cleaning up resources');
-          
+
           // Clear polling intervals
           if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current);
             pollIntervalRef.current = null;
           }
-          
+
           // CRITICAL: Close EventSource connections to prevent memory leaks
           if (eventSourceRef.current) {
             if (eventSourceRef.current.leaderboard) {
@@ -12217,7 +12231,7 @@ Be realistic and conservative. Base confidence on data quality.`;
             }
             eventSourceRef.current = null;
           }
-          
+
           // IMPORTANT: DO NOT call stopTournament() here
           // The tournament continues running on the server independently
         };
@@ -13130,8 +13144,8 @@ Be realistic and conservative. Base confidence on data quality.`;
             <div className="grid grid-cols-3 gap-4 mb-3">
               <div className="text-center">
                 <div className={`text-2xl font-bold ${aiScore >= 80 ? 'text-green-400' :
-                    aiScore >= 60 ? 'text-yellow-400' :
-                      'text-red-400'
+                  aiScore >= 60 ? 'text-yellow-400' :
+                    'text-red-400'
                   }`}>
                   {aiScore}/100
                 </div>
@@ -13145,9 +13159,9 @@ Be realistic and conservative. Base confidence on data quality.`;
               </div>
               <div className="text-center">
                 <span className={`px-3 py-1 rounded-full text-sm font-bold ${aiVerdict === 'STRONG BUY' ? 'bg-green-500/20 text-green-400' :
-                    aiVerdict === 'BUY' ? 'bg-green-500/10 text-green-300' :
-                      aiVerdict === 'SELL' ? 'bg-red-500/20 text-red-400' :
-                        'bg-yellow-500/10 text-yellow-300'
+                  aiVerdict === 'BUY' ? 'bg-green-500/10 text-green-300' :
+                    aiVerdict === 'SELL' ? 'bg-red-500/20 text-red-400' :
+                      'bg-yellow-500/10 text-yellow-300'
                   }`}>
                   {aiVerdict}
                 </span>
@@ -14143,8 +14157,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                         <span className="text-slate-600 cursor-help" title="How comfortable you can sleep owning this stock - based on volatility, debt, and technical signals">?</span>
                       </div>
                       <div className={`text-3xl font-bold ${calcSleepWellScore(stock) >= 80 ? 'text-green-400' :
-                          calcSleepWellScore(stock) >= 60 ? 'text-yellow-400' :
-                            'text-red-400'
+                        calcSleepWellScore(stock) >= 60 ? 'text-yellow-400' :
+                          'text-red-400'
                         }`}>
                         {calcSleepWellScore(stock)}/100
                       </div>
@@ -14160,10 +14174,10 @@ Be realistic and conservative. Base confidence on data quality.`;
                         <span className="text-slate-600 cursor-help" title="Overall grade based on valuation, growth, financial health, and profitability">?</span>
                       </div>
                       <div className={`text-3xl font-bold ${calculateStockGrade(stock).letterGrade === 'A' ? 'text-green-400' :
-                          calculateStockGrade(stock).letterGrade === 'B' ? 'text-blue-400' :
-                            calculateStockGrade(stock).letterGrade === 'C' ? 'text-yellow-400' :
-                              calculateStockGrade(stock).letterGrade === 'D' ? 'text-orange-400' :
-                                'text-red-400'
+                        calculateStockGrade(stock).letterGrade === 'B' ? 'text-blue-400' :
+                          calculateStockGrade(stock).letterGrade === 'C' ? 'text-yellow-400' :
+                            calculateStockGrade(stock).letterGrade === 'D' ? 'text-orange-400' :
+                              'text-red-400'
                         }`}>
                         {calculateStockGrade(stock).letterGrade}
                       </div>
@@ -14196,8 +14210,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                         <div className="glass-card p-4 rounded-lg text-center">
                           <div className="text-xs text-slate-500 mb-2">Predicted Change</div>
                           <div className={`text-3xl font-bold ${stock.mlPrediction.predPct > 0 ? 'text-green-400' :
-                              stock.mlPrediction.predPct < 0 ? 'text-red-400' :
-                                'text-slate-400'
+                            stock.mlPrediction.predPct < 0 ? 'text-red-400' :
+                              'text-slate-400'
                             }`}>
                             {formatMLPrediction(stock.mlPrediction.predPct)}
                           </div>
@@ -14225,8 +14239,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                               stock.mlPrediction.trend === 'bearish' ? '🔽' : '➡️'}
                           </div>
                           <div className={`text-sm font-semibold mt-2 ${stock.mlPrediction.trend === 'bullish' ? 'text-green-400' :
-                              stock.mlPrediction.trend === 'bearish' ? 'text-red-400' :
-                                'text-slate-400'
+                            stock.mlPrediction.trend === 'bearish' ? 'text-red-400' :
+                              'text-slate-400'
                             }`}>
                             {stock.mlPrediction.trend.charAt(0).toUpperCase() + stock.mlPrediction.trend.slice(1)}
                           </div>
@@ -14282,9 +14296,9 @@ Be realistic and conservative. Base confidence on data quality.`;
                             </span>
                           </div>
                           <span className={`px-4 py-2 rounded-lg font-bold text-lg ${tradingPlan.signal === 'STRONG BUY' ? 'bg-emerald-500 text-white' :
-                              tradingPlan.signal === 'BUY' ? 'bg-green-500 text-white' :
-                                tradingPlan.signal === 'SELL' ? 'bg-red-500 text-white' :
-                                  'bg-amber-500 text-white'
+                            tradingPlan.signal === 'BUY' ? 'bg-green-500 text-white' :
+                              tradingPlan.signal === 'SELL' ? 'bg-red-500 text-white' :
+                                'bg-amber-500 text-white'
                             }`}>
                             {tradingPlan.signal}
                           </span>
@@ -14870,8 +14884,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                     {/* News Sentiment Card */}
                     {newsSentiment && (
                       <div className={`glass-card p-6 rounded-xl border-2 ${newsSentiment.label === 'bullish' ? 'border-green-500/30 bg-green-500/5' :
-                          newsSentiment.label === 'bearish' ? 'border-red-500/30 bg-red-500/5' :
-                            'border-slate-500/30 bg-slate-500/5'
+                        newsSentiment.label === 'bearish' ? 'border-red-500/30 bg-red-500/5' :
+                          'border-slate-500/30 bg-slate-500/5'
                         }`}>
                         <div className="flex items-center justify-between mb-4">
                           <div>
@@ -14880,14 +14894,14 @@ Be realistic and conservative. Base confidence on data quality.`;
                           </div>
                           <div className="text-right">
                             <div className={`text-4xl font-bold ${newsSentiment.label === 'bullish' ? 'text-green-400' :
-                                newsSentiment.label === 'bearish' ? 'text-red-400' :
-                                  'text-slate-400'
+                              newsSentiment.label === 'bearish' ? 'text-red-400' :
+                                'text-slate-400'
                               }`}>
                               {newsSentiment.label === 'bullish' ? '📈' : newsSentiment.label === 'bearish' ? '📉' : '➡️'}
                             </div>
                             <div className={`text-xl font-bold mt-2 ${newsSentiment.label === 'bullish' ? 'text-green-400' :
-                                newsSentiment.label === 'bearish' ? 'text-red-400' :
-                                  'text-slate-400'
+                              newsSentiment.label === 'bearish' ? 'text-red-400' :
+                                'text-slate-400'
                               }`}>
                               {newsSentiment.label.toUpperCase()}
                             </div>
@@ -14912,8 +14926,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                         <div className="mt-3 p-2 bg-slate-800/50 rounded-lg text-center">
                           <span className="text-xs text-slate-400">Score: </span>
                           <span className={`font-bold text-sm ${newsSentiment.score > 0 ? 'text-green-400' :
-                              newsSentiment.score < 0 ? 'text-red-400' :
-                                'text-slate-400'
+                            newsSentiment.score < 0 ? 'text-red-400' :
+                              'text-slate-400'
                             }`}>
                             {newsSentiment.score > 0 ? '+' : ''}{newsSentiment.score}/100
                           </span>
@@ -14931,8 +14945,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                       </div>
                     ) : socialSentiment && socialSentiment.totalMessages > 0 ? (
                       <div className={`glass-card p-6 rounded-xl border-2 ${socialSentiment.overallSentiment === 'bullish' ? 'border-green-500/30 bg-green-500/5' :
-                          socialSentiment.overallSentiment === 'bearish' ? 'border-red-500/30 bg-red-500/5' :
-                            'border-slate-500/30 bg-slate-500/5'
+                        socialSentiment.overallSentiment === 'bearish' ? 'border-red-500/30 bg-red-500/5' :
+                          'border-slate-500/30 bg-slate-500/5'
                         }`}>
                         <div className="flex items-center justify-between mb-4">
                           <div>
@@ -14949,14 +14963,14 @@ Be realistic and conservative. Base confidence on data quality.`;
                           </div>
                           <div className="text-right">
                             <div className={`text-4xl font-bold ${socialSentiment.overallSentiment === 'bullish' ? 'text-green-400' :
-                                socialSentiment.overallSentiment === 'bearish' ? 'text-red-400' :
-                                  'text-slate-400'
+                              socialSentiment.overallSentiment === 'bearish' ? 'text-red-400' :
+                                'text-slate-400'
                               }`}>
                               {socialSentiment.overallSentiment === 'bullish' ? '🚀' : socialSentiment.overallSentiment === 'bearish' ? '🐻' : '😐'}
                             </div>
                             <div className={`text-xl font-bold mt-2 ${socialSentiment.overallSentiment === 'bullish' ? 'text-green-400' :
-                                socialSentiment.overallSentiment === 'bearish' ? 'text-red-400' :
-                                  'text-slate-400'
+                              socialSentiment.overallSentiment === 'bearish' ? 'text-red-400' :
+                                'text-slate-400'
                               }`}>
                               {socialSentiment.overallSentiment.toUpperCase()}
                             </div>
@@ -14981,8 +14995,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                         <div className="mt-3 p-2 bg-slate-800/50 rounded-lg text-center">
                           <span className="text-xs text-slate-400">Combined Score: </span>
                           <span className={`font-bold text-sm ${socialSentiment.sentimentScore > 0 ? 'text-green-400' :
-                              socialSentiment.sentimentScore < 0 ? 'text-red-400' :
-                                'text-slate-400'
+                            socialSentiment.sentimentScore < 0 ? 'text-red-400' :
+                              'text-slate-400'
                             }`}>
                             {socialSentiment.sentimentScore > 0 ? '+' : ''}{socialSentiment.sentimentScore}%
                           </span>
@@ -15006,8 +15020,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                                       </div>
                                     </div>
                                     <div className={`chip text-xs flex-shrink-0 ${post.sentiment === 'bullish' ? 'bg-green-500/20 text-green-400' :
-                                        post.sentiment === 'bearish' ? 'bg-red-500/20 text-red-400' :
-                                          'bg-slate-500/20 text-slate-400'
+                                      post.sentiment === 'bearish' ? 'bg-red-500/20 text-red-400' :
+                                        'bg-slate-500/20 text-slate-400'
                                       }`}>
                                       {post.sentiment === 'bullish' ? '📈' : post.sentiment === 'bearish' ? '📉' : '➡️'}
                                     </div>
@@ -15031,8 +15045,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                   {/* Aggregate Sentiment Overview */}
                   {newsSentiment && (
                     <div className={`glass-card p-6 rounded-xl border-2 ${newsSentiment.label === 'bullish' ? 'border-green-500/30 bg-green-500/5' :
-                        newsSentiment.label === 'bearish' ? 'border-red-500/30 bg-red-500/5' :
-                          'border-slate-500/30 bg-slate-500/5'
+                      newsSentiment.label === 'bearish' ? 'border-red-500/30 bg-red-500/5' :
+                        'border-slate-500/30 bg-slate-500/5'
                       }`} style={{ display: 'none' }}>
                       <div className="flex items-center justify-between mb-4">
                         <div>
@@ -15041,14 +15055,14 @@ Be realistic and conservative. Base confidence on data quality.`;
                         </div>
                         <div className="text-right">
                           <div className={`text-5xl font-bold ${newsSentiment.label === 'bullish' ? 'text-green-400' :
-                              newsSentiment.label === 'bearish' ? 'text-red-400' :
-                                'text-slate-400'
+                            newsSentiment.label === 'bearish' ? 'text-red-400' :
+                              'text-slate-400'
                             }`}>
                             {newsSentiment.label === 'bullish' ? '📈' : newsSentiment.label === 'bearish' ? '📉' : '➡️'}
                           </div>
                           <div className={`text-2xl font-bold mt-2 ${newsSentiment.label === 'bullish' ? 'text-green-400' :
-                              newsSentiment.label === 'bearish' ? 'text-red-400' :
-                                'text-slate-400'
+                            newsSentiment.label === 'bearish' ? 'text-red-400' :
+                              'text-slate-400'
                             }`}>
                             {newsSentiment.label.toUpperCase()}
                           </div>
@@ -15073,8 +15087,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                       <div className="mt-4 p-3 bg-slate-800/50 rounded-lg">
                         <div className="text-xs text-slate-400">Sentiment Score:
                           <span className={`font-bold ml-2 ${newsSentiment.score > 0 ? 'text-green-400' :
-                              newsSentiment.score < 0 ? 'text-red-400' :
-                                'text-slate-400'
+                            newsSentiment.score < 0 ? 'text-red-400' :
+                              'text-slate-400'
                             }`}>
                             {newsSentiment.score > 0 ? '+' : ''}{newsSentiment.score}/100
                           </span>
@@ -15125,8 +15139,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                                     {article.title}
                                   </h4>
                                   <div className={`chip flex-shrink-0 ${article.sentiment.label === 'bullish' ? 'bg-green-500/20 text-green-400 border-green-500/30' :
-                                      article.sentiment.label === 'bearish' ? 'bg-red-500/20 text-red-400 border-red-500/30' :
-                                        'bg-slate-500/20 text-slate-400 border-slate-500/30'
+                                    article.sentiment.label === 'bearish' ? 'bg-red-500/20 text-red-400 border-red-500/30' :
+                                      'bg-slate-500/20 text-slate-400 border-slate-500/30'
                                     }`}>
                                     {article.sentiment.label === 'bullish' ? '📈 Bullish' :
                                       article.sentiment.label === 'bearish' ? '📉 Bearish' :
@@ -15402,8 +15416,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                     <div className="glass-card p-4 rounded-xl">
                       <div className="text-xs text-slate-500 mb-2">RSI (14)</div>
                       <div className={`text-2xl font-bold ${(technicalData?.rsi || stock.rsi) < 30 ? 'text-green-400' :
-                          (technicalData?.rsi || stock.rsi) > 70 ? 'text-red-400' :
-                            'text-cyan-400'
+                        (technicalData?.rsi || stock.rsi) > 70 ? 'text-red-400' :
+                          'text-cyan-400'
                         }`}>
                         {(technicalData?.rsi || stock.rsi)?.toFixed(0) || '—'}
                       </div>
@@ -15418,8 +15432,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                     <div className="glass-card p-4 rounded-xl">
                       <div className="text-xs text-slate-500 mb-2">ADX (14)</div>
                       <div className={`text-2xl font-bold ${technicalData?.adx > 25 ? 'text-green-400' :
-                          technicalData?.adx > 20 ? 'text-yellow-400' :
-                            'text-slate-400'
+                        technicalData?.adx > 20 ? 'text-yellow-400' :
+                          'text-slate-400'
                         }`}>
                         {technicalData?.adx?.toFixed(0) || '—'}
                       </div>
@@ -15434,8 +15448,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                     <div className="glass-card p-4 rounded-xl">
                       <div className="text-xs text-slate-500 mb-2">Volatility (20d)</div>
                       <div className={`text-2xl font-bold ${technicalData?.stdDev > 5 ? 'text-red-400' :
-                          technicalData?.stdDev > 2 ? 'text-yellow-400' :
-                            'text-green-400'
+                        technicalData?.stdDev > 2 ? 'text-yellow-400' :
+                          'text-green-400'
                         }`}>
                         {technicalData?.stdDev?.toFixed(2) || '—'}
                       </div>
@@ -15514,8 +15528,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                         {technicalData?.sma50 && technicalData?.sma200 && (
                           <div className="pt-4 border-t border-slate-700/30">
                             <div className={`p-3 rounded-lg ${technicalData.sma50 > technicalData.sma200 ?
-                                'bg-green-500/10 border border-green-500/30' :
-                                'bg-red-500/10 border border-red-500/30'
+                              'bg-green-500/10 border border-green-500/30' :
+                              'bg-red-500/10 border border-red-500/30'
                               }`}>
                               <div className="flex items-center justify-between">
                                 <div>
@@ -15642,8 +15656,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                           <div className="flex justify-between items-center mb-2">
                             <span className="text-xs text-slate-400">RSI (14)</span>
                             <span className={`font-mono text-sm font-bold ${(technicalData?.rsi || stock.rsi) < 30 ? 'text-green-400' :
-                                (technicalData?.rsi || stock.rsi) > 70 ? 'text-red-400' :
-                                  'text-cyan-400'
+                              (technicalData?.rsi || stock.rsi) > 70 ? 'text-red-400' :
+                                'text-cyan-400'
                               }`}>
                               {(technicalData?.rsi || stock.rsi)?.toFixed(0) || '—'}
                             </span>
@@ -15672,8 +15686,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                             <div className="flex justify-between items-center">
                               <span className="text-xs text-slate-400">ADX Trend Strength</span>
                               <span className={`font-mono text-sm font-bold ${technicalData.adx > 25 ? 'text-green-400' :
-                                  technicalData.adx > 20 ? 'text-yellow-400' :
-                                    'text-slate-400'
+                                technicalData.adx > 20 ? 'text-yellow-400' :
+                                  'text-slate-400'
                                 }`}>
                                 {technicalData.adx.toFixed(0)}
                               </span>
@@ -15681,8 +15695,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                             <div className="mt-2 h-2 bg-slate-700 rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full ${technicalData.adx > 25 ? 'bg-green-500' :
-                                    technicalData.adx > 20 ? 'bg-yellow-500' :
-                                      'bg-slate-500'
+                                  technicalData.adx > 20 ? 'bg-yellow-500' :
+                                    'bg-slate-500'
                                   }`}
                                 style={{ width: `${Math.min(100, (technicalData.adx / 50) * 100)}%` }}
                               ></div>
@@ -15711,8 +15725,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                             <div className="flex justify-between items-center">
                               <span className="text-xs text-slate-400">Volatility (σ)</span>
                               <span className={`text-sm font-bold ${technicalData.stdDev > 5 ? 'text-red-400' :
-                                  technicalData.stdDev > 2 ? 'text-yellow-400' :
-                                    'text-green-400'
+                                technicalData.stdDev > 2 ? 'text-yellow-400' :
+                                  'text-green-400'
                                 }`}>
                                 {technicalData.stdDev.toFixed(2)}
                               </span>
@@ -15756,10 +15770,10 @@ Be realistic and conservative. Base confidence on data quality.`;
                           <div className="text-center">
                             <div className="text-xs text-slate-500 mb-2">Rating</div>
                             <div className={`text-6xl font-bold mb-2 ${analystRatingsData.snapshot.rating?.startsWith('A') ? 'text-green-400' :
-                                analystRatingsData.snapshot.rating?.startsWith('B') ? 'text-blue-400' :
-                                  analystRatingsData.snapshot.rating?.startsWith('C') ? 'text-yellow-400' :
-                                    analystRatingsData.snapshot.rating?.startsWith('D') ? 'text-orange-400' :
-                                      'text-red-400'
+                              analystRatingsData.snapshot.rating?.startsWith('B') ? 'text-blue-400' :
+                                analystRatingsData.snapshot.rating?.startsWith('C') ? 'text-yellow-400' :
+                                  analystRatingsData.snapshot.rating?.startsWith('D') ? 'text-orange-400' :
+                                    'text-red-400'
                               }`}>
                               {analystRatingsData.snapshot.rating || 'N/A'}
                             </div>
@@ -15789,7 +15803,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                             </div>
                             {stock.price && (analystRatingsData.priceTargetSummary?.lastQuarterAvgPriceTarget || analystRatingsData.priceTarget?.lastQuarterAvgPriceTarget) && (
                               <div className={`text-sm font-bold mt-1 ${((analystRatingsData.priceTargetSummary?.lastQuarterAvgPriceTarget || analystRatingsData.priceTarget?.lastQuarterAvgPriceTarget) / stock.price - 1) * 100 > 0
-                                  ? 'text-green-400' : 'text-red-400'
+                                ? 'text-green-400' : 'text-red-400'
                                 }`}>
                                 {(((analystRatingsData.priceTargetSummary?.lastQuarterAvgPriceTarget || analystRatingsData.priceTarget?.lastQuarterAvgPriceTarget) / stock.price - 1) * 100).toFixed(1)}% upside
                               </div>
@@ -15923,7 +15937,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                                   </div>
                                   {stock.price && (
                                     <div className={`text-xs font-bold mt-1 ${(analystRatingsData.priceTargetSummary.lastMonthAvgPriceTarget / stock.price - 1) * 100 > 0
-                                        ? 'text-green-400' : 'text-red-400'
+                                      ? 'text-green-400' : 'text-red-400'
                                       }`}>
                                       {((analystRatingsData.priceTargetSummary.lastMonthAvgPriceTarget / stock.price - 1) * 100).toFixed(1)}%
                                     </div>
@@ -15941,7 +15955,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                                   </div>
                                   {stock.price && (
                                     <div className={`text-xs font-bold mt-1 ${(analystRatingsData.priceTargetSummary.lastQuarterAvgPriceTarget / stock.price - 1) * 100 > 0
-                                        ? 'text-green-400' : 'text-red-400'
+                                      ? 'text-green-400' : 'text-red-400'
                                       }`}>
                                       {((analystRatingsData.priceTargetSummary.lastQuarterAvgPriceTarget / stock.price - 1) * 100).toFixed(1)}%
                                     </div>
@@ -15959,7 +15973,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                                   </div>
                                   {stock.price && (
                                     <div className={`text-xs font-bold mt-1 ${(analystRatingsData.priceTargetSummary.lastYearAvgPriceTarget / stock.price - 1) * 100 > 0
-                                        ? 'text-green-400' : 'text-red-400'
+                                      ? 'text-green-400' : 'text-red-400'
                                       }`}>
                                       {((analystRatingsData.priceTargetSummary.lastYearAvgPriceTarget / stock.price - 1) * 100).toFixed(1)}%
                                     </div>
@@ -15977,7 +15991,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                                   </div>
                                   {stock.price && (
                                     <div className={`text-xs font-bold mt-1 ${(analystRatingsData.priceTargetSummary.allTimeAvgPriceTarget / stock.price - 1) * 100 > 0
-                                        ? 'text-green-400' : 'text-red-400'
+                                      ? 'text-green-400' : 'text-red-400'
                                       }`}>
                                       {((analystRatingsData.priceTargetSummary.allTimeAvgPriceTarget / stock.price - 1) * 100).toFixed(1)}%
                                     </div>
@@ -16103,8 +16117,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                             <div className="text-center mb-4">
                               <div className="text-xs text-slate-500 mb-2">Consensus</div>
                               <div className={`text-4xl font-bold ${analystRatingsData.consensus.consensus === 'Strong Buy' || analystRatingsData.consensus.consensus === 'Buy' ? 'text-green-400' :
-                                  analystRatingsData.consensus.consensus === 'Hold' ? 'text-yellow-400' :
-                                    'text-red-400'
+                                analystRatingsData.consensus.consensus === 'Hold' ? 'text-yellow-400' :
+                                  'text-red-400'
                                 }`}>
                                 {analystRatingsData.consensus.consensus || 'N/A'}
                               </div>
@@ -16229,12 +16243,12 @@ Be realistic and conservative. Base confidence on data quality.`;
                                     {grade.gradingCompany || grade.firm || grade.analystFirm || grade.analystName || grade.company || 'Unknown Analyst'}
                                   </span>
                                   <span className={`chip text-xs px-3 py-1 rounded-full ${grade.newGrade?.toLowerCase().includes('buy') || grade.newGrade?.toLowerCase().includes('outperform') ||
-                                      grade.newGrade?.toLowerCase().includes('overweight') ?
-                                      'bg-green-500/20 text-green-400 border border-green-500/30' :
-                                      grade.newGrade?.toLowerCase().includes('sell') || grade.newGrade?.toLowerCase().includes('underperform') ||
-                                        grade.newGrade?.toLowerCase().includes('underweight') ?
-                                        'bg-red-500/20 text-red-400 border border-red-500/30' :
-                                        'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                                    grade.newGrade?.toLowerCase().includes('overweight') ?
+                                    'bg-green-500/20 text-green-400 border border-green-500/30' :
+                                    grade.newGrade?.toLowerCase().includes('sell') || grade.newGrade?.toLowerCase().includes('underperform') ||
+                                      grade.newGrade?.toLowerCase().includes('underweight') ?
+                                      'bg-red-500/20 text-red-400 border border-red-500/30' :
+                                      'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
                                     }`}>
                                     {grade.newGrade || grade.grade || 'N/A'}
                                   </span>
@@ -16353,8 +16367,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                                     <div className="flex items-center gap-2 mb-1">
                                       <span className="font-semibold text-white">{trade.reportingName || 'Unknown'}</span>
                                       <span className={`chip text-xs px-2 py-1 rounded ${trade.acquisitionOrDisposition === 'A'
-                                          ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                                          : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                                        : 'bg-red-500/20 text-red-400 border border-red-500/30'
                                         }`}>
                                         {trade.acquisitionOrDisposition === 'A' ? '📈 Buy' : '📉 Sell'}
                                       </span>
@@ -16872,8 +16886,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                           <div className="text-center">
                             <div className="text-xs text-slate-500 mb-2">AI Recommendation</div>
                             <div className={`text-5xl font-bold mb-2 ${aiAnalysis.recommendation === 'BUY' ? 'text-green-400' :
-                                aiAnalysis.recommendation === 'SELL' ? 'text-red-400' :
-                                  'text-yellow-400'
+                              aiAnalysis.recommendation === 'SELL' ? 'text-red-400' :
+                                'text-yellow-400'
                               }`}>
                               {aiAnalysis.recommendation}
                             </div>
@@ -16882,10 +16896,10 @@ Be realistic and conservative. Base confidence on data quality.`;
                                 <div
                                   key={i}
                                   className={`w-2 h-6 rounded ${i < aiAnalysis.recommendationStrength
-                                      ? aiAnalysis.recommendation === 'BUY' ? 'bg-green-500' :
-                                        aiAnalysis.recommendation === 'SELL' ? 'bg-red-500' :
-                                          'bg-yellow-500'
-                                      : 'bg-slate-700'
+                                    ? aiAnalysis.recommendation === 'BUY' ? 'bg-green-500' :
+                                      aiAnalysis.recommendation === 'SELL' ? 'bg-red-500' :
+                                        'bg-yellow-500'
+                                    : 'bg-slate-700'
                                     }`}
                                 />
                               ))}
@@ -17003,8 +17017,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                               <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
                                 <div
                                   className={`h-full ${aiAnalysis.technicalScore >= 70 ? 'bg-green-500' :
-                                      aiAnalysis.technicalScore >= 40 ? 'bg-yellow-500' :
-                                        'bg-red-500'
+                                    aiAnalysis.technicalScore >= 40 ? 'bg-yellow-500' :
+                                      'bg-red-500'
                                     }`}
                                   style={{ width: `${aiAnalysis.technicalScore}%` }}
                                 />
@@ -17019,8 +17033,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                               <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
                                 <div
                                   className={`h-full ${aiAnalysis.fundamentalScore >= 70 ? 'bg-green-500' :
-                                      aiAnalysis.fundamentalScore >= 40 ? 'bg-yellow-500' :
-                                        'bg-red-500'
+                                    aiAnalysis.fundamentalScore >= 40 ? 'bg-yellow-500' :
+                                      'bg-red-500'
                                     }`}
                                   style={{ width: `${aiAnalysis.fundamentalScore}%` }}
                                 />
@@ -17035,8 +17049,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                               <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
                                 <div
                                   className={`h-full ${aiAnalysis.sentimentScore >= 70 ? 'bg-green-500' :
-                                      aiAnalysis.sentimentScore >= 40 ? 'bg-yellow-500' :
-                                        'bg-red-500'
+                                    aiAnalysis.sentimentScore >= 40 ? 'bg-yellow-500' :
+                                      'bg-red-500'
                                     }`}
                                   style={{ width: `${aiAnalysis.sentimentScore}%` }}
                                 />
@@ -17269,7 +17283,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                               <div className="text-center">
                                 <div className="text-xs text-slate-500 mb-1">Similarity</div>
                                 <div className={`text-lg font-bold ${stock.similarity > 80 ? 'text-green-400' :
-                                    stock.similarity > 60 ? 'text-yellow-400' : 'text-red-400'
+                                  stock.similarity > 60 ? 'text-yellow-400' : 'text-red-400'
                                   }`}>
                                   {stock.similarity.toFixed(1)}%
                                 </div>
@@ -17813,10 +17827,10 @@ Be realistic and conservative. Base confidence on data quality.`;
                                         style={{
                                           width: `${item.percent}%`,
                                           background: `linear-gradient(90deg, ${idx === 0 ? '#06b6d4, #3b82f6' :
-                                              idx === 1 ? '#8b5cf6, #a855f7' :
-                                                idx === 2 ? '#10b981, #34d399' :
-                                                  idx === 3 ? '#f59e0b, #fbbf24' :
-                                                    '#ef4444, #f87171'
+                                            idx === 1 ? '#8b5cf6, #a855f7' :
+                                              idx === 2 ? '#10b981, #34d399' :
+                                                idx === 3 ? '#f59e0b, #fbbf24' :
+                                                  '#ef4444, #f87171'
                                             })`
                                         }}
                                       />
@@ -17868,7 +17882,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                                       ></div>
                                       <div className="absolute inset-0 flex items-center justify-center">
                                         <span className={`text-xs font-bold font-mono ${Math.abs(holding.gainLossPercent) > 5 ? 'text-white' :
-                                            isPositive ? 'text-green-400' : 'text-red-400'
+                                          isPositive ? 'text-green-400' : 'text-red-400'
                                           }`}>
                                           {isPositive ? '+' : ''}{holding.gainLossPercent.toFixed(2)}%
                                         </span>
@@ -17930,9 +17944,9 @@ Be realistic and conservative. Base confidence on data quality.`;
                                 </td>
                                 <td className="p-4 text-right">
                                   <span className={`px-2 py-1 rounded font-mono font-bold text-sm ${holding.gainLossPercent >= 10 ? 'bg-green-500/20 text-green-400' :
-                                      holding.gainLossPercent >= 0 ? 'bg-green-500/10 text-green-400' :
-                                        holding.gainLossPercent <= -10 ? 'bg-red-500/20 text-red-400' :
-                                          'bg-red-500/10 text-red-400'
+                                    holding.gainLossPercent >= 0 ? 'bg-green-500/10 text-green-400' :
+                                      holding.gainLossPercent <= -10 ? 'bg-red-500/20 text-red-400' :
+                                        'bg-red-500/10 text-red-400'
                                     }`}>
                                     {holding.gainLossPercent >= 0 ? '+' : ''}{holding.gainLossPercent?.toFixed(2) || '—'}%
                                   </span>
@@ -18408,9 +18422,9 @@ Be realistic and conservative. Base confidence on data quality.`;
                                 </td>
                                 <td className="p-3 text-center">
                                   <span className={`chip ${stock.aiScore >= 80 ? 'bg-green-500/20 text-green-400' :
-                                      stock.aiScore >= 65 ? 'bg-cyan-500/20 text-cyan-400' :
-                                        stock.aiScore >= 45 ? 'bg-yellow-500/20 text-yellow-400' :
-                                          'bg-red-500/20 text-red-400'
+                                    stock.aiScore >= 65 ? 'bg-cyan-500/20 text-cyan-400' :
+                                      stock.aiScore >= 45 ? 'bg-yellow-500/20 text-yellow-400' :
+                                        'bg-red-500/20 text-red-400'
                                     }`}>
                                     {stock.aiScore || '—'}
                                   </span>
@@ -18921,8 +18935,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                       onClick={() => addStockToComparison(stock.symbol)}
                       disabled={selectedStocks.length >= 5}
                       className={`px-3 py-2 rounded-lg text-sm font-semibold transition ${selectedStocks.length >= 5
-                          ? 'bg-slate-800/50 text-slate-500 cursor-not-allowed'
-                          : 'bg-slate-700 hover:bg-slate-600 text-white'
+                        ? 'bg-slate-800/50 text-slate-500 cursor-not-allowed'
+                        : 'bg-slate-700 hover:bg-slate-600 text-white'
                         }`}
                     >
                       {stock.symbol}
@@ -19893,8 +19907,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                       key={method.id}
                       onClick={() => setImportMethod(method.id)}
                       className={`flex-1 py-3 px-4 rounded-lg font-semibold text-sm transition flex items-center justify-center gap-2 ${importMethod === method.id
-                          ? 'bg-cyan-500/20 border-2 border-cyan-500/50 text-cyan-300'
-                          : 'bg-slate-800/50 border-2 border-slate-700/50 text-slate-400 hover:bg-slate-700/50'
+                        ? 'bg-cyan-500/20 border-2 border-cyan-500/50 text-cyan-300'
+                        : 'bg-slate-800/50 border-2 border-slate-700/50 text-slate-400 hover:bg-slate-700/50'
                         }`}
                     >
                       <i className={`fas ${method.icon}`}></i>
@@ -19961,8 +19975,8 @@ Be realistic and conservative. Base confidence on data quality.`;
               {/* Result Message */}
               {result && (
                 <div className={`p-4 rounded-lg border ${result.success
-                    ? 'bg-green-500/10 border-green-500/30 text-green-400'
-                    : 'bg-red-500/10 border-red-500/30 text-red-400'
+                  ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                  : 'bg-red-500/10 border-red-500/30 text-red-400'
                   }`}>
                   <div className="flex items-center gap-2 font-semibold mb-1">
                     <i className={`fas ${result.success ? 'fa-check-circle' : 'fa-exclamation-circle'}`}></i>
@@ -19996,8 +20010,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                   onClick={handleTextImport}
                   disabled={loading || !textInput.trim()}
                   className={`px-6 py-2.5 rounded-lg font-semibold text-sm transition flex items-center gap-2 ${loading || !textInput.trim()
-                      ? 'bg-slate-700/50 text-slate-500 cursor-not-allowed'
-                      : 'bg-cyan-600 hover:bg-cyan-500 text-white'
+                    ? 'bg-slate-700/50 text-slate-500 cursor-not-allowed'
+                    : 'bg-cyan-600 hover:bg-cyan-500 text-white'
                     }`}
                 >
                   {loading ? (
@@ -20110,8 +20124,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                     <div
                       key={alert.id}
                       className={`p-4 rounded-lg border cursor-pointer transition ${alert.read
-                          ? 'bg-slate-800/30 border-slate-700/50'
-                          : 'bg-cyan-500/10 border-cyan-500/30'
+                        ? 'bg-slate-800/30 border-slate-700/50'
+                        : 'bg-cyan-500/10 border-cyan-500/30'
                         }`}
                       onClick={() => window.alertManager.markAsRead(alert.id)}
                     >
@@ -20248,8 +20262,8 @@ Be realistic and conservative. Base confidence on data quality.`;
 
       return (
         <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${connected
-            ? 'bg-green-500/10 border border-green-500/30 text-green-400'
-            : 'bg-yellow-500/10 border border-yellow-500/30 text-yellow-400'
+          ? 'bg-green-500/10 border border-green-500/30 text-green-400'
+          : 'bg-yellow-500/10 border border-yellow-500/30 text-yellow-400'
           } mb-4`}>
           <i className={`fas ${connected ? 'fa-check-circle' : 'fa-exclamation-triangle'}`}></i>
           <span>
@@ -20731,20 +20745,18 @@ Be realistic and conservative. Base confidence on data quality.`;
                       <div
                         key={team.id}
                         onClick={() => setSelectedTeam(selectedTeam === team.name ? null : team.name)}
-                        className={`p-4 rounded-xl border cursor-pointer transition-all hover:scale-[1.02] ${
-                          selectedTeam === team.name
-                            ? 'border-purple-500 bg-purple-500/10'
-                            : 'border-slate-700 bg-slate-800/50 hover:border-slate-600'
-                        }`}
+                        className={`p-4 rounded-xl border cursor-pointer transition-all hover:scale-[1.02] ${selectedTeam === team.name
+                          ? 'border-purple-500 bg-purple-500/10'
+                          : 'border-slate-700 bg-slate-800/50 hover:border-slate-600'
+                          }`}
                       >
                         {/* Rank Badge */}
                         <div className="flex items-center justify-between mb-3">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                            idx === 0 ? 'bg-yellow-500/20 text-yellow-400' :
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${idx === 0 ? 'bg-yellow-500/20 text-yellow-400' :
                             idx === 1 ? 'bg-slate-400/20 text-slate-300' :
-                            idx === 2 ? 'bg-orange-600/20 text-orange-400' :
-                            'bg-slate-700 text-slate-400'
-                          }`}>
+                              idx === 2 ? 'bg-orange-600/20 text-orange-400' :
+                                'bg-slate-700 text-slate-400'
+                            }`}>
                             #{idx + 1}
                           </div>
                           <span className="text-xs text-slate-500">{team.strategy}</span>
@@ -20757,7 +20769,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                         {/* Portfolio Value */}
                         <div className="mb-3">
                           <p className="text-2xl font-bold text-white">
-                            ${team.portfolioValue?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                            ${team.portfolioValue?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </p>
                           <p className={`text-sm font-semibold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
                             {isPositive ? '+' : ''}{pnlPercent}% ({isPositive ? '+' : ''}${totalPnL.toFixed(2)})
@@ -20768,11 +20780,11 @@ Be realistic and conservative. Base confidence on data quality.`;
                         <div className="grid grid-cols-2 gap-2 text-xs mb-2">
                           <div className="bg-slate-900/50 p-2 rounded">
                             <p className="text-slate-500">Cash</p>
-                            <p className="text-cyan-400 font-semibold">${(team.cash || 50000).toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
+                            <p className="text-cyan-400 font-semibold">${(team.cash || 50000).toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
                           </div>
                           <div className="bg-slate-900/50 p-2 rounded">
                             <p className="text-slate-500">Invested</p>
-                            <p className="text-amber-400 font-semibold">${(team.invested || 0).toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
+                            <p className="text-amber-400 font-semibold">${(team.invested || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
                           </div>
                           <div className="bg-slate-900/50 p-2 rounded">
                             <p className="text-slate-500">Realized P/L</p>
@@ -20830,31 +20842,31 @@ Be realistic and conservative. Base confidence on data quality.`;
                             <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
                               <p className="text-slate-500 text-xs mb-1">Portfolio Value</p>
                               <p className="text-white font-bold text-lg">
-                                ${(teamData?.portfolioValue || 50000).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                ${(teamData?.portfolioValue || 50000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </p>
                             </div>
                             <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
                               <p className="text-slate-500 text-xs mb-1">Cash Available</p>
                               <p className="text-cyan-400 font-bold text-lg">
-                                ${(teamData?.cash || 50000).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                ${(teamData?.cash || 50000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </p>
                             </div>
                             <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
                               <p className="text-slate-500 text-xs mb-1">Invested</p>
                               <p className="text-amber-400 font-bold text-lg">
-                                ${(teamData?.invested || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                ${(teamData?.invested || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </p>
                             </div>
                             <div className="bg-slate-800/50 p-3 rounded-lg border border-green-500/30">
                               <p className="text-slate-500 text-xs mb-1">Realized P/L</p>
                               <p className={`font-bold text-lg ${(teamData?.realizedPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                {(teamData?.realizedPnL || 0) >= 0 ? '+' : ''}${(teamData?.realizedPnL || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                {(teamData?.realizedPnL || 0) >= 0 ? '+' : ''}${(teamData?.realizedPnL || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </p>
                             </div>
                             <div className="bg-slate-800/50 p-3 rounded-lg border border-blue-500/30">
                               <p className="text-slate-500 text-xs mb-1">Unrealized P/L</p>
                               <p className={`font-bold text-lg ${(teamData?.unrealizedPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                {(teamData?.unrealizedPnL || 0) >= 0 ? '+' : ''}${(teamData?.unrealizedPnL || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                {(teamData?.unrealizedPnL || 0) >= 0 ? '+' : ''}${(teamData?.unrealizedPnL || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </p>
                             </div>
                           </div>
@@ -20864,7 +20876,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                             <div className="flex items-center justify-between">
                               <span className="text-slate-400 font-medium">Total Profit/Loss</span>
                               <span className={`text-2xl font-bold ${(teamData?.totalPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                {(teamData?.totalPnL || 0) >= 0 ? '+' : ''}${(teamData?.totalPnL || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                {(teamData?.totalPnL || 0) >= 0 ? '+' : ''}${(teamData?.totalPnL || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 <span className="text-sm ml-2">
                                   ({(((teamData?.totalPnL || 0) / 50000) * 100).toFixed(2)}%)
                                 </span>
@@ -20902,7 +20914,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                                         <td className="text-right p-2 text-slate-400">${holding.avgCost?.toFixed(2)}</td>
                                         <td className="text-right p-2 text-white">${holding.currentPrice?.toFixed(2)}</td>
                                         <td className="text-right p-2 text-amber-400 font-semibold">
-                                          ${holding.marketValue?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                          ${holding.marketValue?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         </td>
                                         <td className={`text-right p-2 font-semibold ${(holding.unrealizedPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                                           {(holding.unrealizedPnL || 0) >= 0 ? '+' : ''}${holding.unrealizedPnL?.toFixed(2)}
@@ -20948,9 +20960,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                                       <tr key={i} className={`border-b border-slate-800 ${trade.action === 'BUY' ? 'bg-green-500/5' : 'bg-red-500/5'}`}>
                                         <td className="p-2 text-slate-500 text-xs">{trade.time}</td>
                                         <td className="p-2">
-                                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                                            trade.action === 'BUY' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                                          }`}>
+                                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${trade.action === 'BUY' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                                            }`}>
                                             {trade.action}
                                           </span>
                                         </td>
@@ -20958,11 +20969,10 @@ Be realistic and conservative. Base confidence on data quality.`;
                                         <td className="text-right p-2 text-white">{trade.shares}</td>
                                         <td className="text-right p-2 text-slate-400">${trade.price?.toFixed(2)}</td>
                                         <td className="text-right p-2 text-white">${trade.value?.toFixed(2)}</td>
-                                        <td className={`text-right p-2 font-semibold ${
-                                          trade.action === 'SELL'
-                                            ? ((trade.realizedPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400')
-                                            : 'text-slate-500'
-                                        }`}>
+                                        <td className={`text-right p-2 font-semibold ${trade.action === 'SELL'
+                                          ? ((trade.realizedPnL || 0) >= 0 ? 'text-green-400' : 'text-red-400')
+                                          : 'text-slate-500'
+                                          }`}>
                                           {trade.action === 'SELL'
                                             ? `${(trade.realizedPnL || 0) >= 0 ? '+' : ''}$${(trade.realizedPnL || 0).toFixed(2)}`
                                             : '-'
@@ -20986,13 +20996,13 @@ Be realistic and conservative. Base confidence on data quality.`;
                             <div className="bg-slate-800/50 p-2 rounded-lg">
                               <p className="text-slate-500 text-xs mb-1">Buy Volume</p>
                               <p className="text-green-400 font-bold">
-                                ${stats.totalBuyValue.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                                ${stats.totalBuyValue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                               </p>
                             </div>
                             <div className="bg-slate-800/50 p-2 rounded-lg">
                               <p className="text-slate-500 text-xs mb-1">Sell Volume</p>
                               <p className="text-red-400 font-bold">
-                                ${stats.totalSellValue.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                                ${stats.totalSellValue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                               </p>
                             </div>
                             <div className="bg-slate-800/50 p-2 rounded-lg">
@@ -21084,7 +21094,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                                         <div className="flex-1 bg-slate-800 rounded-full h-4 overflow-hidden">
                                           <div
                                             className={`h-full ${colors[idx % colors.length]} rounded-full transition-all duration-500`}
-                                            style={{width: `${Math.min(sector.percentage, 100)}%`}}
+                                            style={{ width: `${Math.min(sector.percentage, 100)}%` }}
                                           ></div>
                                         </div>
                                         <div className="w-16 text-right text-xs text-white font-semibold">
@@ -21104,7 +21114,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                                     <div className="bg-slate-700 rounded-full h-3 overflow-hidden">
                                       <div
                                         className="h-full bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full"
-                                        style={{width: `${100 - (teamData.sectorAllocation.cashPercentage || 0)}%`}}
+                                        style={{ width: `${100 - (teamData.sectorAllocation.cashPercentage || 0)}%` }}
                                       ></div>
                                     </div>
                                     <div className="flex justify-between mt-2">
@@ -21191,25 +21201,22 @@ Be realistic and conservative. Base confidence on data quality.`;
                 trades.slice(0, 50).map((trade, idx) => (
                   <div
                     key={idx}
-                    className={`p-4 rounded-lg border ${
-                      trade.action === 'BUY'
-                        ? 'bg-green-500/5 border-green-500/30'
-                        : 'bg-red-500/5 border-red-500/30'
-                    }`}
+                    className={`p-4 rounded-lg border ${trade.action === 'BUY'
+                      ? 'bg-green-500/5 border-green-500/30'
+                      : 'bg-red-500/5 border-red-500/30'
+                      }`}
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                          trade.action === 'BUY' ? 'bg-green-500/20' : 'bg-red-500/20'
-                        }`}>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${trade.action === 'BUY' ? 'bg-green-500/20' : 'bg-red-500/20'
+                          }`}>
                           <i className={`fas ${trade.action === 'BUY' ? 'fa-arrow-up text-green-400' : 'fa-arrow-down text-red-400'}`}></i>
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-white">{trade.team}</span>
-                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                              trade.action === 'BUY' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                            }`}>
+                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${trade.action === 'BUY' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                              }`}>
                               {trade.action}
                             </span>
                           </div>
@@ -21220,7 +21227,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                       </div>
                       <div className="text-right">
                         <p className="text-slate-500 text-xs">{trade.time || trade.timestamp}</p>
-                        <p className="text-white font-semibold">${(trade.price * trade.shares).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+                        <p className="text-white font-semibold">${(trade.price * trade.shares).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                       </div>
                     </div>
 
@@ -21280,7 +21287,7 @@ Be realistic and conservative. Base confidence on data quality.`;
       }, [isDarkMode]);
       const [loading, setLoading] = useState(true);
       const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0 });
-      
+
       // DEBUG: Track loading state changes
       useEffect(() => {
         console.log('🔄 LOADING STATE CHANGED:', loading);
@@ -21293,13 +21300,13 @@ Be realistic and conservative. Base confidence on data quality.`;
       const [sortBy, setSortBy] = useState({ key: 'marketCap', dir: 'desc' });
       const [visibleColumns, setVisibleColumns] = useState(DEFAULT_VISIBLE);
       const [selectedStock, setSelectedStock] = useState(null);
-      
+
       // OPTIMIZATION: Debounce search input to prevent re-filtering on every keystroke
       useEffect(() => {
         const timer = setTimeout(() => {
           setDebouncedSearch(search);
         }, 300); // 300ms debounce
-        
+
         return () => clearTimeout(timer);
       }, [search]);
 
@@ -21593,14 +21600,14 @@ Be realistic and conservative. Base confidence on data quality.`;
         // EXPANDED default list with 949+ major US stocks (S&P 500, NASDAQ 100, and popular stocks)
         const defaultList = ["AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "NVDA", "TSLA", "META", "BRK.B", "UNH", "XOM", "JNJ", "JPM", "V", "PG", "MA", "HD", "CVX", "LLY", "ABBV", "MRK", "AVGO", "COST", "PEP", "KO", "ADBE", "TMO", "WMT", "MCD", "CSCO", "ACN", "ABT", "CRM", "NFLX", "DHR", "LIN", "NKE", "VZ", "CMCSA", "TXN", "DIS", "PM", "NEE", "BMY", "ORCL", "AMD", "INTC", "QCOM", "RTX", "UPS", "T", "HON", "UNP", "BA", "SPGI", "COP", "SBUX", "LOW", "INTU", "AMGN", "GE", "DE", "CAT", "PLD", "ISRG", "MS", "BLK", "GS", "AXP", "NOW", "AMAT", "TJX", "ELV", "ADI", "SYK", "BKNG", "MDLZ", "LMT", "VRTX", "GILD", "CI", "ADP", "REGN", "ZTS", "PGR", "CVS", "MMC", "TGT", "SLB", "LRCX", "CB", "ETN", "C", "MO", "SO", "BDX", "DUK", "SCHW", "BSX", "PNC", "PYPL", "EQIX", "FISV", "ITW", "MMM", "FCX", "AON", "CL", "APD", "USB", "CME", "ICE", "GM", "WM", "F", "NOC", "MCO", "NSC", "PSX", "CCI", "MPC", "SHW", "MCK", "EMR", "ROP", "EOG", "KLAC", "HCA", "ECL", "MSI", "GD", "PSA", "APH", "PH", "ADSK", "SNPS", "SRE", "AJG", "ATVI", "TEL", "TFC", "AIG", "COF", "MAR", "AFL", "TT", "MET", "NXPI", "FIS", "PCAR", "CARR", "TRV", "SYY", "ALL", "AEP", "AZO", "PAYX", "PRU", "ORLY", "FTNT", "HUM", "DHI", "D", "DD", "KMB", "MNST", "RSG", "CMG", "IDXX", "WELL", "GPN", "CTVA", "O", "MSCI", "ROST", "MCHP", "SPG", "EA", "JCI", "EW", "IQV", "CTAS", "KMI", "KDP", "BIIB", "ROK", "WMB", "A", "XEL", "PPG", "CTSH", "WBD", "CPRT", "BK", "OTIS", "ODFL", "FAST", "HSY", "AMT", "CHTR", "DVN", "CMI", "EXC", "VRSK", "YUM", "GIS", "DLR", "STZ", "CBRE", "EXR", "DOW", "AMP", "DXCM", "AWK", "ILMN", "GLW", "KEYS", "STE", "MTD", "EBAY", "ANSS", "IFF", "LHX", "KHC", "LH", "ACGL", "LYB", "VMC", "ADM", "WY", "ED", "PCG", "FTV", "LVS", "TROW", "CDNS", "DTE", "RMD", "HPQ", "WST", "TSCO", "ALGN", "MTB", "VICI", "EFX", "WAB", "WTW", "AEE", "IT", "CNC", "ETR", "FRC", "GWW", "AVB", "ALB", "DAL", "APTV", "BAX", "PFG", "SBAC", "EQR", "CSGP", "ES", "TDY", "PPL", "STT", "HPE", "DOV", "DLTR", "WEC", "FITB", "DFS", "EIX", "TSN", "TYL", "SIVB", "FE", "ZBH", "TDG", "HBAN", "MPWR", "PWR", "MLM", "RF", "NTRS", "IEX", "CLX", "ARE", "HAL", "HOLX", "EQT", "CZR", "INVH", "LUV", "CFG", "OMC", "URI", "XYL", "DPZ", "K", "VTR", "FLT", "CAH", "TTWO", "EXPE", "BALL", "FDS", "SYF", "BBY", "COO", "NVR", "DRI", "MKC", "WAT", "ZBRA", "WDC", "PKI", "J", "CNP", "IP", "NTAP", "KIM", "AES", "LKQ", "CINF", "CE", "POOL", "EXPD", "LNT", "TER", "SWK", "JBHT", "AMCR", "APA", "PTC", "JKHY", "BXP", "HRL", "NDAQ", "EPAM", "BF.B", "UDR", "TRMB", "KMX", "TAP", "SWKS", "CPT", "MAA", "AOS", "HST", "PNW", "AIZ", "LYV", "MOS", "CHRW", "MGM", "ULTA", "AKAM", "TECH", "GL", "ALLE", "HSIC", "SNA", "FFIV", "GNRC", "LW", "RE", "EMN", "CTLT", "REG", "PAYC", "AAL", "SEE", "HII", "CMA", "BRO", "CPB", "IPG", "NI", "CRL", "PEAK", "BBWI", "WYNN", "WHR", "NCLH", "ALK", "IVZ", "HAS", "RL", "ZION", "BEN", "PNR", "MKTX", "BWA", "VNO", "NWS", "NWSA", "LUMN", "FOX", "FOXA", "DXC", "DISH", "UBER", "LYFT", "ABNB", "COIN", "SHOP", "SQ", "ROKU", "SNAP", "PINS", "TWLO", "ZM", "DOCU", "DDOG", "SNOW", "NET", "CRWD", "ZS", "OKTA", "PANW", "MDB", "TEAM", "WDAY", "VEEV", "DKNG", "RBLX", "U", "PATH", "RIVN", "LCID", "PLTR", "SOFI", "HOOD", "AFRM", "UPST", "PTON", "BYND", "PLUG", "ENPH", "SEDG", "FSLR", "RUN", "SPWR", "MAXN", "BE", "BLNK", "CHPT", "QS", "LAZR", "VLDR", "LIDR", "OUST", "MVIS", "INVZ", "SPCE", "ASTR", "RDW", "PL", "ASTS", "SATS", "LUNR", "MNTS", "IRDM", "GSAT", "AST", "GILT", "VORB", "ACHR", "JOBY", "LILM", "EVTL", "BIRD", "WKHS", "GOEV", "RIDE", "FSR", "LEV", "ARVL", "PTRA", "HYLN", "NKLA", "GP", "HYZN", "XL", "FUV", "SOLO", "AYRO", "ELMS", "GEV", "MULN", "WKSP", "FFIE", "PSNY", "AMC", "GME", "BB", "BBBY", "NOK", "SNDL", "NAKD", "EXPR", "KOSS", "CLOV", "WISH", "CLNE", "RKT", "UWMC", "SENS", "OCGN", "PROG", "ATER", "BBIG", "SPRT", "GREE", "IRNT", "OPAD", "SDC", "ABML", "ALPP", "OZSC", "AITX", "TSNP", "TLSS", "BBRW", "VPER", "SRMX", "INKW", "IDGC", "FOMO", "BOTY", "POTN", "MINE", "SIRC", "IGEX", "NIO", "XPEV", "LI", "BYDDY", "BABA", "JD", "PDD", "BIDU", "TCEHY", "NTES", "TME", "IQ", "BILI", "VIPS", "ATHM", "ZTO", "YMM", "HTHT", "DIDI", "EDU", "TAL", "GOTU", "RLX", "YY", "MOMO", "HUYA", "DOYU", "TIGR", "FUTU", "UP", "LX", "QTT", "DUO", "MOGU", "TUYA", "API", "LAIX", "BEST", "YJ", "CANG", "PETZ", "MOXC", "QH", "LMNR", "LITB", "AIHS", "TANH", "CBAT", "KNDI", "POLA", "IDEX", "WIMI", "MRIN", "CARV", "EAST", "JAGX", "SXTC", "CJJD", "DOGZ", "GLG", "REED", "SGMD", "TSM", "ASML", "MU", "MRVL", "MCHP", "ON", "QRVO", "STM", "GFS", "ENTG", "CRUS", "COHU", "AOSL", "MTSI", "FORM", "UCTT", "PLAB", "ACLS", "INDI", "ICHR", "NVMI", "ONTO", "ACMR", "CAMT", "POWI", "MKSI", "AEIS", "RMBS", "AMBA", "ALGM", "LSCC", "DIOD", "WOLF", "SLAB", "SMTC", "VECO", "TRMR", "AAOI", "REFR", "IPGP", "LITE", "OESX", "EMKR", "VIAV", "INFN", "OCLR", "FNSR", "AAON", "ATKR", "BDC", "BELFB", "CTS", "TAIT", "TTMI", "SANM", "ENS", "TRS", "VSEC", "MWA", "BC", "TILE", "HXL", "SHLS", "DBD", "PRLB", "DDD", "SSYS", "NNDM", "XONE", "VJET", "MTLS", "LOGI", "CRSR", "IRBT", "WBX", "SEIC", "SSNC", "BR", "GDDY", "LDOS", "SAIC", "CACI", "KTOS", "AVAV", "TDY", "FROG", "SPLK", "ZI", "COUP", "ESTC", "BILL", "S", "CFLT", "GTLB", "IOT", "APPN", "SUMO", "EVBG", "PD", "AI", "NCNO", "FIVN", "BRZE", "DT", "SNOW", "DDOG", "NET", "CRWD", "ZS", "OKTA", "PANW", "TENB", "VRNS", "QLYS", "RPD", "SAIL", "RSKD", "FSLY", "CLOUDFLARE", "PING", "NEWR", "ESTC", "SPLK", "WORK", "TWLO", "BAND", "BOX", "DBX", "DOCN", "LINODE", "MDB", "SNOW", "ELASTIC"];
         let stocks = saved ? JSON.parse(saved) : defaultList;
-        
+
         // AUTO-RESTORE: If saved list is suspiciously small (<100), restore from default
         if (stocks.length < 100) {
           console.warn(`⚠️ Only ${stocks.length} stocks in localStorage - restoring full list of ${defaultList.length} stocks`);
           stocks = defaultList;
           localStorage.setItem('curatedStocks', JSON.stringify(defaultList));
         }
-        
+
         // FIX: Validate that symbols are actual ticker symbols, not company names
         // Ticker symbols are typically 1-5 characters (with exceptions like BRK.B)
         const invalidSymbols = stocks.filter(s => {
@@ -21608,7 +21615,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           // Check if it looks like a company name (>8 chars without dots)
           return cleaned.length > 8 && !cleaned.includes('.');
         });
-        
+
         if (invalidSymbols.length > 10) {
           console.error(`🚨 Found ${invalidSymbols.length} invalid symbols (company names instead of tickers)`);
           console.error('Sample invalid:', invalidSymbols.slice(0, 5));
@@ -21616,15 +21623,15 @@ Be realistic and conservative. Base confidence on data quality.`;
           stocks = defaultList;
           localStorage.setItem('curatedStocks', JSON.stringify(defaultList));
         }
-        
+
         // Remove duplicates and normalize (uppercase, trim)
         const uniqueStocks = [...new Set(stocks.map(s => String(s).toUpperCase().trim()).filter(s => s))];
-        
+
         // Save cleaned version back to localStorage if it changed (debounced)
         if (uniqueStocks.length !== stocks.length) {
           DebouncedStorage.setItem('curatedStocks', JSON.stringify(uniqueStocks), 2000);
         }
-        
+
         console.log(`📊 Loaded ${uniqueStocks.length} stocks for screening`);
         return uniqueStocks;
       });
@@ -22264,9 +22271,9 @@ Be realistic and conservative. Base confidence on data quality.`;
         try {
           const change = quote.changesPercentage || quote.changePct || 0;
           const price = quote.price || quote.c || 0;
-          
+
           if (!price || price <= 0) return 50; // Neutral default
-          
+
           // Simple RSI approximation based on daily change
           // Strong positive = RSI > 70, strong negative = RSI < 30
           if (change > 8) return 75;  // Very overbought
@@ -22292,18 +22299,18 @@ Be realistic and conservative. Base confidence on data quality.`;
 
         setErrors([]);
         const startTime = new Date();
-        
+
         // FIX: Declare at function scope so they're accessible in finally block
         let uniqueCuratedStocks = [];
         let allStocks = [];
         let completedCount = 0;
-        
+
         // ═══════════════════════════════════════════════════════════════════
         // ULTRA-FAST STARTUP: Check localStorage first (sync), then IndexedDB
         // ═══════════════════════════════════════════════════════════════════
-        
+
         let hasCachedData = false;
-        
+
         // Step 1: Try FAST localStorage session restore (optimized for large datasets!)
         try {
           const sessionKey = 're_fast_session_v1';
@@ -22313,24 +22320,24 @@ Be realistic and conservative. Base confidence on data quality.`;
             const parseStart = performance.now();
             const parsed = JSON.parse(sessionData);
             const parseTime = performance.now() - parseStart;
-            
+
             if (parseTime > 50) {
               console.warn(`⚠️ Session parse took ${parseTime.toFixed(0)}ms - consider compression`);
             }
-            
+
             const { stocks: cachedStocks, timestamp } = parsed;
             const age = Date.now() - timestamp;
-            
+
             // Use session if less than 4 hours old
             if (age < 4 * 60 * 60 * 1000 && cachedStocks && cachedStocks.length > 50) {
-              console.log(`⚡ INSTANT: Restored ${cachedStocks.length} stocks from session (${Math.round(age/60000)}min old, parsed in ${parseTime.toFixed(0)}ms)`);
-              
+              console.log(`⚡ INSTANT: Restored ${cachedStocks.length} stocks from session (${Math.round(age / 60000)}min old, parsed in ${parseTime.toFixed(0)}ms)`);
+
               // OPTIMIZATION: Defer sort to avoid blocking
               requestIdleCallback(() => {
                 const sorted = [...cachedStocks].sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
                 setStocks(sorted);
               }, { timeout: 100 });
-              
+
               // Show unsorted immediately
               setStocks(cachedStocks);
               setLoading(false);
@@ -22340,7 +22347,7 @@ Be realistic and conservative. Base confidence on data quality.`;
         } catch (e) {
           console.warn('Session restore failed:', e);
         }
-        
+
         // Step 2: If no session, try IndexedDB (async but still fast)
         if (!hasCachedData) {
           try {
@@ -22355,7 +22362,7 @@ Be realistic and conservative. Base confidence on data quality.`;
             console.warn('IndexedDB load failed:', e);
           }
         }
-        
+
         // Step 3: Show placeholders if no cache (users see something immediately)
         if (!hasCachedData) {
           console.log(`🎯 No cache - showing ${curatedStocks.length} placeholders...`);
@@ -22363,7 +22370,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           setStocks(placeholders);
           setLoading(false);
         }
-        
+
         setLoadingProgress({ current: 0, total: curatedStocks.length || 0 });
 
         // Track if we should force completion
@@ -22385,29 +22392,33 @@ Be realistic and conservative. Base confidence on data quality.`;
           // ═══════════════════════════════════════════════════════════════════
           // FAST BATCH QUOTE LOADER - Fetches 100 stocks per API call!
           // ═══════════════════════════════════════════════════════════════════
-          
+
           const fetchBatchQuotesOnly = async (symbols) => {
             const results = [];
-            const BATCH_SIZE = 100; // FMP supports up to 100 symbols per call
-            
+            const BATCH_SIZE = 100; // Process in chunks
+
             for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
               const batch = symbols.slice(i, i + BATCH_SIZE);
               const batchNum = Math.floor(i / BATCH_SIZE) + 1;
               const totalBatches = Math.ceil(symbols.length / BATCH_SIZE);
-              
-              console.log(`🚀 Batch quote ${batchNum}/${totalBatches}: Fetching ${batch.length} stocks in ONE call...`);
-              
+
+              console.log(`🚀 Batch quote ${batchNum}/${totalBatches}: Fetching ${batch.length} stocks via backend proxy...`);
+
               try {
-                const url = `https://financialmodelingprep.com/api/v3/quote/${batch.join(',')}?apikey=${FMP_API_KEY}`;
-                const response = await fetch(url);
-                
+                // Use backend proxy instead of direct FMP calls
+                const response = await fetch(`${window.API_BASE_URL}/api/quotes/batch`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ symbols: batch })
+                });
+
                 if (response.status === 429) {
-                  console.warn('⏳ Rate limited on batch quote, waiting 10s...');
+                  console.warn('⏳ Rate limited, waiting 10s...');
                   await new Promise(r => setTimeout(r, 10000));
                   i -= BATCH_SIZE; // Retry this batch
                   continue;
                 }
-                
+
                 if (response.ok) {
                   const data = await response.json();
                   if (Array.isArray(data)) {
@@ -22415,23 +22426,23 @@ Be realistic and conservative. Base confidence on data quality.`;
                     console.log(`✅ Got ${data.length} quotes in batch ${batchNum}`);
                   }
                 }
-                
-                // Small delay between batches to avoid rate limits
+
+                // Small delay between batches
                 if (i + BATCH_SIZE < symbols.length) {
-                  await new Promise(r => setTimeout(r, 1000));
+                  await new Promise(r => setTimeout(r, 500));
                 }
               } catch (error) {
                 console.warn(`Batch ${batchNum} failed:`, error);
               }
             }
-            
+
             return results;
           };
 
           // ═══════════════════════════════════════════════════════════════════
           // OPTIMIZED: Batch cache check instead of sequential loop
           // ═══════════════════════════════════════════════════════════════════
-          
+
           // Remove duplicates from curatedStocks before processing
           uniqueCuratedStocks = [...new Set(curatedStocks.map(s => String(s).toUpperCase().trim()).filter(s => s))];
 
@@ -22439,7 +22450,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           const batchStart = performance.now();
           const { cached: cachedStocks, uncached: uncachedSymbols } = Cache.getBatch(uniqueCuratedStocks, 'stock');
           const batchTime = performance.now() - batchStart;
-          
+
           if (batchTime > 100) {
             console.warn(`⚠️ Batch cache check took ${batchTime.toFixed(0)}ms for ${uniqueCuratedStocks.length} symbols`);
           }
@@ -22452,29 +22463,29 @@ Be realistic and conservative. Base confidence on data quality.`;
           }
 
           console.log(`⚡ Found ${cachedStocks.length} cached stocks, ${uncachedSymbols.length} need fetching`);
-          
+
           // ═══════════════════════════════════════════════════════════════════
           // STREAMING BATCH LOADER - Display stocks AS THEY LOAD (instant UI!)
           // ═══════════════════════════════════════════════════════════════════
-          
+
           if (uncachedSymbols.length > 0) {
             console.log('🚀 STREAMING batch loader for', uncachedSymbols.length, 'stocks...');
-            
+
             const BATCH_SIZE = 20; // Backend processes individually - keep batches small
             const loadedSymbols = new Set();
             let displayedCount = 0;
-            
+
             // OPTIMIZATION: Accumulate all batches, then ONE final update
             const allBatchStocks = [];
-            
+
             // Process each batch and display immediately
             for (let i = 0; i < uncachedSymbols.length; i += BATCH_SIZE) {
               const batch = uncachedSymbols.slice(i, i + BATCH_SIZE);
               const batchNum = Math.floor(i / BATCH_SIZE) + 1;
               const totalBatches = Math.ceil(uncachedSymbols.length / BATCH_SIZE);
-              
+
               console.log(`🚀 Batch ${batchNum}/${totalBatches}: Loading ${batch.length} stocks...`);
-              
+
               try {
                 // Use secure backend proxy for batch quotes
                 const response = await fetch(`${window.API_BASE_URL}/api/quotes/batch`, {
@@ -22482,119 +22493,119 @@ Be realistic and conservative. Base confidence on data quality.`;
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ symbols: batch })
                 });
-                
+
                 if (response.status === 429) {
                   console.warn('⏳ Rate limited, waiting 5s...');
                   await new Promise(r => setTimeout(r, 5000));
                   i -= BATCH_SIZE; // Retry this batch
                   continue;
                 }
-                
+
                 if (!response.ok) {
                   const errorText = await response.text();
                   console.error(`❌ Batch ${batchNum} failed with ${response.status}:`, errorText.substring(0, 200));
                   continue;
                 }
-                
+
                 const data = await response.json();
-                
+
                 if (!Array.isArray(data)) {
                   console.error(`❌ Batch ${batchNum} returned non-array:`, typeof data, data);
                   continue;
                 }
-                
+
                 if (data.length === 0) {
                   console.warn(`⚠️ Batch ${batchNum} returned empty array for ${batch.length} symbols`);
                   continue;
                 }
-                
+
                 console.log(`✅ Batch ${batchNum} received ${data.length} stocks`);
-                
+
                 const batchStocks = [];
-                
+
                 // OPTIMIZATION: Batch AI computation using requestIdleCallback
                 const pendingAI = [];
-                
+
                 data.forEach(quote => {
-                      if (!quote || !quote.symbol) return;
-                      
-                      // FIX: Check if we have cached data with full fields for screeners
-                      const cachedFull = Cache.get(quote.symbol, 'stock');
-                      
-                      const stockData = {
-                        symbol: quote.symbol,
-                        name: quote.name || quote.symbol,
-                        companyName: quote.name || quote.symbol, // FIX: Add companyName for filtering
-                        sector: cachedFull?.sector || 'Unknown', // FIX: Add sector for filtering
-                        industry: cachedFull?.industry || 'Unknown',
-                        price: quote.price,
-                        changePct: quote.changesPercentage,
-                        change: quote.change,
-                        volume: quote.volume,
-                        avgVolume: quote.avgVolume,
-                        marketCap: quote.marketCap,
-                        pe: quote.pe,
-                        eps: quote.eps,
-                        // FIX: Use cached data if available for screener fields
-                        roe: cachedFull?.roe || quote.roe || 0,
-                        revenueGrowth: cachedFull?.revenueGrowth || 0,
-                        debtToEquity: cachedFull?.debtToEquity || 0,
-                        beta: cachedFull?.beta || quote.beta || 1.0,
-                        // FIX: Calculate RSI from price data instead of hardcoding to 50
-                        rsi: cachedFull?.rsi || calculateSimpleRSI(quote),
-                        high52: quote.yearHigh,
-                        low52: quote.yearLow,
-                        dayHigh: quote.dayHigh,
-                        dayLow: quote.dayLow,
-                        open: quote.open,
-                        previousClose: quote.previousClose,
-                        exchange: quote.exchange,
-                        index: 'Curated',
-                        _batchLoaded: true,
-                        _needsEnrichment: !cachedFull // Mark for background enrichment if no cache
-                      };
-                      
-                      // Add AI analysis inline (cached, so fast!)
-                      const ai = generateAIAnalysis(stockData);
-                      Object.assign(stockData, ai);
-                      
-                      // Cache for future use (async, non-blocking)
-                      requestIdleCallback(() => {
-                        Cache.set(quote.symbol, stockData, 'stock');
-                      });
-                      
-                      cachedStocks.push({ symbol: quote.symbol, data: stockData });
-                      loadedSymbols.add(quote.symbol.toUpperCase());
-                      batchStocks.push(stockData);
-                      
-                      // FIX: Also populate allStocks for final processing
-                      allStocks.push(stockData);
-                      completedCount++;
-                    });
-                    
-                    // Accumulate for batch display
-                    allBatchStocks.push(...batchStocks);
-                    displayedCount += batchStocks.length;
-                    
-                    // OPTIMIZATION: Update UI every 2 batches (200 stocks) for smoother experience
-                    const shouldUpdate = (batchNum % 2 === 0) || (i + BATCH_SIZE >= uncachedSymbols.length);
-                    
-                    if (shouldUpdate && allBatchStocks.length > 0) {
-                      // ONE update with all accumulated stocks (no intermediate sorts!)
-                      setStocks(prev => {
-                        const existing = new Set(prev.map(s => s.symbol?.toUpperCase()));
-                        const newStocks = allBatchStocks.filter(s => !existing.has(s.symbol?.toUpperCase()));
-                        // DEFER SORTING - just merge for now
-                        return [...prev, ...newStocks];
-                      });
-                      
-                      allBatchStocks.length = 0; // Clear accumulator
-                      
-                      setLoading(false); // Show UI after first update!
-                      setLoadingProgress({ current: displayedCount, total: uncachedSymbols.length });
-                      console.log(`✅ Batch ${batchNum}: ${batchStocks.length} stocks DISPLAYED! Total visible: ${displayedCount}`);
-                    }
-                
+                  if (!quote || !quote.symbol) return;
+
+                  // FIX: Check if we have cached data with full fields for screeners
+                  const cachedFull = Cache.get(quote.symbol, 'stock');
+
+                  const stockData = {
+                    symbol: quote.symbol,
+                    name: quote.name || quote.symbol,
+                    companyName: quote.name || quote.symbol, // FIX: Add companyName for filtering
+                    sector: cachedFull?.sector || 'Unknown', // FIX: Add sector for filtering
+                    industry: cachedFull?.industry || 'Unknown',
+                    price: quote.price,
+                    changePct: quote.changesPercentage,
+                    change: quote.change,
+                    volume: quote.volume,
+                    avgVolume: quote.avgVolume,
+                    marketCap: quote.marketCap,
+                    pe: quote.pe,
+                    eps: quote.eps,
+                    // FIX: Use cached data if available for screener fields
+                    roe: cachedFull?.roe || quote.roe || 0,
+                    revenueGrowth: cachedFull?.revenueGrowth || 0,
+                    debtToEquity: cachedFull?.debtToEquity || 0,
+                    beta: cachedFull?.beta || quote.beta || 1.0,
+                    // FIX: Calculate RSI from price data instead of hardcoding to 50
+                    rsi: cachedFull?.rsi || calculateSimpleRSI(quote),
+                    high52: quote.yearHigh,
+                    low52: quote.yearLow,
+                    dayHigh: quote.dayHigh,
+                    dayLow: quote.dayLow,
+                    open: quote.open,
+                    previousClose: quote.previousClose,
+                    exchange: quote.exchange,
+                    index: 'Curated',
+                    _batchLoaded: true,
+                    _needsEnrichment: !cachedFull // Mark for background enrichment if no cache
+                  };
+
+                  // Add AI analysis inline (cached, so fast!)
+                  const ai = generateAIAnalysis(stockData);
+                  Object.assign(stockData, ai);
+
+                  // Cache for future use (async, non-blocking)
+                  requestIdleCallback(() => {
+                    Cache.set(quote.symbol, stockData, 'stock');
+                  });
+
+                  cachedStocks.push({ symbol: quote.symbol, data: stockData });
+                  loadedSymbols.add(quote.symbol.toUpperCase());
+                  batchStocks.push(stockData);
+
+                  // FIX: Also populate allStocks for final processing
+                  allStocks.push(stockData);
+                  completedCount++;
+                });
+
+                // Accumulate for batch display
+                allBatchStocks.push(...batchStocks);
+                displayedCount += batchStocks.length;
+
+                // OPTIMIZATION: Update UI every 2 batches (200 stocks) for smoother experience
+                const shouldUpdate = (batchNum % 2 === 0) || (i + BATCH_SIZE >= uncachedSymbols.length);
+
+                if (shouldUpdate && allBatchStocks.length > 0) {
+                  // ONE update with all accumulated stocks (no intermediate sorts!)
+                  setStocks(prev => {
+                    const existing = new Set(prev.map(s => s.symbol?.toUpperCase()));
+                    const newStocks = allBatchStocks.filter(s => !existing.has(s.symbol?.toUpperCase()));
+                    // DEFER SORTING - just merge for now
+                    return [...prev, ...newStocks];
+                  });
+
+                  allBatchStocks.length = 0; // Clear accumulator
+
+                  setLoading(false); // Show UI after first update!
+                  setLoadingProgress({ current: displayedCount, total: uncachedSymbols.length });
+                  console.log(`✅ Batch ${batchNum}: ${batchStocks.length} stocks DISPLAYED! Total visible: ${displayedCount}`);
+                }
+
                 // OPTIMIZATION: Reduced delay between batches (50ms instead of 150ms!)
                 if (i + BATCH_SIZE < uncachedSymbols.length) {
                   await new Promise(r => setTimeout(r, 50));
@@ -22603,15 +22614,15 @@ Be realistic and conservative. Base confidence on data quality.`;
                 console.error(`❌ Batch ${batchNum} exception:`, error.message, error.stack);
               }
             }
-            
+
             // Clear uncachedSymbols - batch loading complete
             uncachedSymbols.length = 0;
             console.log(`✅ Streaming complete! ${displayedCount} stocks loaded`);
-            
+
             // FIX: Background enrichment for stocks missing screener fields - TEMPORARILY DISABLED
             // This was causing crashes - will re-enable after debugging
             console.log('ℹ️ Background enrichment temporarily disabled for stability');
-            
+
             // OPTIMIZATION: Sort ONCE at the end using requestIdleCallback to avoid blocking
             requestIdleCallback(() => {
               setStocks(prev => {
@@ -22620,7 +22631,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                 return sorted;
               });
             }, { timeout: 100 });
-            
+
             // Save session ASYNCHRONOUSLY (don't block UI)
             if (window.SessionPersistence && cachedStocks.length > 0) {
               setTimeout(() => {
@@ -22637,17 +22648,17 @@ Be realistic and conservative. Base confidence on data quality.`;
           // OPTIMIZATION: Batched stock updates instead of incremental
           let pendingStockUpdates = [];
           let updateTimer = null;
-          
+
           const flushStockUpdates = () => {
             if (pendingStockUpdates.length === 0) return;
-            
+
             const toUpdate = [...pendingStockUpdates];
             pendingStockUpdates = [];
-            
+
             setStocks(prevStocks => {
               // Build a map for O(1) lookups
               const stockMap = new Map(prevStocks.map(s => [s.symbol?.toUpperCase()?.trim(), s]));
-              
+
               // Add/update all pending stocks
               toUpdate.forEach(newStock => {
                 const symbolUpper = newStock.symbol?.toUpperCase()?.trim();
@@ -22655,22 +22666,22 @@ Be realistic and conservative. Base confidence on data quality.`;
                   stockMap.set(symbolUpper, newStock);
                 }
               });
-              
+
               // Convert back to array (DEFER SORT - will sort once at end)
               return Array.from(stockMap.values());
             });
-            
+
             if (pendingStockUpdates.length >= 10) {
               setLoading(false);
             }
           };
-          
+
           // Helper function to batch stock updates
           const updateStocksIncrementally = (newStock) => {
             if (!newStock || !newStock.symbol) return;
-            
+
             pendingStockUpdates.push(newStock);
-            
+
             // Batch updates every 100ms
             if (updateTimer) clearTimeout(updateTimer);
             updateTimer = setTimeout(flushStockUpdates, 100);
@@ -22679,14 +22690,14 @@ Be realistic and conservative. Base confidence on data quality.`;
           // Process cached stocks INSTANTLY!
           if (cachedStocks.length > 0) {
             console.log(`🚀 Displaying ${cachedStocks.length} cached stocks instantly...`);
-            
+
             const processedStocks = [];
             let needsAI = 0;
-            
+
             cachedStocks.forEach(({ symbol, data: stockData }) => {
               try {
                 stockData.index = 'Curated';
-                
+
                 // ONLY compute AI if missing (avoid re-computation!)
                 if (!stockData.aiScore && !stockData.verdict) {
                   needsAI++;
@@ -22699,14 +22710,14 @@ Be realistic and conservative. Base confidence on data quality.`;
                     stockData._needsAI = true;
                   }
                 }
-                
+
                 const stockWithData = {
                   ...stockData,
                   mlPrediction: stockData.mlPrediction || { predPct: null, conf: null, trend: null }
                 };
-                
+
                 processedStocks.push(stockWithData);
-                
+
                 // FIX: Also populate allStocks and increment completedCount
                 allStocks.push(stockWithData);
                 completedCount++;
@@ -22732,17 +22743,17 @@ Be realistic and conservative. Base confidence on data quality.`;
               price: s.price,
               sector: s.sector
             })));
-            
+
             // OPTIMIZATION: Compute AI for remaining cached stocks in background using chunked idle processing
             if (needsAI > 50) {
               setTimeout(() => {
                 const remaining = processedStocks.filter(s => s._needsAI);
                 console.log(`🔄 Computing AI for ${remaining.length} stocks in background...`);
-                
+
                 // Process in chunks of 20 using requestIdleCallback
                 const CHUNK_SIZE = 20;
                 let currentIndex = 0;
-                
+
                 const processChunk = (deadline) => {
                   // Process while we have time or until we hit chunk size
                   let processed = 0;
@@ -22758,7 +22769,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                     currentIndex++;
                     processed++;
                   }
-                  
+
                   // Schedule next chunk if more remain
                   if (currentIndex < remaining.length) {
                     requestIdleCallback(processChunk, { timeout: 50 });
@@ -22766,20 +22777,20 @@ Be realistic and conservative. Base confidence on data quality.`;
                     console.log(`✅ Background AI complete for ${remaining.length} stocks`);
                   }
                 };
-                
+
                 requestIdleCallback(processChunk, { timeout: 50 });
               }, 2000);
             }
-            
+
             // OPTIMIZATION: ML predictions in background (batch updates instead of individual)
             setTimeout(() => {
               const top20 = processedStocks.slice(0, 20);
-              const mlPromises = top20.map(stock => 
+              const mlPromises = top20.map(stock =>
                 computeMLPrediction(stock.symbol)
                   .then(ml => ({ symbol: stock.symbol, ml }))
                   .catch(() => ({ symbol: stock.symbol, ml: { predPct: null, conf: null, trend: null } }))
               );
-              
+
               // Wait for all predictions, then ONE state update
               Promise.allSettled(mlPromises).then(results => {
                 const mlMap = new Map();
@@ -22788,10 +22799,10 @@ Be realistic and conservative. Base confidence on data quality.`;
                     mlMap.set(result.value.symbol, result.value.ml);
                   }
                 });
-                
+
                 // Single batched update
                 if (mlMap.size > 0) {
-                  setStocks(prev => prev.map(s => 
+                  setStocks(prev => prev.map(s =>
                     mlMap.has(s.symbol) ? { ...s, mlPrediction: mlMap.get(s.symbol) } : s
                   ));
                   console.log(`✅ ML predictions complete for ${mlMap.size} stocks`);
@@ -22802,7 +22813,7 @@ Be realistic and conservative. Base confidence on data quality.`;
 
           // SKIP slow individual fetch completely - streaming batch already got everything
           uncachedSymbols.length = 0;
-          
+
           if (uncachedSymbols.length > 0) {
             // Helper function to add timeout to promises
             const withTimeout = (promise, timeoutMs, symbol) => {
@@ -23038,7 +23049,7 @@ Be realistic and conservative. Base confidence on data quality.`;
             // Stop loading spinner immediately
             setLoading(false);
             console.log('✅ Loading stopped - stocks are now visible');
-            
+
             // Sort in idle time using requestIdleCallback
             requestIdleCallback(() => {
               uniqueStocks.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
@@ -23295,15 +23306,15 @@ Be realistic and conservative. Base confidence on data quality.`;
           watchlistOnly: showWatchlistOnly,
           sampleStock: stocks[0]
         });
-        
+
         // OPTIMIZATION: Single-pass filter instead of multiple chained filters
         // This is 5-10× faster for large datasets
-        
+
         // Precompute filter conditions
         const searchLower = debouncedSearch ? debouncedSearch.toLowerCase() : null;
         const watchlistSet = showWatchlistOnly && watchlist ? new Set(watchlist.map(w => w?.toUpperCase()).filter(Boolean)) : null;
         const preset = selectedPreset ? PRESET_SCREENS[selectedPreset] : null;
-        
+
         // Precompile filter functions for preset and manual filters
         const presetChecks = [];
         if (preset) {
@@ -23332,7 +23343,7 @@ Be realistic and conservative. Base confidence on data quality.`;
             }
           });
         }
-        
+
         const manualChecks = [];
         Object.entries(filters).forEach(([key, val]) => {
           if (val === '') return;
@@ -23347,27 +23358,27 @@ Be realistic and conservative. Base confidence on data quality.`;
             manualChecks.push(s => (s[field] || 0) <= numVal);
           }
         });
-        
+
         // Single-pass filter - check ALL conditions at once
         const result = stocks.filter(s => {
           // Watchlist check
           if (watchlistSet && !watchlistSet.has(s.symbol?.toUpperCase())) return false;
-          
+
           // Search check
           if (searchLower && !(
             s.symbol.toLowerCase().includes(searchLower) ||
             (s.companyName || '').toLowerCase().includes(searchLower)
           )) return false;
-          
+
           // Sector check
           if (selectedSector && s.sector !== selectedSector) return false;
-          
+
           // Preset checks
           if (presetChecks.length > 0 && !presetChecks.every(check => check(s))) return false;
-          
+
           // Manual checks
           if (manualChecks.length > 0 && !manualChecks.every(check => check(s))) return false;
-          
+
           return true;
         });
 
@@ -23389,11 +23400,11 @@ Be realistic and conservative. Base confidence on data quality.`;
           console.log('Sample stock:', stocks[0]);
           console.log('Watchlist only:', showWatchlistOnly);
         }
-        
+
         if (result.length > 0 && result.length < stocks.length) {
           console.log(`✅ Filtered: ${result.length} of ${stocks.length} stocks match criteria`);
         }
-        
+
         return result;
       }, [stocks, debouncedSearch, selectedSector, selectedPreset, filters, sortBy, showWatchlistOnly, watchlist]);
 
@@ -23901,8 +23912,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                 <button
                   onClick={() => setActiveMainTab('screener')}
                   className={`px-4 py-3 font-semibold transition flex items-center gap-2 ${activeMainTab === 'screener'
-                      ? 'text-cyan-400 border-b-2 border-cyan-400'
-                      : 'text-slate-400 hover:text-white'
+                    ? 'text-cyan-400 border-b-2 border-cyan-400'
+                    : 'text-slate-400 hover:text-white'
                     }`}
                 >
                   <i className="fas fa-chart-line"></i>
@@ -23912,8 +23923,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                 <button
                   onClick={() => setActiveMainTab('tournament')}
                   className={`px-4 py-3 font-semibold transition flex items-center gap-2 ${activeMainTab === 'tournament'
-                      ? 'text-purple-400 border-b-2 border-purple-400'
-                      : 'text-slate-400 hover:text-white'
+                    ? 'text-purple-400 border-b-2 border-purple-400'
+                    : 'text-slate-400 hover:text-white'
                     }`}
                 >
                   <i className="fas fa-scroll"></i>
@@ -23923,8 +23934,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                 <button
                   onClick={() => setActiveMainTab('portfolio')}
                   className={`px-4 py-3 font-semibold transition flex items-center gap-2 ${activeMainTab === 'portfolio'
-                      ? 'text-emerald-400 border-b-2 border-emerald-400'
-                      : 'text-slate-400 hover:text-white'
+                    ? 'text-emerald-400 border-b-2 border-emerald-400'
+                    : 'text-slate-400 hover:text-white'
                     }`}
                 >
                   <i className="fas fa-briefcase"></i>
@@ -23946,8 +23957,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                     <button
                       onClick={() => setShowWatchlistOnly(!showWatchlistOnly)}
                       className={`px-4 py-2.5 rounded-lg font-semibold text-sm flex items-center gap-2 transition ${showWatchlistOnly
-                          ? 'bg-gradient-to-r from-yellow-600 to-orange-600 text-white'
-                          : 'bg-slate-700 hover:bg-slate-600 text-white'
+                        ? 'bg-gradient-to-r from-yellow-600 to-orange-600 text-white'
+                        : 'bg-slate-700 hover:bg-slate-600 text-white'
                         }`}
                       title={showWatchlistOnly ? `Showing ${watchlist.length} watchlist stocks` : 'Show watchlist only'}
                     >
@@ -24175,11 +24186,11 @@ Be realistic and conservative. Base confidence on data quality.`;
                                           setShowHeatmap(false);
                                         }}
                                         className={`aspect-square rounded flex flex-col items-center justify-center cursor-pointer hover:opacity-80 hover:scale-105 transition-all p-1 ${pct >= 3 ? 'bg-green-500' :
-                                            pct >= 1 ? 'bg-green-600/80' :
-                                              pct >= 0 ? 'bg-green-800/60' :
-                                                pct >= -1 ? 'bg-red-800/60' :
-                                                  pct >= -3 ? 'bg-red-600/80' :
-                                                    'bg-red-500'
+                                          pct >= 1 ? 'bg-green-600/80' :
+                                            pct >= 0 ? 'bg-green-800/60' :
+                                              pct >= -1 ? 'bg-red-800/60' :
+                                                pct >= -3 ? 'bg-red-600/80' :
+                                                  'bg-red-500'
                                           }`}
                                         title={`${stock.symbol}: ${pct.toFixed(2)}%`}
                                       >
@@ -24356,7 +24367,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                           </button>
                         </div>
                       )}
-                      
+
                       {/* Main Results Table */}
                       {filtered.length > 0 && !isIncrementalLoading ? (
                         <>
@@ -24423,8 +24434,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                                 </thead>
                                 <tbody>
                                   {filtered.slice(0, displayLimit || 100).map((stock, idx) => (
-                                    <tr 
-                                      key={stock.symbol} 
+                                    <tr
+                                      key={stock.symbol}
                                       className={`table-row border-t border-slate-700/20 ${stock._isPlaceholder ? 'animate-pulse' : ''}`}
                                       onClick={() => !stock._isPlaceholder && openStockModal(stock)}
                                       ref={el => {
@@ -24445,8 +24456,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                                               toggleWatchlist(stock.symbol);
                                             }}
                                             className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all transform hover:scale-110 ${watchlist && Array.isArray(watchlist) && watchlist.some(w => w && w.toUpperCase() === stock.symbol.toUpperCase())
-                                                ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 border border-yellow-500/30'
-                                                : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600 hover:text-slate-300 border border-slate-600/30'
+                                              ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 border border-yellow-500/30'
+                                              : 'bg-slate-700/50 text-slate-400 hover:bg-slate-600 hover:text-slate-300 border border-slate-600/30'
                                               }`}
                                             title={watchlist && Array.isArray(watchlist) && watchlist.some(w => w && w.toUpperCase() === stock.symbol.toUpperCase()) ? 'Remove from watchlist' : 'Add to watchlist'}
                                           >
@@ -24592,9 +24603,9 @@ Be realistic and conservative. Base confidence on data quality.`;
                                       {visibleColumns.includes('analystRating') && (
                                         <td className="p-4">
                                           <span className={`chip text-xs ${stock.analystRating?.startsWith('A') ? 'bg-green-500/20 text-green-400' :
-                                              stock.analystRating?.startsWith('B') ? 'bg-blue-500/20 text-blue-400' :
-                                                stock.analystRating?.startsWith('C') ? 'bg-yellow-500/20 text-yellow-400' :
-                                                  'bg-red-500/20 text-red-400'
+                                            stock.analystRating?.startsWith('B') ? 'bg-blue-500/20 text-blue-400' :
+                                              stock.analystRating?.startsWith('C') ? 'bg-yellow-500/20 text-yellow-400' :
+                                                'bg-red-500/20 text-red-400'
                                             }`}>
                                             {stock.analystRating || '—'}
                                           </span>
@@ -24606,8 +24617,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                                       {visibleColumns.includes('piotroskiScore') && (
                                         <td className="p-4">
                                           <span className={`font-mono font-semibold ${stock.piotroskiScore >= 7 ? 'text-green-400' :
-                                              stock.piotroskiScore >= 4 ? 'text-yellow-400' :
-                                                'text-red-400'
+                                            stock.piotroskiScore >= 4 ? 'text-yellow-400' :
+                                              'text-red-400'
                                             }`}>
                                             {stock.piotroskiScore || '—'}/9
                                           </span>
@@ -24616,8 +24627,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                                       {visibleColumns.includes('altmanZScore') && (
                                         <td className="p-4">
                                           <span className={`font-mono ${stock.altmanZScore > 3 ? 'text-green-400' :
-                                              stock.altmanZScore > 1.8 ? 'text-yellow-400' :
-                                                'text-red-400'
+                                            stock.altmanZScore > 1.8 ? 'text-yellow-400' :
+                                              'text-red-400'
                                             }`}>
                                             {stock.altmanZScore?.toFixed(1) || '—'}
                                           </span>
@@ -24641,8 +24652,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                                           {stock.mlPrediction && stock.mlPrediction.predPct != null ? (
                                             <div className="flex flex-col">
                                               <span className={`font-mono font-semibold ${stock.mlPrediction.predPct > 0 ? 'text-green-400' :
-                                                  stock.mlPrediction.predPct < 0 ? 'text-red-400' :
-                                                    'text-slate-400'
+                                                stock.mlPrediction.predPct < 0 ? 'text-red-400' :
+                                                  'text-slate-400'
                                                 }`}>
                                                 {formatMLPrediction(stock.mlPrediction.predPct)}
                                               </span>
@@ -24658,8 +24669,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                                       {visibleColumns.includes('verdict') && (
                                         <td className="p-4">
                                           <span className={`chip ${stock.verdict === 'STRONG BUY' || stock.verdict === 'BUY' ? 'bg-green-500/20 text-green-400' :
-                                              stock.verdict === 'SELL' || stock.verdict === 'REDUCE' ? 'bg-red-500/20 text-red-400' :
-                                                'bg-yellow-500/20 text-yellow-400'
+                                            stock.verdict === 'SELL' || stock.verdict === 'REDUCE' ? 'bg-red-500/20 text-red-400' :
+                                              'bg-yellow-500/20 text-yellow-400'
                                             }`}>
                                             {stock.verdict}
                                           </span>
@@ -24950,7 +24961,7 @@ Be realistic and conservative. Base confidence on data quality.`;
     // ═══════════════════════════════════════════════════════════════════════════
     // AI COST DASHBOARD - Monitor Tournament AI Spending
     // ═══════════════════════════════════════════════════════════════════════════
-    
+
     function initializeAICostDashboard() {
       // Create dashboard element
       const dashboard = document.createElement('div');
@@ -24970,7 +24981,7 @@ Be realistic and conservative. Base confidence on data quality.`;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
         font-family: 'Segoe UI', system-ui, sans-serif;
       `;
-      
+
       dashboard.innerHTML = `
         <div style="display: flex; justify-between; align-items: center; margin-bottom: 12px;">
           <div style="display: flex; align-items: center; gap: 8px;">
@@ -25037,14 +25048,14 @@ Be realistic and conservative. Base confidence on data quality.`;
           <span>Updates every 30s</span>
         </div>
       `;
-      
+
       document.body.appendChild(dashboard);
-      
+
       // Toggle visibility
       let isExpanded = true;
       const toggleBtn = document.getElementById('toggle-cost-dashboard');
       const content = document.getElementById('cost-dashboard-content');
-      
+
       if (toggleBtn) {
         toggleBtn.addEventListener('click', () => {
           isExpanded = !isExpanded;
@@ -25052,15 +25063,15 @@ Be realistic and conservative. Base confidence on data quality.`;
           toggleBtn.querySelector('i').className = isExpanded ? 'fas fa-chevron-down' : 'fas fa-chevron-up';
         });
       }
-      
+
       // Update function
       let failedAttempts = 0;
       const MAX_FAILED_ATTEMPTS = 3;
-      
+
       async function updateCostDashboard() {
         try {
           const response = await fetch(`${window.API_BASE_URL}/api/ai/costs`);
-          
+
           // If endpoint doesn't exist or returns HTML, silently fail
           if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
             failedAttempts++;
@@ -25072,16 +25083,16 @@ Be realistic and conservative. Base confidence on data quality.`;
             }
             return;
           }
-          
+
           const data = await response.json();
           failedAttempts = 0; // Reset on success
-          
+
           // Daily
           const dailyPercent = Math.min(100, (data.today / data.dailyBudget) * 100);
           document.getElementById('daily-cost').textContent = `$${data.today.toFixed(4)} / $${data.dailyBudget.toFixed(2)}`;
           document.getElementById('daily-progress').style.width = `${dailyPercent}%`;
           document.getElementById('daily-remaining').textContent = `$${data.remainingDaily.toFixed(4)}`;
-          
+
           // Color code based on usage
           const dailyProgressBar = document.getElementById('daily-progress');
           if (dailyPercent > 90) {
@@ -25091,13 +25102,13 @@ Be realistic and conservative. Base confidence on data quality.`;
           } else {
             dailyProgressBar.style.background = 'linear-gradient(90deg, #22d3ee, #06b6d4)';
           }
-          
+
           // Monthly
           const monthlyPercent = Math.min(100, (data.monthly / data.monthlyBudget) * 100);
           document.getElementById('monthly-cost').textContent = `$${data.monthly.toFixed(2)} / $${data.monthlyBudget}`;
           document.getElementById('monthly-progress').style.width = `${monthlyPercent}%`;
           document.getElementById('monthly-remaining').textContent = `$${data.remainingMonthly.toFixed(2)}`;
-          
+
           // Team costs
           const teamCostsDiv = document.getElementById('team-costs');
           let teamHtml = '';
@@ -25111,10 +25122,10 @@ Be realistic and conservative. Base confidence on data quality.`;
             `;
           });
           teamCostsDiv.innerHTML = teamHtml || '<div style="color: #64748b; text-align: center;">No spending yet</div>';
-          
+
           // Stats
           document.getElementById('total-requests').textContent = data.totalRequests || 0;
-          
+
           // Status
           const statusDiv = document.getElementById('budget-status');
           if (data.budgetExceeded) {
@@ -25127,7 +25138,7 @@ Be realistic and conservative. Base confidence on data quality.`;
             statusDiv.textContent = '✓ Active';
             statusDiv.style.color = '#10b981';
           }
-          
+
         } catch (error) {
           failedAttempts++;
           if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
@@ -25138,10 +25149,10 @@ Be realistic and conservative. Base confidence on data quality.`;
           // Silently fail - don't spam console
         }
       }
-      
+
       // Initial update
       setTimeout(updateCostDashboard, 2000);
-      
+
       // FIX: Store interval ID and pause when tab hidden
       const intervalId = setInterval(() => {
         // Only update if tab is visible
@@ -25149,12 +25160,12 @@ Be realistic and conservative. Base confidence on data quality.`;
           updateCostDashboard();
         }
       }, 30000);
-      
+
       // Track interval for cleanup
       if (window.ACTIVE_INTERVALS) {
         window.ACTIVE_INTERVALS.add(intervalId);
       }
-      
+
       // Cleanup on page unload
       window.addEventListener('beforeunload', () => {
         clearInterval(intervalId);
@@ -25189,9 +25200,11 @@ Be realistic and conservative. Base confidence on data quality.`;
         }
 
         // ⚡ INSTANT STARTUP: Preload cache to memory BEFORE React renders
-        const defaultSymbols = typeof DEMO_STOCKS !== 'undefined'
-          ? DEMO_STOCKS.map(s => s.symbol)
-          : ['AAPL', 'MSFT', 'GOOGL', 'NVDA', 'AMZN', 'TSLA', 'META', 'JPM', 'V', 'UNH'];
+        // Use real stock symbols from configuration, not demo data
+        const defaultSymbols = window.DEFAULT_STOCK_SYMBOLS ||
+          ['AAPL', 'MSFT', 'GOOGL', 'NVDA', 'AMZN', 'TSLA', 'META', 'JPM', 'V', 'UNH'];
+
+        console.log('📊 Loading', defaultSymbols.length, 'stocks from FMP API via proxy...');
         Cache.preloadToMemory(defaultSymbols);
 
         ReactDOM.createRoot(rootElement).render(
@@ -25218,4 +25231,4 @@ Be realistic and conservative. Base confidence on data quality.`;
   </script>
 </body>
 
-</html> 
+</html>
