@@ -298,6 +298,106 @@ app.get('/api/enhanced/health', async (req, res) => {
 // AUTONOMOUS AI TOURNAMENT - Runs automatically during US market hours
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTOR MAPPING - For sector allocation tracking
+// ═══════════════════════════════════════════════════════════════════════════════
+const STOCK_SECTORS = {
+  // Technology
+  "AAPL": "Technology", "MSFT": "Technology", "GOOGL": "Technology", "GOOG": "Technology",
+  "META": "Technology", "NVDA": "Technology", "AVGO": "Technology", "ADBE": "Technology",
+  "CRM": "Technology", "CSCO": "Technology", "ORCL": "Technology", "AMD": "Technology",
+  "INTC": "Technology", "QCOM": "Technology", "TXN": "Technology", "NOW": "Technology",
+  "AMAT": "Technology", "ADI": "Technology", "LRCX": "Technology", "KLAC": "Technology",
+  "SNPS": "Technology", "ADSK": "Technology", "NXPI": "Technology", "FTNT": "Technology",
+  "TSM": "Technology", "ASML": "Technology", "MU": "Technology", "MRVL": "Technology",
+  "ON": "Technology", "QRVO": "Technology", "STM": "Technology", "GFS": "Technology",
+  "WOLF": "Technology", "LSCC": "Technology", "PANW": "Technology", "CRWD": "Technology",
+  "ZS": "Technology", "OKTA": "Technology", "MDB": "Technology", "TEAM": "Technology",
+  "DDOG": "Technology", "SNOW": "Technology", "NET": "Technology", "PLTR": "Technology",
+
+  // Consumer Discretionary
+  "AMZN": "Consumer Discretionary", "TSLA": "Consumer Discretionary", "HD": "Consumer Discretionary",
+  "MCD": "Consumer Discretionary", "NKE": "Consumer Discretionary", "SBUX": "Consumer Discretionary",
+  "LOW": "Consumer Discretionary", "TJX": "Consumer Discretionary", "BKNG": "Consumer Discretionary",
+  "MAR": "Consumer Discretionary", "CMG": "Consumer Discretionary", "DHI": "Consumer Discretionary",
+  "UBER": "Consumer Discretionary", "LYFT": "Consumer Discretionary", "ABNB": "Consumer Discretionary",
+  "SHOP": "Consumer Discretionary", "ROKU": "Consumer Discretionary", "DKNG": "Consumer Discretionary",
+  "RBLX": "Consumer Discretionary", "GME": "Consumer Discretionary", "AMC": "Consumer Discretionary",
+  "RIVN": "Consumer Discretionary", "LCID": "Consumer Discretionary", "NIO": "Consumer Discretionary",
+  "XPEV": "Consumer Discretionary", "LI": "Consumer Discretionary", "GM": "Consumer Discretionary",
+  "F": "Consumer Discretionary",
+
+  // Healthcare
+  "UNH": "Healthcare", "JNJ": "Healthcare", "LLY": "Healthcare", "ABBV": "Healthcare",
+  "MRK": "Healthcare", "TMO": "Healthcare", "ABT": "Healthcare", "DHR": "Healthcare",
+  "BMY": "Healthcare", "AMGN": "Healthcare", "ISRG": "Healthcare", "SYK": "Healthcare",
+  "VRTX": "Healthcare", "GILD": "Healthcare", "CI": "Healthcare", "REGN": "Healthcare",
+  "ZTS": "Healthcare", "CVS": "Healthcare", "ELV": "Healthcare", "HUM": "Healthcare",
+  "BDX": "Healthcare", "BSX": "Healthcare", "HCA": "Healthcare", "MCK": "Healthcare",
+
+  // Financials
+  "BRK.B": "Financials", "JPM": "Financials", "V": "Financials", "MA": "Financials",
+  "BAC": "Financials", "WFC": "Financials", "MS": "Financials", "BLK": "Financials",
+  "GS": "Financials", "AXP": "Financials", "SPGI": "Financials", "C": "Financials",
+  "SCHW": "Financials", "PNC": "Financials", "CB": "Financials", "MMC": "Financials",
+  "AON": "Financials", "CME": "Financials", "ICE": "Financials", "MCO": "Financials",
+  "TRV": "Financials", "AFL": "Financials", "MET": "Financials", "PRU": "Financials",
+  "AIG": "Financials", "COF": "Financials", "USB": "Financials", "TFC": "Financials",
+  "ALL": "Financials", "PGR": "Financials", "COIN": "Financials", "SQ": "Financials",
+  "PYPL": "Financials", "SOFI": "Financials", "HOOD": "Financials", "AFRM": "Financials",
+
+  // Communication Services
+  "NFLX": "Communication Services", "DIS": "Communication Services", "CMCSA": "Communication Services",
+  "VZ": "Communication Services", "T": "Communication Services", "SNAP": "Communication Services",
+  "PINS": "Communication Services", "TWLO": "Communication Services", "ZM": "Communication Services",
+  "BABA": "Communication Services", "BIDU": "Communication Services", "BILI": "Communication Services",
+  "NTES": "Communication Services", "JD": "Communication Services", "PDD": "Communication Services",
+
+  // Energy
+  "XOM": "Energy", "CVX": "Energy", "COP": "Energy", "SLB": "Energy", "EOG": "Energy",
+  "PSX": "Energy", "MPC": "Energy", "ENPH": "Energy", "SEDG": "Energy", "FSLR": "Energy",
+  "RUN": "Energy", "PLUG": "Energy", "BE": "Energy", "BLNK": "Energy", "CHPT": "Energy",
+  "QS": "Energy", "HYLN": "Energy", "NKLA": "Energy", "FSR": "Energy", "GOEV": "Energy",
+
+  // Industrials
+  "HON": "Industrials", "UNP": "Industrials", "BA": "Industrials", "RTX": "Industrials",
+  "UPS": "Industrials", "CAT": "Industrials", "DE": "Industrials", "GE": "Industrials",
+  "LMT": "Industrials", "NOC": "Industrials", "GD": "Industrials", "NSC": "Industrials",
+  "ITW": "Industrials", "EMR": "Industrials", "ROP": "Industrials", "PH": "Industrials",
+  "ETN": "Industrials", "PCAR": "Industrials", "CARR": "Industrials", "WM": "Industrials",
+  "RSG": "Industrials", "MSI": "Industrials", "TT": "Industrials", "AJG": "Industrials",
+  "PAYX": "Industrials", "ADP": "Industrials", "FIS": "Industrials", "FISV": "Industrials",
+
+  // Consumer Staples
+  "PG": "Consumer Staples", "COST": "Consumer Staples", "PEP": "Consumer Staples",
+  "KO": "Consumer Staples", "WMT": "Consumer Staples", "PM": "Consumer Staples",
+  "MO": "Consumer Staples", "MDLZ": "Consumer Staples", "TGT": "Consumer Staples",
+  "CL": "Consumer Staples", "KMB": "Consumer Staples", "MNST": "Consumer Staples",
+  "SYY": "Consumer Staples", "ORLY": "Consumer Staples", "AZO": "Consumer Staples",
+
+  // Real Estate
+  "PLD": "Real Estate", "EQIX": "Real Estate", "PSA": "Real Estate", "CCI": "Real Estate",
+  "SRE": "Real Estate", "APH": "Real Estate",
+
+  // Utilities
+  "NEE": "Utilities", "DUK": "Utilities", "SO": "Utilities", "D": "Utilities",
+  "AEP": "Utilities", "ECL": "Utilities",
+
+  // Materials
+  "LIN": "Materials", "FCX": "Materials", "APD": "Materials", "SHW": "Materials",
+  "DD": "Materials", "MMM": "Materials", "TEL": "Materials",
+
+  // Other/Miscellaneous
+  "INTU": "Technology", "WDAY": "Technology", "VEEV": "Technology", "PATH": "Technology",
+  "DOCU": "Technology", "BB": "Technology", "NOK": "Technology", "SNDL": "Healthcare",
+  "CLOV": "Healthcare", "WISH": "Consumer Discretionary", "RKT": "Financials"
+};
+
+// Get sector for a stock symbol
+function getStockSector(symbol) {
+  return STOCK_SECTORS[symbol] || 'Other';
+}
+
 // Full stock watchlist - all stocks from the app
 const FULL_WATCHLIST = [
   // Major Tech & S&P 500
@@ -681,6 +781,261 @@ function generateReasoning(team, action, symbol) {
   }
 
   return baseReasoning;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// REAL AI DECISION MAKING - Each team uses Claude to analyze and decide trades
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Fetch market data for AI analysis
+async function fetchMarketDataForAI(symbols) {
+  try {
+    const symbolList = symbols.slice(0, 10).join(','); // Limit to 10 for API efficiency
+    const url = `https://financialmodelingprep.com/stable/quote?symbol=${symbolList}&apikey=${FMP_API_KEY}`;
+    const response = await fetchWithRetry(url, { timeoutMs: 10000, retries: 1 });
+    const data = await response.json();
+
+    if (Array.isArray(data)) {
+      return data.map(quote => ({
+        symbol: quote.symbol,
+        price: quote.price,
+        change: quote.change,
+        changesPercentage: quote.changesPercentage,
+        dayHigh: quote.dayHigh,
+        dayLow: quote.dayLow,
+        volume: quote.volume,
+        avgVolume: quote.avgVolume,
+        marketCap: quote.marketCap,
+        pe: quote.pe,
+        eps: quote.eps,
+        yearHigh: quote.yearHigh,
+        yearLow: quote.yearLow
+      }));
+    }
+    return [];
+  } catch (error) {
+    console.error('[AI] Error fetching market data:', error.message);
+    return [];
+  }
+}
+
+// Get AI trading decision from Claude
+async function getAITradingDecision(team, marketData, competitivePosition) {
+  if (!CLAUDE_API_KEY) {
+    console.log('[AI] No Claude API key - using simulated decision');
+    return null;
+  }
+
+  try {
+    // Build context about current holdings
+    const holdingsSummary = Object.entries(team.holdings || {})
+      .map(([sym, pos]) => `${sym}: ${pos.shares} shares @ $${pos.avgCost.toFixed(2)} (P/L: ${pos.unrealizedPnL >= 0 ? '+' : ''}$${pos.unrealizedPnL.toFixed(2)})`)
+      .join('\n') || 'No current holdings';
+
+    // Build market data summary
+    const marketSummary = marketData.slice(0, 8).map(s =>
+      `${s.symbol}: $${s.price?.toFixed(2)} (${s.changesPercentage >= 0 ? '+' : ''}${s.changesPercentage?.toFixed(2)}%) Vol: ${(s.volume/1000000).toFixed(1)}M P/E: ${s.pe?.toFixed(1) || 'N/A'}`
+    ).join('\n');
+
+    const prompt = `You are ${team.name}, an AI trading agent with a ${team.strategy} strategy. You are ${team.personality} and focus on ${team.focuses.join(', ')}.
+
+TOURNAMENT STATUS:
+- Your Portfolio: $${team.portfolioValue.toFixed(2)} (Cash: $${team.cash.toFixed(2)})
+- Position: Rank ${competitivePosition.rank} of ${competitivePosition.totalTeams}
+- ${competitivePosition.isLeading ? 'You are LEADING!' : competitivePosition.isTrailing ? `TRAILING by ${competitivePosition.gapPercent}%` : 'Middle of the pack'}
+
+CURRENT HOLDINGS:
+${holdingsSummary}
+
+MARKET DATA (Today's movers):
+${marketSummary}
+
+Based on your strategy and the market conditions, decide on ONE trade action. Consider:
+1. Your strategy (${team.strategy}) and risk tolerance
+2. Current holdings and diversification
+3. Competitive position in tournament
+4. Today's market movements
+
+Respond in this EXACT JSON format only:
+{"action": "BUY" or "SELL" or "HOLD", "symbol": "TICKER", "shares": number, "reasoning": "2-3 sentence explanation"}
+
+If HOLD, use: {"action": "HOLD", "symbol": null, "shares": 0, "reasoning": "explanation"}`;
+
+    const response = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': CLAUDE_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json'
+      },
+      timeoutMs: 30000,
+      retries: 1,
+      body: JSON.stringify({
+        model: 'claude-3-5-haiku-20241022', // Use Haiku for cost efficiency
+        max_tokens: 300,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    const result = await response.json();
+
+    if (result.error) {
+      console.error(`[AI] Claude API error for ${team.name}:`, result.error.message);
+      return null;
+    }
+
+    const content = result.content?.[0]?.text || '';
+
+    // Parse JSON response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const decision = JSON.parse(jsonMatch[0]);
+      console.log(`[AI] ${team.name} decision: ${decision.action} ${decision.shares || ''} ${decision.symbol || ''}`);
+      return decision;
+    }
+
+    return null;
+  } catch (error) {
+    console.error(`[AI] Error getting decision for ${team.name}:`, error.message);
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PERFORMANCE METRICS - Calculate Sharpe ratio, win rate, max drawdown, etc.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function calculatePerformanceMetrics(team) {
+  const trades = team.tradeHistory || [];
+  const startValue = 50000;
+  const currentValue = team.portfolioValue;
+
+  // Total Return
+  const totalReturn = ((currentValue - startValue) / startValue) * 100;
+
+  // Win Rate (for closed trades with realized P/L)
+  const closedTrades = trades.filter(t => t.action === 'SELL' && t.realizedPnL !== undefined);
+  const winningTrades = closedTrades.filter(t => t.realizedPnL > 0);
+  const winRate = closedTrades.length > 0 ? (winningTrades.length / closedTrades.length) * 100 : 0;
+
+  // Average Gain/Loss
+  const avgGain = winningTrades.length > 0
+    ? winningTrades.reduce((sum, t) => sum + t.realizedPnL, 0) / winningTrades.length
+    : 0;
+  const losingTrades = closedTrades.filter(t => t.realizedPnL <= 0);
+  const avgLoss = losingTrades.length > 0
+    ? Math.abs(losingTrades.reduce((sum, t) => sum + t.realizedPnL, 0) / losingTrades.length)
+    : 0;
+
+  // Profit Factor
+  const grossProfit = winningTrades.reduce((sum, t) => sum + t.realizedPnL, 0);
+  const grossLoss = Math.abs(losingTrades.reduce((sum, t) => sum + t.realizedPnL, 0));
+  const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
+
+  // Max Drawdown (from portfolio history)
+  let maxDrawdown = 0;
+  let peak = startValue;
+  const history = tournamentState.portfolioHistory || [];
+  for (const point of history) {
+    const teamData = point.teams?.find(t => t.id === team.id);
+    if (teamData) {
+      if (teamData.portfolioValue > peak) {
+        peak = teamData.portfolioValue;
+      }
+      const drawdown = ((peak - teamData.portfolioValue) / peak) * 100;
+      if (drawdown > maxDrawdown) {
+        maxDrawdown = drawdown;
+      }
+    }
+  }
+
+  // Best and Worst Trade
+  const bestTrade = closedTrades.length > 0
+    ? closedTrades.reduce((best, t) => t.realizedPnL > best.realizedPnL ? t : best, closedTrades[0])
+    : null;
+  const worstTrade = closedTrades.length > 0
+    ? closedTrades.reduce((worst, t) => t.realizedPnL < worst.realizedPnL ? t : worst, closedTrades[0])
+    : null;
+
+  // Sharpe Ratio (simplified - using daily returns from history)
+  let sharpeRatio = 0;
+  if (history.length > 2) {
+    const returns = [];
+    for (let i = 1; i < history.length; i++) {
+      const prevData = history[i-1].teams?.find(t => t.id === team.id);
+      const currData = history[i].teams?.find(t => t.id === team.id);
+      if (prevData && currData && prevData.portfolioValue > 0) {
+        returns.push((currData.portfolioValue - prevData.portfolioValue) / prevData.portfolioValue);
+      }
+    }
+    if (returns.length > 1) {
+      const avgReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
+      const variance = returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length;
+      const stdDev = Math.sqrt(variance);
+      // Annualized (assuming ~252 trading days, ~78 updates per day at 5min intervals)
+      sharpeRatio = stdDev > 0 ? (avgReturn / stdDev) * Math.sqrt(252 * 78) : 0;
+    }
+  }
+
+  return {
+    totalReturn: Math.round(totalReturn * 100) / 100,
+    winRate: Math.round(winRate * 100) / 100,
+    avgGain: Math.round(avgGain * 100) / 100,
+    avgLoss: Math.round(avgLoss * 100) / 100,
+    profitFactor: profitFactor === Infinity ? 999 : Math.round(profitFactor * 100) / 100,
+    maxDrawdown: Math.round(maxDrawdown * 100) / 100,
+    sharpeRatio: Math.round(sharpeRatio * 100) / 100,
+    totalTrades: trades.length,
+    closedTrades: closedTrades.length,
+    bestTrade: bestTrade ? {
+      symbol: bestTrade.symbol,
+      pnl: Math.round(bestTrade.realizedPnL * 100) / 100
+    } : null,
+    worstTrade: worstTrade ? {
+      symbol: worstTrade.symbol,
+      pnl: Math.round(worstTrade.realizedPnL * 100) / 100
+    } : null
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTOR ALLOCATION - Calculate sector breakdown for each team
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function calculateSectorAllocation(team) {
+  const holdings = team.holdings || {};
+  const sectors = {};
+  let totalValue = 0;
+
+  for (const [symbol, position] of Object.entries(holdings)) {
+    const sector = getStockSector(symbol);
+    const value = position.marketValue || (position.shares * position.currentPrice);
+
+    if (!sectors[sector]) {
+      sectors[sector] = { value: 0, holdings: [] };
+    }
+    sectors[sector].value += value;
+    sectors[sector].holdings.push({
+      symbol,
+      shares: position.shares,
+      value: Math.round(value * 100) / 100
+    });
+    totalValue += value;
+  }
+
+  // Calculate percentages
+  const allocation = Object.entries(sectors).map(([sector, data]) => ({
+    sector,
+    value: Math.round(data.value * 100) / 100,
+    percentage: totalValue > 0 ? Math.round((data.value / totalValue) * 10000) / 100 : 0,
+    holdings: data.holdings
+  })).sort((a, b) => b.value - a.value);
+
+  return {
+    totalInvested: Math.round(totalValue * 100) / 100,
+    cashPercentage: Math.round((team.cash / team.portfolioValue) * 10000) / 100,
+    sectors: allocation
+  };
 }
 
 // Fetch real-time prices from FMP API
