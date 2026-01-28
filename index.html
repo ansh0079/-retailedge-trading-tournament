@@ -21008,9 +21008,9 @@ Be realistic and conservative. Base confidence on data quality.`;
               const response = await fetch(url);
 
               if (response.status === 429) {
-                // Rate limited - check Retry-After header
+                // Rate limited - wait longer (5s base, exponential backoff)
                 const retryAfter = response.headers.get('Retry-After');
-                const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : (i + 1) * 2000;
+                const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : (i + 1) * 5000;
                 console.warn(`⏳ FMP rate limited. Waiting ${waitTime / 1000}s before retry ${i + 1}/${retries}...`);
                 await delay(waitTime);
                 continue;
@@ -21019,7 +21019,7 @@ Be realistic and conservative. Base confidence on data quality.`;
               if (!response.ok && response.status !== 404) {
                 // 404 is acceptable (endpoint might not exist), but other errors should retry
                 if (i < retries - 1) {
-                  await delay(1000 * (i + 1));
+                  await delay(2000 * (i + 1));
                   continue;
                 }
               }
@@ -21050,35 +21050,35 @@ Be realistic and conservative. Base confidence on data quality.`;
           }
 
           const quoteData = await quoteRes.json();
-          await delay(200); // Increased from 50ms to 200ms for paid plan
+          await delay(500); // Increased to 500ms to avoid rate limits
 
           const metricsRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/key-metrics-ttm?symbol=${symbol}&apikey=${FMP_API_KEY}`);
           const metricsData = metricsRes?.ok ? await metricsRes.json() : null;
-          await delay(200);
+          await delay(500);
 
           const scoresRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/financial-scores?symbol=${symbol}&apikey=${FMP_API_KEY}`);
           const scoresData = scoresRes?.ok ? await scoresRes.json() : null;
-          await delay(200);
+          await delay(500);
 
           const ratingsRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/ratings-snapshot?symbol=${symbol}&apikey=${FMP_API_KEY}`);
           const ratingsData = ratingsRes?.ok ? await ratingsRes.json() : null;
-          await delay(200);
+          await delay(500);
 
           const targetRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/price-target-consensus?symbol=${symbol}&apikey=${FMP_API_KEY}`);
           const targetData = targetRes?.ok ? await targetRes.json() : null;
-          await delay(200);
+          await delay(500);
 
           const profileRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/profile?symbol=${symbol}&apikey=${FMP_API_KEY}`);
           const profileData = profileRes?.ok ? await profileRes.json() : null;
-          await delay(200);
+          await delay(500);
 
           const gradesRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/grades?symbol=${symbol}&limit=10&apikey=${FMP_API_KEY}`);
           const grades = gradesRes?.ok ? await gradesRes.json() : [];
-          await delay(200);
+          await delay(500);
 
           const ratiosRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/ratios?symbol=${symbol}&limit=1&apikey=${FMP_API_KEY}`);
           const ratiosData = ratiosRes?.ok ? await ratiosRes.json() : null;
-          await delay(200);
+          await delay(500);
 
           const growthRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/financial-growth?symbol=${symbol}&limit=5&apikey=${FMP_API_KEY}`);
           const growthData = growthRes?.ok ? await growthRes.json() : null;
@@ -23616,4 +23616,4 @@ Be realistic and conservative. Base confidence on data quality.`;
   </script>
 </body>
 
-</html>
+</html> 
