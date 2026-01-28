@@ -81,7 +81,31 @@ class APIService {
 
     async getBatchQuotes(symbols) {
         try {
-            return await this.getFMPBatch('quote', symbols);
+            // FMP stable doesn't support batch queries - fetch individually with delay
+            const results = [];
+            
+            for (let i = 0; i < symbols.length; i++) {
+                try {
+                    const url = `https://financialmodelingprep.com/stable/quote?symbol=${symbols[i]}&apikey=${this.apiKeys.FMP}`;
+                    const response = await fetch(url);
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (Array.isArray(data) && data.length > 0) {
+                            results.push(data[0]);
+                        }
+                    }
+                    
+                    // Small delay to avoid rate limits (20ms = 50 requests/second max)
+                    if (i < symbols.length - 1) {
+                        await new Promise(resolve => setTimeout(resolve, 20));
+                    }
+                } catch (err) {
+                    console.warn(`Failed to fetch ${symbols[i]}:`, err.message);
+                }
+            }
+            
+            return results;
         } catch (error) {
             console.error('Batch quotes error:', error);
             return [];
