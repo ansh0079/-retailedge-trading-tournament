@@ -34,29 +34,55 @@ if (!CLAUDE_API_KEY && !KIMI_API_KEY && !DEEPSEEK_API_KEY && !GEMINI_API_KEY) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AI COST MANAGER - Budget Tracking & Controls
+// AI COST MANAGER - Budget Tracking & Controls with Priority Levels
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class AICostManager {
   constructor() {
-    // Cost per 1K tokens (USD)
+    // Cost per 1K tokens (USD) - Updated pricing
     this.aiPricing = {
-      'claude-3-sonnet': { input: 0.003, output: 0.015 },   // $3/$15 per 1M tokens
+      'claude-3-5-sonnet': { input: 0.003, output: 0.015 },  // $3/$15 per 1M tokens
+      'claude-3-sonnet': { input: 0.003, output: 0.015 },    // $3/$15 per 1M tokens
       'claude-3-haiku': { input: 0.00025, output: 0.00125 }, // $0.25/$1.25 per 1M tokens
-      'deepseek-chat': { input: 0.00014, output: 0.00028 }, // $0.14/$0.28 per 1M tokens (CHEAPEST!)
-      'gemini-pro': { input: 0.0005, output: 0.0015 },      // $0.50/$1.50 per 1M tokens
-      'kimi-k2': { input: 0.0003, output: 0.0006 }          // ~$0.30/$0.60 per 1M tokens
+      'deepseek-chat': { input: 0.00014, output: 0.00028 },  // $0.14/$0.28 per 1M tokens (BEST VALUE!)
+      'gemini-1.5-flash': { input: 0.000075, output: 0.0003 }, // $0.075/$0.30 per 1M tokens
+      'gemini-pro': { input: 0.0005, output: 0.0015 },       // $0.50/$1.50 per 1M tokens
+      'moonshot-v1-8k': { input: 0.0003, output: 0.0006 },   // ~$0.30/$0.60 per 1M tokens (Kimi)
+      'kimi-k2': { input: 0.0003, output: 0.0006 }           // ~$0.30/$0.60 per 1M tokens
     };
-    
+
     // Budget limits
     this.dailyBudget = 1.00;   // $1/day
     this.monthlyBudget = 10.00; // $10/month
-    
+
+    // Priority levels for analysis (controls cost per analysis)
+    this.priorityLevels = {
+      'CRITICAL': {  // High-value decisions (holdings, large moves)
+        maxCost: 0.01,  // 1 cent max per analysis
+        description: 'Critical trading decisions'
+      },
+      'HIGH': {      // Important but not urgent
+        maxCost: 0.005, // 0.5 cents
+        description: 'High priority analysis'
+      },
+      'MEDIUM': {    // Normal trading rounds
+        maxCost: 0.002, // 0.2 cents
+        description: 'Standard analysis'
+      },
+      'LOW': {       // Background/educational
+        maxCost: 0.001, // 0.1 cents
+        description: 'Low priority/cached preferred'
+      }
+    };
+
     // Track spending
     this.spending = this.loadSpendingData();
-    
+
     // Tournament state
     this.tournamentPausedByBudget = false;
+
+    // Cache stats
+    this.cacheStats = { hits: 0, misses: 0 };
   }
   
   loadSpendingData() {
@@ -329,6 +355,163 @@ class AICostAlertSystem {
 
 // Initialize alert system
 const costAlertSystem = new AICostAlertSystem(costManager);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HYBRID ANALYSIS SYSTEM - Local + AI for Cost Optimization
+// Uses free local rule-based analysis, reserves AI for high-priority only
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class HybridAnalysisSystem {
+  constructor() {
+    // Track which stocks have been analyzed with AI recently
+    this.aiAnalysisCache = new Map(); // symbol -> { timestamp, analysis }
+    this.aiCacheDuration = 30 * 60 * 1000; // 30 minutes
+  }
+
+  // Free local rule-based analysis (no API cost)
+  runLocalAnalysis(stockData) {
+    const factors = [];
+    let score = 50;
+
+    // Momentum signals
+    if (stockData.changesPercentage > 3) {
+      factors.push('Strong upward momentum');
+      score += 10;
+    } else if (stockData.changesPercentage < -3) {
+      factors.push('Strong downward momentum');
+      score -= 5;
+    }
+
+    // Volume signals
+    if (stockData.volumeRatio > 2) {
+      factors.push('Volume surge (2x+ average)');
+      score += 10;
+    } else if (stockData.volumeRatio > 1.5) {
+      factors.push('Above average volume');
+      score += 5;
+    }
+
+    // Valuation signals
+    if (stockData.pe && stockData.pe > 0) {
+      if (stockData.pe < 15) {
+        factors.push('Value (low P/E)');
+        score += 10;
+      } else if (stockData.pe > 40) {
+        factors.push('Growth premium (high P/E)');
+        score -= 5;
+      }
+    }
+
+    // 52-week position
+    if (stockData.yearHigh && stockData.price >= stockData.yearHigh * 0.95) {
+      factors.push('Near 52-week high');
+      score += 5;
+    } else if (stockData.yearLow && stockData.price <= stockData.yearLow * 1.05) {
+      factors.push('Near 52-week low');
+      score += 5; // Potential bounce
+    }
+
+    // Day range position
+    if (stockData.dayHigh && stockData.dayLow) {
+      const dayRange = (stockData.price - stockData.dayLow) / (stockData.dayHigh - stockData.dayLow);
+      if (dayRange >= 0.8) {
+        factors.push('Near day high');
+      } else if (dayRange <= 0.2) {
+        factors.push('Near day low');
+      }
+    }
+
+    // Generate verdict
+    let verdict;
+    if (score >= 75) verdict = 'STRONG BUY';
+    else if (score >= 60) verdict = 'BUY';
+    else if (score >= 45) verdict = 'HOLD';
+    else if (score >= 35) verdict = 'REDUCE';
+    else verdict = 'SELL';
+
+    return {
+      score,
+      verdict,
+      factors,
+      reasoning: factors.length > 0
+        ? `Local analysis: ${factors.join(', ')}.`
+        : 'Neutral technical profile.',
+      source: 'local',
+      cost: 0
+    };
+  }
+
+  // Determine if AI analysis is worth the cost
+  shouldUseAI(stockData, team, competitivePosition) {
+    // Check if budget allows
+    if (!costManager.canAffordAnalysis()) {
+      return false;
+    }
+
+    // Use AI more sparingly - only for high-priority situations:
+
+    // 1. Significant price moves (>5%)
+    if (Math.abs(stockData.changesPercentage || 0) > 5) {
+      return true;
+    }
+
+    // 2. High volume spikes (3x+ average)
+    if ((stockData.volumeRatio || 1) > 3) {
+      return true;
+    }
+
+    // 3. Team is trailing badly and needs better decisions
+    if (competitivePosition.isTrailing && competitivePosition.gapPercent > 5) {
+      return true;
+    }
+
+    // 4. Stock already in team's holdings (more important decision)
+    if (team.holdings && team.holdings[stockData.symbol]) {
+      return true;
+    }
+
+    // 5. Random sampling - use AI for ~20% of other trades to maintain diversity
+    if (Math.random() < 0.2) {
+      return true;
+    }
+
+    return false;
+  }
+
+  // Check if we have recent AI analysis cached
+  getCachedAIAnalysis(symbol) {
+    const cached = this.aiAnalysisCache.get(symbol);
+    if (cached && (Date.now() - cached.timestamp) < this.aiCacheDuration) {
+      return cached.analysis;
+    }
+    return null;
+  }
+
+  // Cache AI analysis result
+  cacheAIAnalysis(symbol, analysis) {
+    this.aiAnalysisCache.set(symbol, {
+      timestamp: Date.now(),
+      analysis
+    });
+
+    // Cleanup old entries
+    if (this.aiAnalysisCache.size > 100) {
+      const oldestKey = this.aiAnalysisCache.keys().next().value;
+      this.aiAnalysisCache.delete(oldestKey);
+    }
+  }
+
+  // Get analysis stats
+  getStats() {
+    return {
+      cachedAnalyses: this.aiAnalysisCache.size,
+      cacheDurationMinutes: this.aiCacheDuration / 60000
+    };
+  }
+}
+
+// Initialize hybrid analysis system
+const hybridAnalysis = new HybridAnalysisSystem();
 
 // Enable CORS for all routes
 app.use(cors());
@@ -1928,10 +2111,35 @@ async function executeAITrade(team, filteredStocks) {
   const competitivePos = getCompetitivePosition(team);
   const holdingsSymbols = Object.keys(team.holdings).filter(s => team.holdings[s].shares > 0);
 
-  // Try to get real AI decision
-  const aiDecision = await getAITradingDecision(team, filteredStocks, competitivePos);
-
   let action, symbol, shares, reasoning;
+  let usedAI = false;
+  let localAnalysis = null;
+
+  // First, pick a candidate stock to analyze
+  let candidateStock = null;
+  if (filteredStocks.length > 0) {
+    // Pick from top filtered stocks
+    const topStocks = filteredStocks.slice(0, Math.min(10, filteredStocks.length));
+    candidateStock = topStocks[Math.floor(Math.random() * topStocks.length)];
+  }
+
+  // Run local analysis first (free)
+  if (candidateStock) {
+    localAnalysis = hybridAnalysis.runLocalAnalysis(candidateStock);
+    console.log(`[Hybrid] ${team.name} local analysis for ${candidateStock.symbol}: Score ${localAnalysis.score}, ${localAnalysis.verdict}`);
+  }
+
+  // Determine if we should use expensive AI or stick with local analysis
+  const shouldUseAI = candidateStock && hybridAnalysis.shouldUseAI(candidateStock, team, competitivePos);
+
+  let aiDecision = null;
+  if (shouldUseAI) {
+    // Try to get real AI decision (costs money)
+    aiDecision = await getAITradingDecision(team, filteredStocks, competitivePos);
+    usedAI = true;
+  } else if (candidateStock) {
+    console.log(`[Hybrid] ${team.name}: Using local analysis (saving AI cost)`);
+  }
 
   if (aiDecision && aiDecision.action !== 'HOLD') {
     // Use AI decision
@@ -1940,14 +2148,34 @@ async function executeAITrade(team, filteredStocks) {
     shares = aiDecision.shares || Math.floor(10 + Math.random() * 30);
     reasoning = aiDecision.reasoning || generateReasoning(team, action, symbol);
 
-    console.log(`[AI Trade] ${team.name}: ${action} ${shares} ${symbol}`);
+    console.log(`[AI Trade] ${team.name}: ${action} ${shares} ${symbol} (AI decision)`);
   } else if (aiDecision && aiDecision.action === 'HOLD') {
     // AI decided to hold - skip this trade
     console.log(`[AI Trade] ${team.name}: HOLD - ${aiDecision.reasoning}`);
     return null;
+  } else if (localAnalysis && candidateStock) {
+    // Use local analysis to make decision
+    console.log(`[Hybrid Trade] ${team.name}: Using local analysis decision`);
+
+    // Determine action based on local analysis score and team strategy
+    if (localAnalysis.score >= 60 || (localAnalysis.score >= 50 && team.strategy === 'aggressive')) {
+      action = 'BUY';
+      symbol = candidateStock.symbol;
+      shares = Math.floor(10 + Math.random() * 30);
+      reasoning = `${localAnalysis.reasoning} [Local analysis: ${localAnalysis.verdict}]`;
+    } else if (holdingsSymbols.length > 0 && localAnalysis.score < 40) {
+      action = 'SELL';
+      symbol = holdingsSymbols[Math.floor(Math.random() * holdingsSymbols.length)];
+      shares = Math.floor(10 + Math.random() * 30);
+      reasoning = `Local analysis suggests reducing exposure. ${localAnalysis.factors.join(', ') || 'Neutral signals'}`;
+    } else {
+      // Hold - no clear signal
+      console.log(`[Hybrid] ${team.name}: Local analysis inconclusive (score: ${localAnalysis.score}) - skipping trade`);
+      return null;
+    }
   } else {
     // Fallback to smart selection from filtered stocks
-    console.log(`[AI Trade] ${team.name}: Using smart fallback selection`);
+    console.log(`[Hybrid Trade] ${team.name}: Using smart fallback selection`);
 
     // Trailing teams may be more aggressive
     let buyProbability = 0.5;
@@ -2030,7 +2258,11 @@ async function executeAITrade(team, filteredStocks) {
     price: Math.round(price * 100) / 100,
     shares,
     reasoning,
-    aiGenerated: !!aiDecision,
+    // Analysis source tracking
+    analysisSource: usedAI ? 'ai' : 'local',
+    aiGenerated: usedAI,
+    localScore: localAnalysis?.score || null,
+    localVerdict: localAnalysis?.verdict || null,
     filterScore: stockData?.score || null,
     filterSignals: stockData?.signals || [],
     competitiveContext: {
@@ -2043,6 +2275,15 @@ async function executeAITrade(team, filteredStocks) {
 
 async function executeTradingRound() {
   if (!tournamentState.running || !isMarketOpen()) return;
+
+  // Check cost alerts before trading
+  const alerts = costAlertSystem.checkAlerts();
+
+  // Check if budget is exhausted
+  if (!costManager.canAffordAnalysis()) {
+    console.log('[Tournament] ⛔ Budget exhausted - skipping AI trading round');
+    return;
+  }
 
   console.log('[Tournament] Executing trading round...');
 
@@ -2353,7 +2594,41 @@ app.get('/api/tournament/status/current', async (req, res) => {
 app.get('/api/ai/costs', (req, res) => {
   try {
     const report = costManager.getSpendingReport();
+    // Include alerts in the report
+    report.alerts = costAlertSystem.getRecentAlerts(5);
+    report.newAlerts = costAlertSystem.checkAlerts();
     res.json(report);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// AI Cost Alerts endpoint
+app.get('/api/ai/alerts', (req, res) => {
+  try {
+    const newAlerts = costAlertSystem.checkAlerts();
+    const recentAlerts = costAlertSystem.getRecentAlerts(20);
+    const report = costManager.getSpendingReport();
+    const hybridStats = hybridAnalysis.getStats();
+
+    res.json({
+      newAlerts,
+      recentAlerts,
+      spending: {
+        today: report.today,
+        dailyBudget: report.dailyBudget,
+        dailyPercent: ((report.today / report.dailyBudget) * 100).toFixed(1),
+        monthly: report.monthly,
+        monthlyBudget: report.monthlyBudget,
+        monthlyPercent: ((report.monthly / report.monthlyBudget) * 100).toFixed(1),
+        budgetExceeded: report.budgetExceeded
+      },
+      hybridAnalysis: {
+        cachedAnalyses: hybridStats.cachedAnalyses,
+        cacheDurationMinutes: hybridStats.cacheDurationMinutes,
+        description: 'Local analysis is free; AI is used only for high-priority situations'
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
