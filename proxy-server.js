@@ -1007,6 +1007,81 @@ app.post('/api/quotes/batch', async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// TOURNAMENT TEAM ANALYSIS ENDPOINT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+app.get('/api/tournament/team/:teamId', (req, res) => {
+  try {
+    const { teamId } = req.params;
+
+    // Read tournament data
+    if (!fs.existsSync(TOURNAMENT_DATA_FILE)) {
+      return res.status(404).json({ error: 'Tournament data not found' });
+    }
+
+    const tournamentData = JSON.parse(fs.readFileSync(TOURNAMENT_DATA_FILE, 'utf8'));
+    const team = tournamentData.teams.find(t => t.id === parseInt(teamId));
+
+    if (!team) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
+
+    // Calculate additional metrics
+    const sellTrades = team.tradeHistory.filter(t => t.action === 'SELL');
+    const profitableTrades = sellTrades.filter(t => {
+      // For sell trades, check if we made profit
+      const buyTrade = team.tradeHistory.find(bt =>
+        bt.symbol === t.symbol &&
+        bt.action === 'BUY' &&
+        new Date(bt.timestamp) < new Date(t.timestamp)
+      );
+      return buyTrade && t.price > buyTrade.price;
+    });
+
+    const winRate = sellTrades.length > 0
+      ? ((profitableTrades.length / sellTrades.length) * 100).toFixed(2)
+      : 0;
+
+    const avgTradeSize = team.tradeHistory.length > 0
+      ? (team.tradeHistory.reduce((sum, t) => sum + (t.price * t.shares), 0) / team.tradeHistory.length).toFixed(2)
+      : 0;
+
+    const returnPct = ((team.portfolioValue - 50000) / 50000 * 100).toFixed(2);
+
+    // Get portfolio history for this team
+    const portfolioHistory = tournamentData.portfolioHistory
+      .map(h => ({
+        timestamp: h.timestamp,
+        time: h.time,
+        value: h.teams.find(t => t.id === parseInt(teamId))?.portfolioValue || 0
+      }))
+      .filter(h => h.value > 0);
+
+    const response = {
+      ...team,
+      metrics: {
+        winRate: parseFloat(winRate),
+        avgTradeSize: parseFloat(avgTradeSize),
+        totalTrades: team.totalTrades,
+        profitableTrades: profitableTrades.length,
+        losingTrades: sellTrades.length - profitableTrades.length,
+        returnPct: parseFloat(returnPct),
+        currentCash: team.cash,
+        investedAmount: team.invested
+      },
+      portfolioHistory
+    };
+
+    console.log(`📊 Team analysis requested: ${team.name} (ID: ${teamId})`);
+    res.json(response);
+
+  } catch (error) {
+    console.error('❌ Error getting team details:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'CORS Proxy Server Running' });
