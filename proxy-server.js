@@ -140,23 +140,89 @@ class AICostManager {
     return inputCost + outputCost;
   }
   
-  canAffordAnalysis() {
+  canAffordAnalysis(priority = 'MEDIUM') {
     const remainingDaily = this.dailyBudget - this.spending.today;
     const remainingMonthly = this.monthlyBudget - this.spending.thisMonth;
-    
-    if (remainingDaily < 0.01) {
-      console.warn(`⛔ Daily budget exhausted ($${this.spending.today.toFixed(2)} / $${this.dailyBudget})`);
+    const priorityConfig = this.priorityLevels[priority] || this.priorityLevels['MEDIUM'];
+
+    if (remainingDaily < priorityConfig.maxCost) {
+      console.warn(`⛔ Daily budget insufficient for ${priority} analysis ($${remainingDaily.toFixed(4)} remaining, need $${priorityConfig.maxCost})`);
       return false;
     }
-    
-    if (remainingMonthly < 0.01) {
-      console.warn(`⛔ Monthly budget exhausted ($${this.spending.thisMonth.toFixed(2)} / $${this.monthlyBudget})`);
+
+    if (remainingMonthly < priorityConfig.maxCost) {
+      console.warn(`⛔ Monthly budget insufficient for ${priority} analysis ($${remainingMonthly.toFixed(2)} remaining)`);
       return false;
     }
-    
+
     return true;
   }
-  
+
+  // Get the cheapest model that fits within the priority budget
+  getBestModelForPriority(priority = 'MEDIUM', preferredModel = null) {
+    const priorityConfig = this.priorityLevels[priority] || this.priorityLevels['MEDIUM'];
+    const estimatedInputTokens = 800; // Average prompt size
+    const estimatedOutputTokens = 300;
+
+    // If preferred model fits budget, use it
+    if (preferredModel && this.aiPricing[preferredModel]) {
+      const cost = this.estimateCost(preferredModel, estimatedInputTokens, estimatedOutputTokens);
+      if (cost <= priorityConfig.maxCost) {
+        return { model: preferredModel, estimatedCost: cost, withinBudget: true };
+      }
+    }
+
+    // Find cheapest model that fits
+    const modelCosts = Object.entries(this.aiPricing)
+      .map(([model, pricing]) => ({
+        model,
+        cost: this.estimateCost(model, estimatedInputTokens, estimatedOutputTokens)
+      }))
+      .sort((a, b) => a.cost - b.cost);
+
+    for (const { model, cost } of modelCosts) {
+      if (cost <= priorityConfig.maxCost) {
+        return { model, estimatedCost: cost, withinBudget: true };
+      }
+    }
+
+    // No model fits budget - return cheapest anyway with warning
+    const cheapest = modelCosts[0];
+    return {
+      model: cheapest.model,
+      estimatedCost: cheapest.cost,
+      withinBudget: false,
+      warning: `Cheapest model (${cheapest.model}) costs $${cheapest.cost.toFixed(4)}, exceeds ${priority} budget of $${priorityConfig.maxCost}`
+    };
+  }
+
+  // Determine priority based on trading context
+  determinePriority(team, stockData, competitivePosition) {
+    // CRITICAL: Stock already in holdings or team is far behind
+    if (team.holdings && team.holdings[stockData?.symbol]) {
+      return 'CRITICAL';
+    }
+    if (competitivePosition?.isTrailing && competitivePosition?.gapPercent > 10) {
+      return 'CRITICAL';
+    }
+
+    // HIGH: Significant price move or volume spike
+    if (Math.abs(stockData?.changesPercentage || 0) > 5) {
+      return 'HIGH';
+    }
+    if ((stockData?.volumeRatio || 1) > 3) {
+      return 'HIGH';
+    }
+
+    // MEDIUM: Normal trading
+    if (competitivePosition?.isLeading || competitivePosition?.isTrailing) {
+      return 'MEDIUM';
+    }
+
+    // LOW: Everything else
+    return 'LOW';
+  }
+
   recordCost(teamName, model, inputTokens, outputTokens) {
     const cost = this.estimateCost(model, inputTokens, outputTokens);
     
@@ -197,18 +263,42 @@ class AICostManager {
   }
   
   getSpendingReport() {
+    const dailyPercent = (this.spending.today / this.dailyBudget) * 100;
+    const monthlyPercent = (this.spending.thisMonth / this.monthlyBudget) * 100;
+    const cacheHitRate = this.cacheStats.hits + this.cacheStats.misses > 0
+      ? (this.cacheStats.hits / (this.cacheStats.hits + this.cacheStats.misses)) * 100
+      : 0;
+
     return {
       today: this.spending.today,
       dailyBudget: this.dailyBudget,
+      dailyPercent: Math.round(dailyPercent * 10) / 10,
       remainingDaily: this.dailyBudget - this.spending.today,
       monthly: this.spending.thisMonth,
       monthlyBudget: this.monthlyBudget,
+      monthlyPercent: Math.round(monthlyPercent * 10) / 10,
       remainingMonthly: this.monthlyBudget - this.spending.thisMonth,
       totalRequests: this.spending.totalRequests,
       byTeam: this.spending.byTeam,
       byModel: this.spending.byModel,
-      budgetExceeded: !this.canAffordAnalysis()
+      priorityLevels: this.priorityLevels,
+      cacheStats: {
+        hits: this.cacheStats.hits,
+        misses: this.cacheStats.misses,
+        hitRate: Math.round(cacheHitRate * 10) / 10
+      },
+      budgetExceeded: !this.canAffordAnalysis(),
+      cheapestModel: this.getBestModelForPriority('LOW').model
     };
+  }
+
+  // Record cache hit/miss
+  recordCacheHit() {
+    this.cacheStats.hits++;
+  }
+
+  recordCacheMiss() {
+    this.cacheStats.misses++;
   }
   
   resetIfNewMonth() {
@@ -441,38 +531,35 @@ class HybridAnalysisSystem {
     };
   }
 
-  // Determine if AI analysis is worth the cost
+  // Determine if AI analysis is worth the cost (returns priority level or false)
   shouldUseAI(stockData, team, competitivePosition) {
-    // Check if budget allows
-    if (!costManager.canAffordAnalysis()) {
+    // Determine priority based on context
+    const priority = costManager.determinePriority(team, stockData, competitivePosition);
+
+    // Check if budget allows for this priority
+    if (!costManager.canAffordAnalysis(priority)) {
+      console.log(`[Hybrid] Budget insufficient for ${priority} priority analysis`);
       return false;
     }
 
-    // Use AI more sparingly - only for high-priority situations:
-
-    // 1. Significant price moves (>5%)
-    if (Math.abs(stockData.changesPercentage || 0) > 5) {
-      return true;
+    // CRITICAL priority - always use AI if budget allows
+    if (priority === 'CRITICAL') {
+      return priority;
     }
 
-    // 2. High volume spikes (3x+ average)
-    if ((stockData.volumeRatio || 1) > 3) {
-      return true;
+    // HIGH priority - use AI
+    if (priority === 'HIGH') {
+      return priority;
     }
 
-    // 3. Team is trailing badly and needs better decisions
-    if (competitivePosition.isTrailing && competitivePosition.gapPercent > 5) {
-      return true;
+    // MEDIUM priority - use AI 50% of the time
+    if (priority === 'MEDIUM' && Math.random() < 0.5) {
+      return priority;
     }
 
-    // 4. Stock already in team's holdings (more important decision)
-    if (team.holdings && team.holdings[stockData.symbol]) {
-      return true;
-    }
-
-    // 5. Random sampling - use AI for ~20% of other trades to maintain diversity
-    if (Math.random() < 0.2) {
-      return true;
+    // LOW priority - use AI only 20% of the time (prefer local/cached)
+    if (priority === 'LOW' && Math.random() < 0.2) {
+      return priority;
     }
 
     return false;
@@ -482,8 +569,10 @@ class HybridAnalysisSystem {
   getCachedAIAnalysis(symbol) {
     const cached = this.aiAnalysisCache.get(symbol);
     if (cached && (Date.now() - cached.timestamp) < this.aiCacheDuration) {
+      costManager.recordCacheHit();
       return cached.analysis;
     }
+    costManager.recordCacheMiss();
     return null;
   }
 
@@ -2130,13 +2219,32 @@ async function executeAITrade(team, filteredStocks) {
   }
 
   // Determine if we should use expensive AI or stick with local analysis
-  const shouldUseAI = candidateStock && hybridAnalysis.shouldUseAI(candidateStock, team, competitivePos);
+  // Returns priority level (CRITICAL/HIGH/MEDIUM/LOW) or false
+  const aiPriority = candidateStock && hybridAnalysis.shouldUseAI(candidateStock, team, competitivePos);
 
   let aiDecision = null;
-  if (shouldUseAI) {
-    // Try to get real AI decision (costs money)
-    aiDecision = await getAITradingDecision(team, filteredStocks, competitivePos);
-    usedAI = true;
+  let analysisPriority = null;
+
+  if (aiPriority) {
+    analysisPriority = aiPriority;
+
+    // Check for cached analysis first
+    const cachedAnalysis = hybridAnalysis.getCachedAIAnalysis(candidateStock.symbol);
+    if (cachedAnalysis && aiPriority !== 'CRITICAL') {
+      console.log(`[Hybrid] ${team.name}: Using cached AI analysis for ${candidateStock.symbol}`);
+      aiDecision = cachedAnalysis;
+      usedAI = false; // Cached, no new cost
+    } else {
+      // Get fresh AI decision (costs money)
+      console.log(`[Hybrid] ${team.name}: ${aiPriority} priority - calling AI`);
+      aiDecision = await getAITradingDecision(team, filteredStocks, competitivePos);
+      usedAI = true;
+
+      // Cache the decision for future use
+      if (aiDecision && candidateStock) {
+        hybridAnalysis.cacheAIAnalysis(candidateStock.symbol, aiDecision);
+      }
+    }
   } else if (candidateStock) {
     console.log(`[Hybrid] ${team.name}: Using local analysis (saving AI cost)`);
   }
@@ -2259,8 +2367,9 @@ async function executeAITrade(team, filteredStocks) {
     shares,
     reasoning,
     // Analysis source tracking
-    analysisSource: usedAI ? 'ai' : 'local',
+    analysisSource: usedAI ? 'ai' : (aiDecision ? 'cached' : 'local'),
     aiGenerated: usedAI,
+    aiPriority: analysisPriority || null,
     localScore: localAnalysis?.score || null,
     localVerdict: localAnalysis?.verdict || null,
     filterScore: stockData?.score || null,
