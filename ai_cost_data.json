@@ -1,7 +1,7 @@
 {
-  "today": 0.00007153999999999998,
-  "thisMonth": 0.00007153999999999998,
-  "totalRequests": 1,
+  "today": 0.00015623999999999998,
+  "thisMonth": 0.00015623999999999998,
+  "totalRequests": 2,
   "lastUpdated": "Wed Jan 28 2026",
   "byTeam": {
     "Value Hunter": {
@@ -13,8 +13,8 @@
       "requests": 0
     },
     "Momentum Trader": {
-      "cost": 0.00007153999999999998,
-      "requests": 1
+      "cost": 0.00015623999999999998,
+      "requests": 2
     },
     "Risk Manager": {
       "cost": 0,
@@ -23,8 +23,8 @@
   },
   "byModel": {
     "deepseek-chat": {
-      "cost": 0.00007153999999999998,
-      "requests": 1
+      "cost": 0.00015623999999999998,
+      "requests": 2
     }
   }
 }

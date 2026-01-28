@@ -172,13 +172,54 @@
         "blue chips"
       ],
       "portfolioValue": 50000,
-      "cash": 50000,
-      "invested": 0,
+      "cash": 25066.5,
+      "invested": 24933.5,
       "realizedPnL": 0,
       "unrealizedPnL": 0,
-      "totalTrades": 0,
-      "holdings": {},
-      "tradeHistory": []
+      "totalTrades": 1,
+      "holdings": {
+        "ABT": {
+          "shares": 235,
+          "avgCost": 106.1,
+          "totalCost": 24933.5,
+          "currentPrice": 106.1,
+          "marketValue": 24933.5,
+          "unrealizedPnL": 0
+        }
+      },
+      "tradeHistory": [
+        {
+          "time": "1:22:06 PM",
+          "timestamp": "2026-01-28T18:22:06.542Z",
+          "team": "DeepSeek V3",
+          "teamId": 3,
+          "model": "DeepSeek-V3",
+          "action": "BUY",
+          "symbol": "ABT",
+          "price": 106.1,
+          "shares": 235,
+          "reasoning": "As a conservative, dividend-focused agent, Abbott Laboratories (ABT) is a stable blue-chip healthcare stock known for reliable dividends and defensive characteristics. With no current holdings, this initial purchase builds a foundation in a low-volatility, essential sector, aligning with my strategy for steady income and capital preservation while entering the market.",
+          "analysisSource": "ai",
+          "aiGenerated": true,
+          "aiPriority": "LOW",
+          "localScore": 55,
+          "localVerdict": "HOLD",
+          "filterScore": 40,
+          "filterSignals": [
+            "Near 52w low",
+            "Large cap",
+            "Near day low"
+          ],
+          "competitiveContext": {
+            "rank": 2,
+            "position": "middle",
+            "gapToLeader": "0.00"
+          },
+          "costBasis": 106.1,
+          "cashAfter": 25066.5,
+          "portfolioValueAfter": 50000
+        }
+      ]
     },
     {
       "id": 4,
@@ -202,6 +243,35 @@
     }
   ],
   "trades": [
+    {
+      "time": "1:22:06 PM",
+      "timestamp": "2026-01-28T18:22:06.542Z",
+      "team": "DeepSeek V3",
+      "teamId": 3,
+      "model": "DeepSeek-V3",
+      "action": "BUY",
+      "symbol": "ABT",
+      "price": 106.1,
+      "shares": 235,
+      "reasoning": "As a conservative, dividend-focused agent, Abbott Laboratories (ABT) is a stable blue-chip healthcare stock known for reliable dividends and defensive characteristics. With no current holdings, this initial purchase builds a foundation in a low-volatility, essential sector, aligning with my strategy for steady income and capital preservation while entering the market.",
+      "analysisSource": "ai",
+      "aiGenerated": true,
+      "aiPriority": "LOW",
+      "localScore": 55,
+      "localVerdict": "HOLD",
+      "filterScore": 40,
+      "filterSignals": [
+        "Near 52w low",
+        "Large cap",
+        "Near day low"
+      ],
+      "competitiveContext": {
+        "rank": 2,
+        "position": "middle",
+        "gapToLeader": "0.00"
+      },
+      "costBasis": 106.1
+    },
     {
       "time": "1:13:08 PM",
       "timestamp": "2026-01-28T18:13:08.764Z",
@@ -2110,7 +2180,33 @@
           "portfolioValue": 50000
         }
       ]
+    },
+    {
+      "timestamp": "2026-01-28T18:22:06.711Z",
+      "time": "01:22 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 49997.6
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
     }
   ],
-  "savedAt": "2026-01-28T18:21:34.470Z"
+  "savedAt": "2026-01-28T18:23:04.269Z"
 }
