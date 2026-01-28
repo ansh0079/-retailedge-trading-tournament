@@ -2156,6 +2156,104 @@ Please provide a clear, structured analysis in markdown format.`;
     window.ViewportLoader = ViewportLoader;
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // DEBOUNCED LOCALSTORAGE - Batch writes to avoid blocking main thread
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    const DebouncedStorage = {
+      pending: new Map(),
+      timers: new Map(),
+      
+      setItem(key, value, delay = 1000) {
+        // Store pending write
+        this.pending.set(key, value);
+        
+        // Clear existing timer
+        if (this.timers.has(key)) {
+          clearTimeout(this.timers.get(key));
+        }
+        
+        // Schedule write
+        const timer = setTimeout(() => {
+          try {
+            const pendingValue = this.pending.get(key);
+            if (pendingValue !== undefined) {
+              localStorage.setItem(key, pendingValue);
+              this.pending.delete(key);
+              this.timers.delete(key);
+            }
+          } catch (err) {
+            console.warn('DebouncedStorage write failed:', err);
+          }
+        }, delay);
+        
+        this.timers.set(key, timer);
+      },
+      
+      flush() {
+        // Write all pending immediately
+        this.pending.forEach((value, key) => {
+          try {
+            localStorage.setItem(key, value);
+          } catch (err) {
+            console.warn('Flush failed for', key, err);
+          }
+        });
+        this.pending.clear();
+        this.timers.forEach(timer => clearTimeout(timer));
+        this.timers.clear();
+      }
+    };
+    
+    // Flush on page unload
+    window.addEventListener('beforeunload', () => DebouncedStorage.flush());
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // BATCHED LOCALSTORAGE - Debounced writes to avoid blocking UI
+    // ═══════════════════════════════════════════════════════════════════════════
+    
+    const BatchedLocalStorage = {
+      pendingWrites: new Map(),
+      writeTimer: null,
+      DEBOUNCE_MS: 500,
+      
+      set(key, value) {
+        // Queue the write
+        this.pendingWrites.set(key, value);
+        
+        // Debounce actual write
+        if (this.writeTimer) clearTimeout(this.writeTimer);
+        this.writeTimer = setTimeout(() => this.flush(), this.DEBOUNCE_MS);
+      },
+      
+      flush() {
+        if (this.pendingWrites.size === 0) return;
+        
+        // Batch write all pending
+        requestIdleCallback(() => {
+          this.pendingWrites.forEach((value, key) => {
+            try {
+              localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+            } catch (err) {
+              console.warn(`LocalStorage write failed for ${key}:`, err);
+            }
+          });
+          this.pendingWrites.clear();
+        }, { timeout: 1000 });
+      },
+      
+      // Immediate write (for critical data)
+      setImmediate(key, value) {
+        try {
+          localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+        } catch (err) {
+          console.warn(`LocalStorage immediate write failed for ${key}:`, err);
+        }
+      }
+    };
+    
+    window.BatchedLocalStorage = BatchedLocalStorage;
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // SESSION PERSISTENCE - Instant Load Between Refreshes
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -3361,8 +3459,16 @@ Please provide a clear, structured analysis in markdown format.`;
     // Expose PrefetchManager for instant load feature
     window.PrefetchManager = PrefetchManager;
     
-    // Start warmup after app loads (only fetches missing data)
-    setTimeout(() => PrefetchManager.warmupDefaultStocks(), 2000);
+    // DELAYED WARMUP: Start only AFTER main loading completes (60 seconds)
+    // This prevents API conflicts during initial load
+    setTimeout(() => {
+      if (!window.isFetchingStocks) {
+        PrefetchManager.warmupDefaultStocks();
+      } else {
+        // Retry after another 30 seconds if still loading
+        setTimeout(() => PrefetchManager.warmupDefaultStocks(), 30000);
+      }
+    }, 60000);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PERFORMANCE MONITOR - Track & Optimize
@@ -8702,7 +8808,78 @@ Be realistic and conservative. Base confidence on data quality.`;
     }
 
     // Generate complete AI analysis with factors
+    // ═══════════════════════════════════════════════════════════════════════════
+    // AI ANALYSIS CACHE - Avoid recalculating for same stock data
+    // ═══════════════════════════════════════════════════════════════════════════
+    const aiAnalysisCache = new Map();
+    
+    // ═══════════════════════════════════════════════════════════════════════════
+    // DEBOUNCED LOCALSTORAGE - Batch writes to prevent blocking
+    // ═══════════════════════════════════════════════════════════════════════════
+    const debouncedLocalStorage = {
+      timers: {},
+      pendingWrites: {},
+      
+      setItem(key, value, delay = 1000) {
+        // Store the value to write
+        this.pendingWrites[key] = value;
+        
+        // Clear existing timer
+        if (this.timers[key]) {
+          clearTimeout(this.timers[key]);
+        }
+        
+        // Set new timer
+        this.timers[key] = setTimeout(() => {
+          try {
+            localStorage.setItem(key, this.pendingWrites[key]);
+            delete this.pendingWrites[key];
+            delete this.timers[key];
+          } catch (e) {
+            console.warn('localStorage write failed:', e);
+          }
+        }, delay);
+      },
+      
+      setItemImmediate(key, value) {
+        // Immediate write (for critical data)
+        if (this.timers[key]) {
+          clearTimeout(this.timers[key]);
+          delete this.timers[key];
+        }
+        try {
+          localStorage.setItem(key, value);
+          delete this.pendingWrites[key];
+        } catch (e) {
+          console.warn('localStorage write failed:', e);
+        }
+      },
+      
+      flush() {
+        // Write all pending immediately
+        Object.keys(this.pendingWrites).forEach(key => {
+          try {
+            localStorage.setItem(key, this.pendingWrites[key]);
+          } catch (e) {
+            console.warn('localStorage flush failed:', e);
+          }
+        });
+        Object.keys(this.timers).forEach(key => clearTimeout(this.timers[key]));
+        this.timers = {};
+        this.pendingWrites = {};
+      }
+    };
+    
+    // Flush on page unload
+    window.addEventListener('beforeunload', () => debouncedLocalStorage.flush());
+    
     function generateAIAnalysis(stock) {
+      // Check cache first (use symbol + price + changePct as key)
+      const cacheKey = `${stock.symbol}_${stock.price}_${stock.changePct}_${stock.pe}_${stock.roe}`;
+      if (aiAnalysisCache.has(cacheKey)) {
+        return aiAnalysisCache.get(cacheKey);
+      }
+      
       const { score, subscores } = computeAIScore(stock);
       const { verdict, stance } = verdictFromScore(score);
       const confidence = confidenceFromScore(score, subscores);
@@ -8867,7 +9044,7 @@ Be realistic and conservative. Base confidence on data quality.`;
         ]
       };
 
-      return {
+      const result = {
         verdict,
         confidence,
         stance,
@@ -8882,6 +9059,15 @@ Be realistic and conservative. Base confidence on data quality.`;
         aiScore: score, // Unified 0-100 scale
         health: score, // Health = AI score for consistency
       };
+      
+      // Cache result (limit cache size to 2000 entries)
+      if (aiAnalysisCache.size > 2000) {
+        const firstKey = aiAnalysisCache.keys().next().value;
+        aiAnalysisCache.delete(firstKey);
+      }
+      aiAnalysisCache.set(cacheKey, result);
+      
+      return result;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -20964,9 +21150,9 @@ Be realistic and conservative. Base confidence on data quality.`;
         const stocks = saved ? JSON.parse(saved) : defaultList;
         // Remove duplicates and normalize (uppercase, trim)
         const uniqueStocks = [...new Set(stocks.map(s => String(s).toUpperCase().trim()).filter(s => s))];
-        // Save cleaned version back to localStorage if it changed
+        // Save cleaned version back to localStorage if it changed (debounced)
         if (uniqueStocks.length !== stocks.length) {
-          localStorage.setItem('curatedStocks', JSON.stringify(uniqueStocks));
+          DebouncedStorage.setItem('curatedStocks', JSON.stringify(uniqueStocks), 2000);
         }
         return uniqueStocks;
       });
@@ -21580,7 +21766,7 @@ Be realistic and conservative. Base confidence on data quality.`;
         // Remove duplicates when adding
         const updated = [...new Set([...curatedStocks, symbol])];
         setCuratedStocks(updated);
-        localStorage.setItem('curatedStocks', JSON.stringify(updated));
+        BatchedLocalStorage.set('curatedStocks', updated);
         setNewStockSymbol('');
         fetchStocks(); // Reload with new stock
       };
@@ -21588,7 +21774,7 @@ Be realistic and conservative. Base confidence on data quality.`;
       const removeFromCurated = (symbol) => {
         const updated = curatedStocks.filter(s => s !== symbol);
         setCuratedStocks(updated);
-        localStorage.setItem('curatedStocks', JSON.stringify(updated));
+        BatchedLocalStorage.set('curatedStocks', updated);
         fetchStocks(); // Reload without removed stock
       };
 
@@ -21604,29 +21790,51 @@ Be realistic and conservative. Base confidence on data quality.`;
         const startTime = new Date();
         
         // ═══════════════════════════════════════════════════════════════════
-        // INSTANT UI: Show placeholders immediately, then populate with data
+        // ULTRA-FAST STARTUP: Check localStorage first (sync), then IndexedDB
         // ═══════════════════════════════════════════════════════════════════
         
-        // Step 1: Check for cached data first (instant display)
         let hasCachedData = false;
+        
+        // Step 1: Try FAST localStorage session restore (sync - instant!)
         try {
-          const instantCached = await window.PrefetchManager?.loadAllFromCache();
-          if (instantCached && instantCached.length > 0) {
-            console.log(`⚡ INSTANT: Displaying ${instantCached.length} cached stocks immediately!`);
-            setStocks(instantCached.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0)));
-            setLoading(false);
-            hasCachedData = true;
+          const sessionKey = 're_fast_session_v1';
+          const sessionData = localStorage.getItem(sessionKey);
+          if (sessionData) {
+            const { stocks: cachedStocks, timestamp } = JSON.parse(sessionData);
+            const age = Date.now() - timestamp;
+            // Use session if less than 4 hours old
+            if (age < 4 * 60 * 60 * 1000 && cachedStocks && cachedStocks.length > 50) {
+              console.log(`⚡ INSTANT: Restored ${cachedStocks.length} stocks from session (${Math.round(age/60000)}min old)`);
+              setStocks(cachedStocks.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0)));
+              setLoading(false);
+              hasCachedData = true;
+            }
           }
         } catch (e) {
-          console.warn('Instant cache load failed:', e);
+          console.warn('Session restore failed:', e);
         }
         
-        // Step 2: If no cached data, show placeholders for instant UI
+        // Step 2: If no session, try IndexedDB (async but still fast)
         if (!hasCachedData) {
-          console.log(`🎯 Showing ${curatedStocks.length} placeholder cards instantly...`);
+          try {
+            const instantCached = await window.PrefetchManager?.loadAllFromCache();
+            if (instantCached && instantCached.length > 50) {
+              console.log(`⚡ INSTANT: Loaded ${instantCached.length} stocks from IndexedDB`);
+              setStocks(instantCached.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0)));
+              setLoading(false);
+              hasCachedData = true;
+            }
+          } catch (e) {
+            console.warn('IndexedDB load failed:', e);
+          }
+        }
+        
+        // Step 3: Show placeholders if no cache (users see something immediately)
+        if (!hasCachedData) {
+          console.log(`🎯 No cache - showing ${curatedStocks.length} placeholders...`);
           const placeholders = PlaceholderManager.createPlaceholders(curatedStocks);
           setStocks(placeholders);
-          setLoading(false); // Hide spinner - we have UI!
+          setLoading(false);
         }
         
         setLoadingProgress({ current: 0, total: curatedStocks.length });
@@ -21713,75 +21921,167 @@ Be realistic and conservative. Base confidence on data quality.`;
           if (uniqueCuratedStocks.length !== curatedStocks.length) {
             console.log(`🧹 Removed ${curatedStocks.length - uniqueCuratedStocks.length} duplicate symbols from curated list`);
             setCuratedStocks(uniqueCuratedStocks);
-            localStorage.setItem('curatedStocks', JSON.stringify(uniqueCuratedStocks));
+            debouncedLocalStorage.setItemImmediate('curatedStocks', JSON.stringify(uniqueCuratedStocks));
           }
 
           console.log(`⚡ Found ${cachedStocks.length} cached stocks, ${uncachedSymbols.length} need fetching`);
           
           // ═══════════════════════════════════════════════════════════════════
-          // FAST PATH: Use batch quotes for ALL uncached stocks (10x faster!)
+          // STREAMING BATCH LOADER - Display stocks AS THEY LOAD (instant UI!)
           // ═══════════════════════════════════════════════════════════════════
           
           if (uncachedSymbols.length > 0) {
-            console.log('🚀 Using FAST batch quote loader for', uncachedSymbols.length, 'stocks...');
+            console.log('🚀 STREAMING batch loader for', uncachedSymbols.length, 'stocks...');
             
-            const batchQuotes = await fetchBatchQuotesOnly(uncachedSymbols);
+            const BATCH_SIZE = 100;
+            const loadedSymbols = new Set();
+            let displayedCount = 0;
             
-            // Process batch quotes into stock objects with AI analysis
-            batchQuotes.forEach(quote => {
-              if (!quote || !quote.symbol) return;
+            // Process each batch and display immediately
+            for (let i = 0; i < uncachedSymbols.length; i += BATCH_SIZE) {
+              const batch = uncachedSymbols.slice(i, i + BATCH_SIZE);
+              const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+              const totalBatches = Math.ceil(uncachedSymbols.length / BATCH_SIZE);
               
-              const stockData = {
-                symbol: quote.symbol,
-                name: quote.name || quote.symbol,
-                price: quote.price,
-                changePct: quote.changesPercentage,
-                change: quote.change,
-                volume: quote.volume,
-                avgVolume: quote.avgVolume,
-                marketCap: quote.marketCap,
-                pe: quote.pe,
-                eps: quote.eps,
-                high52: quote.yearHigh,
-                low52: quote.yearLow,
-                dayHigh: quote.dayHigh,
-                dayLow: quote.dayLow,
-                open: quote.open,
-                previousClose: quote.previousClose,
-                exchange: quote.exchange,
-                index: 'Curated',
-                _batchLoaded: true
-              };
+              console.log(`🚀 Batch ${batchNum}/${totalBatches}: Loading ${batch.length} stocks...`);
               
-              // Add AI analysis
-              const ai = generateAIAnalysis(stockData);
-              Object.assign(stockData, ai);
-              
-              // Cache it
-              Cache.set(quote.symbol, stockData, 'stock');
-              
-              // Add to cached stocks
-              cachedStocks.push({ symbol: quote.symbol, data: stockData });
-            });
-            
-            console.log(`✅ Batch loaded ${batchQuotes.length} stocks! Total cached: ${cachedStocks.length}`);
-            
-            // Save to session for instant reload
-            if (window.SessionPersistence) {
-              const allData = cachedStocks.map(s => s.data);
-              SessionPersistence.saveSession(allData, {}, []);
+              try {
+                const url = `https://financialmodelingprep.com/stable/quote/${batch.join(',')}?apikey=${FMP_API_KEY}`;
+                const response = await fetch(url);
+                
+                if (response.status === 429) {
+                  console.warn('⏳ Rate limited, waiting 5s...');
+                  await new Promise(r => setTimeout(r, 5000));
+                  i -= BATCH_SIZE; // Retry this batch
+                  continue;
+                }
+                
+                if (response.ok) {
+                  const data = await response.json();
+                  if (Array.isArray(data)) {
+                    const batchStocks = [];
+                    
+                    data.forEach(quote => {
+                      if (!quote || !quote.symbol) return;
+                      
+                      const stockData = {
+                        symbol: quote.symbol,
+                        name: quote.name || quote.symbol,
+                        price: quote.price,
+                        changePct: quote.changesPercentage,
+                        change: quote.change,
+                        volume: quote.volume,
+                        avgVolume: quote.avgVolume,
+                        marketCap: quote.marketCap,
+                        pe: quote.pe,
+                        eps: quote.eps,
+                        roe: quote.roe || null,
+                        rsi: quote.rsi || 50,
+                        high52: quote.yearHigh,
+                        low52: quote.yearLow,
+                        dayHigh: quote.dayHigh,
+                        dayLow: quote.dayLow,
+                        open: quote.open,
+                        previousClose: quote.previousClose,
+                        exchange: quote.exchange,
+                        index: 'Curated',
+                        _batchLoaded: true,
+                        _needsAI: true // Defer AI analysis
+                      };
+                      
+                      // SKIP AI analysis during batch load - compute on-demand later!
+                      // This saves ~170,000 operations (180 lines × 951 stocks)
+                      
+                      Cache.set(quote.symbol, stockData, 'stock');
+                      cachedStocks.push({ symbol: quote.symbol, data: stockData });
+                      loadedSymbols.add(quote.symbol.toUpperCase());
+                      batchStocks.push(stockData);
+                    });
+                    
+                    // DISPLAY THIS BATCH IMMEDIATELY!
+                    if (batchStocks.length > 0) {
+                      displayedCount += batchStocks.length;
+                      
+                      // Compute AI for ONLY first 50 stocks (visible on screen)
+                      batchStocks.forEach((stock, idx) => {
+                        if (idx < 50 && stock._needsAI) {
+                          const ai = generateAIAnalysis(stock);
+                          Object.assign(stock, ai);
+                          delete stock._needsAI;
+                        }
+                      });
+                      
+                      // Optimize React rendering with batching
+                      requestAnimationFrame(() => {
+                        setStocks(prev => {
+                          const existing = new Set(prev.map(s => s.symbol?.toUpperCase()));
+                          const newStocks = batchStocks.filter(s => !existing.has(s.symbol?.toUpperCase()));
+                          // FAST merge - only sort once at end
+                          const merged = [...prev, ...newStocks];
+                          // Defer sort to next frame for smoother UX
+                          if (displayedCount >= uncachedSymbols.length) {
+                            merged.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
+                          }
+                          return merged;
+                        });
+                      });
+                      setLoading(false); // Show UI after first batch!
+                      setLoadingProgress({ current: displayedCount, total: uncachedSymbols.length });
+                      console.log(`✅ Batch ${batchNum}: ${batchStocks.length} stocks displayed! Total: ${displayedCount}`);
+                      
+                      // Compute AI for remaining stocks in background (async, non-blocking)
+                      if (batchStocks.length > 50) {
+                        setTimeout(() => {
+                          const remaining = batchStocks.slice(50);
+                          remaining.forEach(stock => {
+                            if (stock._needsAI) {
+                              const ai = generateAIAnalysis(stock);
+                              Object.assign(stock, ai);
+                              Cache.set(stock.symbol, stock, 'stock'); // Update cache
+                              delete stock._needsAI;
+                            }
+                          });
+                          // Trigger re-render with AI data
+                          setStocks(prev => [...prev]);
+                        }, 2000);
+                      }
+                    }
+                  }
+                }
+                
+                // Minimal delay between batches (150ms - faster!)
+                if (i + BATCH_SIZE < uncachedSymbols.length) {
+                  await new Promise(r => setTimeout(r, 150));
+                }
+              } catch (error) {
+                console.warn(`Batch ${batchNum} failed:`, error.message);
+              }
             }
             
-            // CRITICAL: Remove batch-loaded symbols from uncachedSymbols so we don't fetch them again!
-            const batchLoadedSymbols = new Set(batchQuotes.map(q => q.symbol.toUpperCase()));
-            uncachedSymbols.length = 0; // Clear the array
-            uniqueCuratedStocks.forEach(symbol => {
-              const upperSymbol = symbol.toUpperCase();
-              if (!batchLoadedSymbols.has(upperSymbol) && !cachedStocks.find(s => s.symbol.toUpperCase() === upperSymbol)) {
-                uncachedSymbols.push(symbol);
-              }
-            });
-            console.log(`📊 After batch: ${cachedStocks.length} ready, ${uncachedSymbols.length} still need individual fetch`);
+            // Clear uncachedSymbols - batch loading complete
+            uncachedSymbols.length = 0;
+            console.log(`✅ Streaming complete! ${displayedCount} stocks loaded`);
+            
+            // FINAL SORT (once at the end)
+            setTimeout(() => {
+              setStocks(prev => {
+                const sorted = [...prev].sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
+                console.log('📊 Final sort complete');
+                return sorted;
+              });
+            }, 100);
+            
+            // Save session ASYNCHRONOUSLY (don't block UI)
+            if (window.SessionPersistence && cachedStocks.length > 0) {
+              setTimeout(() => {
+                try {
+                  SessionPersistence.saveSession(cachedStocks.map(s => s.data), {}, []);
+                  console.log('💾 Session saved in background');
+                } catch (err) {
+                  console.warn('Session save failed (non-critical):', err.message);
+                }
+              }, 5000); // Save after 5 seconds, don't block
+            }
           }
 
           const allStocks = [];
@@ -21828,70 +22128,82 @@ Be realistic and conservative. Base confidence on data quality.`;
             });
           };
 
-          // Process cached stocks INSTANTLY in one batch update!
-          console.log(`🚀 Processing ${cachedStocks.length} cached stocks instantly...`);
-          const processedStocks = [];
-          
-          cachedStocks.forEach(({ symbol, data: stockData }) => {
-            try {
-              stockData.index = 'Curated';
-              const ai = generateAIAnalysis(stockData);
+          // Process cached stocks INSTANTLY!
+          if (cachedStocks.length > 0) {
+            console.log(`🚀 Displaying ${cachedStocks.length} cached stocks instantly...`);
+            
+            const processedStocks = [];
+            let needsAI = 0;
+            
+            cachedStocks.forEach(({ symbol, data: stockData }) => {
+              try {
+                stockData.index = 'Curated';
+                
+                // ONLY compute AI if missing (avoid re-computation!)
+                if (!stockData.aiScore && !stockData.verdict) {
+                  needsAI++;
+                  if (processedStocks.length < 50) {
+                    // Compute for first 50 visible stocks
+                    const ai = generateAIAnalysis(stockData);
+                    Object.assign(stockData, ai);
+                  } else {
+                    // Mark for lazy loading
+                    stockData._needsAI = true;
+                  }
+                }
+                
+                processedStocks.push({
+                  ...stockData,
+                  mlPrediction: stockData.mlPrediction || { predPct: null, conf: null, trend: null }
+                });
+              } catch (err) {
+                processedStocks.push(stockData);
+              }
+            });
 
-              const stockWithAnalysis = {
-                ...stockData,
-                ...ai,
-                aiScore: ai.aiScore,
-                mlPrediction: { predPct: null, conf: null, trend: null },
-                subscores: ai.subscores ? { ...ai.subscores } : null,
-                topDrivers: ai.topDrivers ? {
-                  positive: ai.topDrivers.positive ? [...ai.topDrivers.positive] : [],
-                  negative: ai.topDrivers.negative ? [...ai.topDrivers.negative] : []
-                } : null,
-                bullFactors: ai.bullFactors ? [...ai.bullFactors] : [],
-                bearFactors: ai.bearFactors ? [...ai.bearFactors] : [],
-                latestNews: stockData.latestNews ? [...stockData.latestNews] : [],
-                peers: stockData.peers ? [...stockData.peers] : [],
-                earningsHistory: stockData.earningsHistory ? [...stockData.earningsHistory] : [],
-                analystGradeHistory: stockData.analystGradeHistory ? [...stockData.analystGradeHistory] : [],
-              };
-              processedStocks.push(stockWithAnalysis);
-              allStocks.push(stockWithAnalysis);
-            } catch (err) {
-              console.warn(`⚠️ ${symbol} processing error:`, err.message);
-            }
-          });
+            console.log(`⚡ ${needsAI} stocks need AI analysis (computing first 50 instantly, rest on-demand)`);
 
-          // ONE batch update for all cached stocks - instant UI!
-          if (processedStocks.length > 0) {
+            // ONE batch update - instant UI!
             processedStocks.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
             setStocks(processedStocks);
             setLoading(false);
-            completedCount = processedStocks.length;
-            setLoadingProgress({ current: completedCount, total: uniqueCuratedStocks.length });
+            setLoadingProgress({ current: processedStocks.length, total: uniqueCuratedStocks.length });
             console.log(`✅ ${processedStocks.length} stocks displayed instantly!`);
             
-            // ML predictions in background (don't block UI)
+            // Compute AI for remaining cached stocks in background
+            if (needsAI > 50) {
+              setTimeout(() => {
+                const remaining = processedStocks.filter(s => s._needsAI);
+                console.log(`🔄 Computing AI for ${remaining.length} stocks in background...`);
+                remaining.forEach((stock, i) => {
+                  setTimeout(() => {
+                    if (stock._needsAI) {
+                      const ai = generateAIAnalysis(stock);
+                      Object.assign(stock, ai);
+                      delete stock._needsAI;
+                      Cache.set(stock.symbol, stock, 'stock');
+                    }
+                  }, i * 10); // 10ms between each to avoid blocking
+                });
+              }, 2000);
+            }
+            
+            // ML predictions in background (only for top 20, after 5 seconds)
             setTimeout(() => {
-              processedStocks.slice(0, 50).forEach((stock, i) => {
+              processedStocks.slice(0, 20).forEach((stock, i) => {
                 setTimeout(() => {
                   computeMLPrediction(stock.symbol).then(ml => {
                     setStocks(prev => prev.map(s => 
                       s.symbol === stock.symbol ? { ...s, mlPrediction: ml } : s
                     ));
                   }).catch(() => {});
-                }, i * 100);
+                }, i * 300);
               });
-            }, 2000);
+            }, 5000);
           }
 
-          // Skip slow individual fetch - batch loader already got everything
-          // Only fetch individually if batch loading missed some (very rare)
-          if (uncachedSymbols.length > 5) {
-            console.log(`⏭️ Skipping slow individual fetch for ${uncachedSymbols.length} remaining stocks`);
-            uncachedSymbols.length = 0;
-          } else if (uncachedSymbols.length > 0) {
-            console.log(`📡 Fetching ${uncachedSymbols.length} remaining stocks individually...`);
-          }
+          // SKIP slow individual fetch completely - streaming batch already got everything
+          uncachedSymbols.length = 0;
           
           if (uncachedSymbols.length > 0) {
             // Helper function to add timeout to promises
@@ -23070,7 +23382,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                               if (!curatedStocks.includes(symbol)) {
                                 const updated = [...new Set([...curatedStocks, symbol])]; // Remove duplicates
                                 setCuratedStocks(updated);
-                                localStorage.setItem('curatedStocks', JSON.stringify(updated));
+                                debouncedLocalStorage.setItem('curatedStocks', JSON.stringify(updated), 500);
                                 console.log('💾 Added to curated list:', symbol);
                               }
 
@@ -23878,7 +24190,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                   const newSymbols = result.symbols || [];
                   setCuratedStocks(prev => {
                     const updated = [...new Set([...prev, ...newSymbols])]; // Remove duplicates
-                    localStorage.setItem('curatedStocks', JSON.stringify(updated));
+                    debouncedLocalStorage.setItem('curatedStocks', JSON.stringify(updated), 500);
                     return updated;
                   });
 
