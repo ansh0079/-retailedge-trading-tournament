@@ -22476,6 +22476,9 @@ Be realistic and conservative. Base confidence on data quality.`;
                       const stockData = {
                         symbol: quote.symbol,
                         name: quote.name || quote.symbol,
+                        companyName: quote.name || quote.symbol, // FIX: Add companyName for filtering
+                        sector: cachedFull?.sector || 'Unknown', // FIX: Add sector for filtering
+                        industry: cachedFull?.industry || 'Unknown',
                         price: quote.price,
                         changePct: quote.changesPercentage,
                         change: quote.change,
@@ -23332,6 +23335,22 @@ Be realistic and conservative. Base confidence on data quality.`;
           return sortBy.dir === 'asc' ? aVal - bVal : bVal - aVal;
         });
 
+        // DEBUG: Log filtering results
+        if (stocks.length > 0 && result.length === 0) {
+          console.warn('⚠️ FILTERING ISSUE: All stocks filtered out!');
+          console.log('Total stocks:', stocks.length);
+          console.log('Search:', debouncedSearch);
+          console.log('Sector:', selectedSector);
+          console.log('Preset:', selectedPreset);
+          console.log('Preset checks:', presetChecks.length);
+          console.log('Sample stock:', stocks[0]);
+          console.log('Watchlist only:', showWatchlistOnly);
+        }
+        
+        if (result.length > 0 && result.length < stocks.length) {
+          console.log(`✅ Filtered: ${result.length} of ${stocks.length} stocks match criteria`);
+        }
+        
         return result;
       }, [stocks, debouncedSearch, selectedSector, selectedPreset, filters, sortBy, showWatchlistOnly, watchlist]);
 
@@ -24274,6 +24293,27 @@ Be realistic and conservative. Base confidence on data quality.`;
                         </div>
                       )}
 
+                      {/* Debug: Show when stocks loaded but filtered is empty */}
+                      {stocks.length > 0 && filtered.length === 0 && !loading && !isIncrementalLoading && (
+                        <div className="text-center py-20">
+                          <i className="fas fa-filter text-6xl text-yellow-500 mb-4"></i>
+                          <p className="text-slate-300 text-lg font-semibold mb-2">No stocks match current filters</p>
+                          <p className="text-slate-400 text-sm mb-4">{stocks.length} stocks loaded, but all filtered out</p>
+                          <button
+                            onClick={() => {
+                              setSelectedPreset('');
+                              setSelectedSector('');
+                              setSearch('');
+                              setShowWatchlistOnly(false);
+                              setFilters({});
+                            }}
+                            className="px-6 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-semibold"
+                          >
+                            Clear All Filters
+                          </button>
+                        </div>
+                      )}
+                      
                       {/* Main Results Table */}
                       {filtered.length > 0 && !isIncrementalLoading ? (
                         <>
