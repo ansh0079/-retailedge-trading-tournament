@@ -22665,12 +22665,20 @@ Be realistic and conservative. Base confidence on data quality.`;
                   }
                 }
                 
-                processedStocks.push({
+                const stockWithData = {
                   ...stockData,
                   mlPrediction: stockData.mlPrediction || { predPct: null, conf: null, trend: null }
-                });
+                };
+                
+                processedStocks.push(stockWithData);
+                
+                // FIX: Also populate allStocks and increment completedCount
+                allStocks.push(stockWithData);
+                completedCount++;
               } catch (err) {
                 processedStocks.push(stockData);
+                allStocks.push(stockData);
+                completedCount++;
               }
             });
 
@@ -24984,12 +24992,27 @@ Be realistic and conservative. Base confidence on data quality.`;
       }
       
       // Update function
+      let failedAttempts = 0;
+      const MAX_FAILED_ATTEMPTS = 3;
+      
       async function updateCostDashboard() {
         try {
           const response = await fetch(`${window.API_BASE_URL}/api/ai/costs`);
-          if (!response.ok) throw new Error('Failed to fetch costs');
+          
+          // If endpoint doesn't exist or returns HTML, silently fail
+          if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
+            failedAttempts++;
+            if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
+              // Hide dashboard after multiple failures
+              const dashboard = document.getElementById('ai-cost-dashboard');
+              if (dashboard) dashboard.style.display = 'none';
+              console.log('ℹ️ AI Cost Dashboard hidden (backend endpoint not available)');
+            }
+            return;
+          }
           
           const data = await response.json();
+          failedAttempts = 0; // Reset on success
           
           // Daily
           const dailyPercent = Math.min(100, (data.today / data.dailyBudget) * 100);
@@ -25044,7 +25067,13 @@ Be realistic and conservative. Base confidence on data quality.`;
           }
           
         } catch (error) {
-          console.warn('Cost dashboard update failed:', error);
+          failedAttempts++;
+          if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
+            const dashboard = document.getElementById('ai-cost-dashboard');
+            if (dashboard) dashboard.style.display = 'none';
+            console.log('ℹ️ AI Cost Dashboard hidden (backend endpoint not available)');
+          }
+          // Silently fail - don't spam console
         }
       }
       
