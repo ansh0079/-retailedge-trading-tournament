@@ -22508,38 +22508,57 @@ Be realistic and conservative. Base confidence on data quality.`;
               console.log(`🚀 Batch ${batchNum}/${totalBatches}: Loading ${batch.length} stocks...`);
               
               try {
-                // Use secure backend proxy for batch quotes
-                const response = await fetch(`${window.API_BASE_URL}/api/quotes/batch`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ symbols: batch })
-                });
-                
-                if (response.status === 429) {
-                  console.warn('⏳ Rate limited, waiting 5s...');
-                  await new Promise(r => setTimeout(r, 5000));
-                  i -= BATCH_SIZE; // Retry this batch
+                let data = null;
+
+                // Try backend proxy first, fallback to direct FMP API
+                try {
+                  const response = await fetch(`${window.API_BASE_URL}/api/quotes/batch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbols: batch })
+                  });
+
+                  if (response.status === 429) {
+                    console.warn('⏳ Rate limited, waiting 5s...');
+                    await new Promise(r => setTimeout(r, 5000));
+                    i -= BATCH_SIZE; // Retry this batch
+                    continue;
+                  }
+
+                  if (response.ok) {
+                    data = await response.json();
+                  }
+                } catch (proxyError) {
+                  console.warn(`⚠️ Proxy failed, trying direct FMP API...`);
+                }
+
+                // Fallback: Direct FMP API call if proxy failed or returned no data
+                if (!data || !Array.isArray(data) || data.length === 0) {
+                  console.log(`🔄 Batch ${batchNum}: Using direct FMP API fallback...`);
+                  try {
+                    const fmpUrl = `https://financialmodelingprep.com/stable/quote/${batch.join(',')}?apikey=${FMP_API_KEY}`;
+                    const fmpResponse = await fetch(fmpUrl);
+
+                    if (fmpResponse.status === 429) {
+                      console.warn('⏳ FMP rate limited, waiting 10s...');
+                      await new Promise(r => setTimeout(r, 10000));
+                      i -= BATCH_SIZE;
+                      continue;
+                    }
+
+                    if (fmpResponse.ok) {
+                      data = await fmpResponse.json();
+                    }
+                  } catch (fmpError) {
+                    console.error(`❌ Direct FMP also failed:`, fmpError.message);
+                  }
+                }
+
+                if (!Array.isArray(data) || data.length === 0) {
+                  console.warn(`⚠️ Batch ${batchNum} returned no data from any source`);
                   continue;
                 }
-                
-                if (!response.ok) {
-                  const errorText = await response.text();
-                  console.error(`❌ Batch ${batchNum} failed with ${response.status}:`, errorText.substring(0, 200));
-                  continue;
-                }
-                
-                const data = await response.json();
-                
-                if (!Array.isArray(data)) {
-                  console.error(`❌ Batch ${batchNum} returned non-array:`, typeof data, data);
-                  continue;
-                }
-                
-                if (data.length === 0) {
-                  console.warn(`⚠️ Batch ${batchNum} returned empty array for ${batch.length} symbols`);
-                  continue;
-                }
-                
+
                 console.log(`✅ Batch ${batchNum} received ${data.length} stocks`);
                 
                 const batchStocks = [];
