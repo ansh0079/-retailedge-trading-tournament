@@ -3186,7 +3186,8 @@ Please provide a clear, structured analysis in markdown format.`;
             // Fetch all chunks in parallel
             const chunkResults = await Promise.all(
               chunks.map(async (chunk) => {
-                const batchUrl = `https://financialmodelingprep.com/stable/${endpoint}?symbols=${chunk.join(',')}&apikey=${FMP_API_KEY}`;
+                // FIX: Symbols should be in path, not query parameter
+                const batchUrl = `https://financialmodelingprep.com/stable/${endpoint}/${chunk.join(',')}?apikey=${FMP_API_KEY}`;
                 console.log(`🚀 Batch fetching ${chunk.length} symbols for ${endpoint}`);
                 const response = await this.fetchUnique(batchUrl);
                 return await response.json();
@@ -22276,8 +22277,10 @@ Be realistic and conservative. Base confidence on data quality.`;
         setErrors([]);
         const startTime = new Date();
         
-        // FIX: Declare at function scope so it's accessible in finally block
+        // FIX: Declare at function scope so they're accessible in finally block
         let uniqueCuratedStocks = [];
+        let allStocks = [];
+        let completedCount = 0;
         
         // ═══════════════════════════════════════════════════════════════════
         // ULTRA-FAST STARTUP: Check localStorage first (sync), then IndexedDB
@@ -22566,65 +22569,9 @@ Be realistic and conservative. Base confidence on data quality.`;
             uncachedSymbols.length = 0;
             console.log(`✅ Streaming complete! ${displayedCount} stocks loaded`);
             
-            // FIX: Background enrichment for stocks missing screener fields
-            setTimeout(() => {
-              const stocksNeedingEnrichment = cachedStocks
-                .filter(s => s.data._needsEnrichment)
-                .slice(0, 50); // Limit to top 50 for performance
-              
-              if (stocksNeedingEnrichment.length > 0) {
-                console.log(`🔄 Enriching ${stocksNeedingEnrichment.length} stocks with screener fields...`);
-                
-                stocksNeedingEnrichment.forEach((stockObj, i) => {
-                  setTimeout(async () => {
-                    try {
-                      // Fetch additional metrics needed for screeners
-                      const symbol = stockObj.symbol;
-                      const metricsRes = await fetch(`https://financialmodelingprep.com/stable/key-metrics-ttm?symbol=${symbol}&apikey=${FMP_API_KEY}`);
-                      const ratiosRes = await fetch(`https://financialmodelingprep.com/stable/ratios?symbol=${symbol}&limit=1&apikey=${FMP_API_KEY}`);
-                      const growthRes = await fetch(`https://financialmodelingprep.com/stable/financial-growth?symbol=${symbol}&limit=1&apikey=${FMP_API_KEY}`);
-                      
-                      const [metricsData, ratiosData, growthData] = await Promise.all([
-                        metricsRes.ok ? metricsRes.json() : null,
-                        ratiosRes.ok ? ratiosRes.json() : null,
-                        growthRes.ok ? growthRes.json() : null
-                      ]);
-                      
-                      const metrics = metricsData?.[0];
-                      const ratios = ratiosData?.[0];
-                      const growth = growthData?.[0];
-                      
-                      // Update stock with enriched data
-                      setStocks(prev => prev.map(s => {
-                        if (s.symbol === symbol) {
-                          return {
-                            ...s,
-                            roe: metrics?.returnOnEquityTTM ? (metrics.returnOnEquityTTM * 100) : s.roe,
-                            revenueGrowth: growth?.revenueGrowth ? (growth.revenueGrowth * 100) : s.revenueGrowth,
-                            debtToEquity: ratios?.debtEquityRatio || s.debtToEquity,
-                            _needsEnrichment: false
-                          };
-                        }
-                        return s;
-                      }));
-                      
-                      // Update cache
-                      const updatedStock = stockObj.data;
-                      updatedStock.roe = metrics?.returnOnEquityTTM ? (metrics.returnOnEquityTTM * 100) : updatedStock.roe;
-                      updatedStock.revenueGrowth = growth?.revenueGrowth ? (growth.revenueGrowth * 100) : updatedStock.revenueGrowth;
-                      updatedStock.debtToEquity = ratios?.debtEquityRatio || updatedStock.debtToEquity;
-                      Cache.set(symbol, updatedStock, 'stock');
-                      
-                      if (i === 0 || i % 10 === 0) {
-                        console.log(`✅ Enriched ${i + 1}/${stocksNeedingEnrichment.length} stocks`);
-                      }
-                    } catch (err) {
-                      console.warn(`Failed to enrich ${stockObj.symbol}:`, err.message);
-                    }
-                  }, i * 500); // 500ms between each to avoid rate limits
-                });
-              }
-            }, 3000); // Start enrichment after 3 seconds
+            // FIX: Background enrichment for stocks missing screener fields - TEMPORARILY DISABLED
+            // This was causing crashes - will re-enable after debugging
+            console.log('ℹ️ Background enrichment temporarily disabled for stability');
             
             // OPTIMIZATION: Sort ONCE at the end using requestIdleCallback to avoid blocking
             requestIdleCallback(() => {
@@ -22648,8 +22595,9 @@ Be realistic and conservative. Base confidence on data quality.`;
             }
           }
 
-          const allStocks = [];
-          let completedCount = 0;
+          // Use function-scoped variables
+          allStocks = [];
+          completedCount = 0;
 
           // OPTIMIZATION: Batched stock updates instead of incremental
           let pendingStockUpdates = [];
