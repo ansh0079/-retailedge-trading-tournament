@@ -14,6 +14,119 @@ const TOURNAMENT_DATA_FILE = path.join(__dirname, 'tournament_data.json');
 const app = express();
 const PORT = process.env.PORT || 3002; // Use environment variable for cloud deployment
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// SHARED UTILITIES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// GLOBAL RATE LIMITER FOR FMP API
+// This ensures we NEVER exceed the rate limit, no matter how many parallel batches the frontend sends.
+class GlobalRateLimiter {
+  constructor(minDelayMs = 300) { // 300ms = ~3 requests/second (Very Safe)
+    this.queue = [];
+    this.processing = false;
+    this.minDelayMs = minDelayMs;
+    this.lastRequestTime = 0;
+  }
+
+  async schedule(fn) {
+    return new Promise((resolve, reject) => {
+      this.queue.push({ fn, resolve, reject });
+      this.processQueue();
+    });
+  }
+
+  async processQueue() {
+    if (this.processing) return;
+    this.processing = true;
+
+    while (this.queue.length > 0) {
+      const now = Date.now();
+      const timeSinceLast = now - this.lastRequestTime;
+      const waitTime = Math.max(0, this.minDelayMs - timeSinceLast);
+
+      if (waitTime > 0) {
+        await new Promise(r => setTimeout(r, waitTime));
+      }
+
+      const { fn, resolve, reject } = this.queue.shift();
+      this.lastRequestTime = Date.now();
+
+      try {
+        const result = await fn();
+        resolve(result);
+      } catch (error) {
+        reject(error);
+      }
+    }
+
+    this.processing = false;
+  }
+}
+
+const fmpLimiter = new GlobalRateLimiter(300); // Enforce 300ms gap between ALL FMP logs
+
+// Robust fetch with retry and timeout AND GLOBAL RATE LIMITING
+async function fetchWithRetry(url, options = {}) {
+  const { timeoutMs = 10000, retries = 2, headers = {} } = options;
+
+  // If request is to FMP, wrap it in the global limiter
+  if (url.includes('financialmodelingprep.com')) {
+    return fmpLimiter.schedule(() => executeFetch(url, options));
+  }
+  return executeFetch(url, options);
+}
+
+// Internal fetch executor
+async function executeFetch(url, options) {
+  const { timeoutMs = 10000, retries = 2, headers = {} } = options;
+  let lastError;
+
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          ...headers,
+          'User-Agent': 'RetailEdgePro/1.0'
+        }
+      });
+
+      clearTimeout(timeout);
+
+      if (response.status === 429) {
+        if (i < retries) {
+          // Increase backoff significantly if we hit a 429 despite our limiter
+          const waitTime = 5000 * (i + 1);
+          console.warn(`⏳ Rate limit hit (429) for ${url}, waiting ${waitTime}ms...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          continue;
+        }
+        return response;
+      }
+
+      return response;
+
+    } catch (error) {
+      lastError = error;
+      if (error.name === 'AbortError') {
+        console.warn(`⏱️ Timeout fetching ${url} (Attempt ${i + 1}/${retries + 1})`);
+      } else {
+        console.warn(`❌ Network error fetching ${url}: ${error.message} (Attempt ${i + 1}/${retries + 1})`);
+      }
+
+      if (i < retries) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+      }
+    }
+  }
+
+  throw lastError || new Error(`Failed to fetch ${url} after ${retries} retries`);
+}
+
 // API Keys - Use environment variables for security
 const CLAUDE_API_KEY = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
 const KIMI_API_KEY = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;
