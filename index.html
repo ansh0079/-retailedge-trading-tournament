@@ -21408,7 +21408,53 @@ Be realistic and conservative. Base confidence on data quality.`;
         }, 180000); // 3 minutes
 
         try {
-          console.log('🔄 Loading', curatedStocks.length, 'stocks with full data...');
+          console.log('🔄 Loading', curatedStocks.length, 'stocks...');
+
+          // ═══════════════════════════════════════════════════════════════════
+          // FAST BATCH QUOTE LOADER - Fetches 100 stocks per API call!
+          // ═══════════════════════════════════════════════════════════════════
+          
+          const fetchBatchQuotesOnly = async (symbols) => {
+            const results = [];
+            const BATCH_SIZE = 100; // FMP supports up to 100 symbols per call
+            
+            for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
+              const batch = symbols.slice(i, i + BATCH_SIZE);
+              const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+              const totalBatches = Math.ceil(symbols.length / BATCH_SIZE);
+              
+              console.log(`🚀 Batch quote ${batchNum}/${totalBatches}: Fetching ${batch.length} stocks in ONE call...`);
+              
+              try {
+                const url = `https://financialmodelingprep.com/stable/quote/${batch.join(',')}?apikey=${FMP_API_KEY}`;
+                const response = await fetch(url);
+                
+                if (response.status === 429) {
+                  console.warn('⏳ Rate limited on batch quote, waiting 10s...');
+                  await new Promise(r => setTimeout(r, 10000));
+                  i -= BATCH_SIZE; // Retry this batch
+                  continue;
+                }
+                
+                if (response.ok) {
+                  const data = await response.json();
+                  if (Array.isArray(data)) {
+                    results.push(...data);
+                    console.log(`✅ Got ${data.length} quotes in batch ${batchNum}`);
+                  }
+                }
+                
+                // Small delay between batches to avoid rate limits
+                if (i + BATCH_SIZE < symbols.length) {
+                  await new Promise(r => setTimeout(r, 1000));
+                }
+              } catch (error) {
+                console.warn(`Batch ${batchNum} failed:`, error);
+              }
+            }
+            
+            return results;
+          };
 
           // OPTIMIZATION: Check cache for all stocks first
           const cachedStocks = [];
@@ -21434,6 +21480,61 @@ Be realistic and conservative. Base confidence on data quality.`;
           }
 
           console.log(`⚡ Found ${cachedStocks.length} cached stocks, ${uncachedSymbols.length} need fetching`);
+          
+          // ═══════════════════════════════════════════════════════════════════
+          // FAST PATH: Use batch quotes for uncached stocks (10x faster!)
+          // ═══════════════════════════════════════════════════════════════════
+          
+          if (uncachedSymbols.length > 0 && uncachedSymbols.length > 20) {
+            console.log('🚀 Using FAST batch quote loader for', uncachedSymbols.length, 'stocks...');
+            
+            const batchQuotes = await fetchBatchQuotesOnly(uncachedSymbols);
+            
+            // Process batch quotes into stock objects with AI analysis
+            batchQuotes.forEach(quote => {
+              if (!quote || !quote.symbol) return;
+              
+              const stockData = {
+                symbol: quote.symbol,
+                name: quote.name || quote.symbol,
+                price: quote.price,
+                changePct: quote.changesPercentage,
+                change: quote.change,
+                volume: quote.volume,
+                avgVolume: quote.avgVolume,
+                marketCap: quote.marketCap,
+                pe: quote.pe,
+                eps: quote.eps,
+                high52: quote.yearHigh,
+                low52: quote.yearLow,
+                dayHigh: quote.dayHigh,
+                dayLow: quote.dayLow,
+                open: quote.open,
+                previousClose: quote.previousClose,
+                exchange: quote.exchange,
+                index: 'Curated',
+                _batchLoaded: true
+              };
+              
+              // Add AI analysis
+              const ai = generateAIAnalysis(stockData);
+              Object.assign(stockData, ai);
+              
+              // Cache it
+              Cache.set(quote.symbol, stockData, 'stock');
+              
+              // Add to cached stocks
+              cachedStocks.push({ symbol: quote.symbol, data: stockData });
+            });
+            
+            console.log(`✅ Batch loaded ${batchQuotes.length} stocks! Total cached: ${cachedStocks.length}`);
+            
+            // Save to session for instant reload
+            if (window.SessionPersistence) {
+              const allData = cachedStocks.map(s => s.data);
+              SessionPersistence.saveSession(allData, {}, []);
+            }
+          }
 
           const allStocks = [];
           let completedCount = 0;
