@@ -794,34 +794,83 @@ app.post('/api/quotes/batch', async (req, res) => {
       return res.status(400).json({ error: 'symbols array is required' });
     }
 
-    // Limit batch size to 100 (FMP limit)
+    // Limit batch size to 100
     const batchSymbols = symbols.slice(0, 100);
-    const symbolString = batchSymbols.join(',');
 
-    console.log(`📊 Batch quote request for ${batchSymbols.length} symbols...`);
+    console.log(`📊 Batch quote request for ${batchSymbols.length} symbols (parallel batching for FMP Starter)...`);
 
-    // FMP Batch Quote API endpoint (correct format)
-    const url = `https://financialmodelingprep.com/stable/batch-quote?symbols=${symbolString}&apikey=${FMP_API_KEY}`;
+    // FMP Starter tier doesn't support batch-quote endpoint
+    // Process in parallel batches of 5 for 5x performance improvement
+    const CONCURRENT_REQUESTS = 5;
+    const results = [];
+    const errors = [];
 
-    const response = await fetchWithRetry(url, {
-      timeoutMs: 30000,
-      retries: 2
-    });
-
-    if (response.status === 429) {
-      console.warn('⏳ FMP rate limited on batch quotes');
-      return res.status(429).json({ error: 'Rate limited, please retry' });
+    // Split symbols into chunks of 5
+    const chunks = [];
+    for (let i = 0; i < batchSymbols.length; i += CONCURRENT_REQUESTS) {
+      chunks.push(batchSymbols.slice(i, i + CONCURRENT_REQUESTS));
     }
 
-    const data = await response.json();
+    console.log(`   Processing ${batchSymbols.length} symbols in ${chunks.length} parallel batches...`);
 
-    if (Array.isArray(data)) {
-      console.log(`✅ Batch quotes: Got ${data.length} quotes`);
-      res.json(data);
-    } else {
-      console.warn('⚠️ Unexpected batch quote response:', data);
-      res.json([]);
+    for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+      const chunk = chunks[chunkIndex];
+
+      // Process all symbols in this chunk in parallel
+      const promises = chunk.map(async symbol => {
+        try {
+          const url = `https://financialmodelingprep.com/stable/quote/${symbol}?apikey=${FMP_API_KEY}`;
+
+          const response = await fetchWithRetry(url, {
+            timeoutMs: 10000,
+            retries: 1
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (Array.isArray(data) && data.length > 0) {
+              return { success: true, data: data[0] };
+            }
+          } else if (response.status === 429) {
+            console.warn(`⏳ Rate limited on ${symbol}`);
+            return { success: false, symbol, error: 'Rate limited' };
+          } else {
+            return { success: false, symbol, error: `HTTP ${response.status}` };
+          }
+
+          return { success: false, symbol, error: 'No data' };
+        } catch (error) {
+          console.warn(`❌ Failed to fetch ${symbol}:`, error.message);
+          return { success: false, symbol, error: error.message };
+        }
+      });
+
+      // Wait for all requests in this batch to complete
+      const batchResults = await Promise.all(promises);
+
+      // Collect results and errors
+      batchResults.forEach(result => {
+        if (result.success) {
+          results.push(result.data);
+        } else {
+          errors.push({ symbol: result.symbol, error: result.error });
+        }
+      });
+
+      // Rate limiting: 250ms between batches (not between individual requests)
+      // This respects the 300 calls/minute limit while processing 5 at a time
+      if (chunkIndex < chunks.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
     }
+
+    console.log(`✅ Batch quotes: Got ${results.length}/${batchSymbols.length} quotes`);
+
+    if (errors.length > 0) {
+      console.warn(`⚠️ Failed to fetch ${errors.length} symbols:`, errors.slice(0, 5));
+    }
+
+    res.json(results);
   } catch (error) {
     console.error('❌ Batch quotes error:', error.message);
     res.status(500).json({ error: 'Failed to fetch batch quotes: ' + error.message });

@@ -265,7 +265,163 @@
           "portfolioValue": 50000
         }
       ]
+    },
+    {
+      "timestamp": "2026-01-28T14:49:52.972Z",
+      "time": "09:49 AM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T14:53:37.341Z",
+      "time": "09:53 AM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T14:55:02.628Z",
+      "time": "09:55 AM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T14:59:43.816Z",
+      "time": "09:59 AM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T15:00:06.318Z",
+      "time": "10:00 AM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T15:02:30.286Z",
+      "time": "10:02 AM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
     }
   ],
-  "savedAt": "2026-01-28T14:46:08.984Z"
+  "savedAt": "2026-01-28T15:02:30.286Z"
 }
