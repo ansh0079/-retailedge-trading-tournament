@@ -4,5 +4,5 @@ AI API Keys Status Check
 Claude (Anthropic): CONFIGURED (sk-a...5QAA)
 DeepSeek: CONFIGURED (sk-d...0e72)
 Kimi (Moonshot): CONFIGURED (sk-k...K38R)
-Gemini (Google): CONFIGURED (AIza...nZ_c)
+Gemini (Google): CONFIGURED (AIza...C9ds)
 FMP (Financial Data): CONFIGURED (h43n...MxIz)
