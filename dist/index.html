@@ -21924,49 +21924,26 @@ Be realistic and conservative. Base confidence on data quality.`;
                     if (batchStocks.length > 0) {
                       displayedCount += batchStocks.length;
                       
-                      // Compute AI for ONLY first 50 stocks (visible on screen)
-                      batchStocks.forEach((stock, idx) => {
-                        if (idx < 50 && stock._needsAI) {
+                      // Add AI analysis to ALL stocks immediately (fast function)
+                      batchStocks.forEach((stock) => {
+                        if (!stock.aiScore) {
                           const ai = generateAIAnalysis(stock);
                           Object.assign(stock, ai);
-                          delete stock._needsAI;
                         }
                       });
                       
-                      // Optimize React rendering with batching
-                      requestAnimationFrame(() => {
-                        setStocks(prev => {
-                          const existing = new Set(prev.map(s => s.symbol?.toUpperCase()));
-                          const newStocks = batchStocks.filter(s => !existing.has(s.symbol?.toUpperCase()));
-                          // FAST merge - only sort once at end
-                          const merged = [...prev, ...newStocks];
-                          // Defer sort to next frame for smoother UX
-                          if (displayedCount >= uncachedSymbols.length) {
-                            merged.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
-                          }
-                          return merged;
-                        });
+                      // IMMEDIATE UPDATE - no requestAnimationFrame delay!
+                      setStocks(prev => {
+                        const existing = new Set(prev.map(s => s.symbol?.toUpperCase()));
+                        const newStocks = batchStocks.filter(s => !existing.has(s.symbol?.toUpperCase()));
+                        const merged = [...prev, ...newStocks];
+                        // Sort by market cap for better UX
+                        return merged.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
                       });
+                      
                       setLoading(false); // Show UI after first batch!
                       setLoadingProgress({ current: displayedCount, total: uncachedSymbols.length });
-                      console.log(`✅ Batch ${batchNum}: ${batchStocks.length} stocks displayed! Total: ${displayedCount}`);
-                      
-                      // Compute AI for remaining stocks in background (async, non-blocking)
-                      if (batchStocks.length > 50) {
-                        setTimeout(() => {
-                          const remaining = batchStocks.slice(50);
-                          remaining.forEach(stock => {
-                            if (stock._needsAI) {
-                              const ai = generateAIAnalysis(stock);
-                              Object.assign(stock, ai);
-                              Cache.set(stock.symbol, stock, 'stock'); // Update cache
-                              delete stock._needsAI;
-                            }
-                          });
-                          // Trigger re-render with AI data
-                          setStocks(prev => [...prev]);
-                        }, 2000);
-                      }
+                      console.log(`✅ Batch ${batchNum}: ${batchStocks.length} stocks DISPLAYED! Total visible: ${displayedCount}`);
                     }
                   }
                 }
