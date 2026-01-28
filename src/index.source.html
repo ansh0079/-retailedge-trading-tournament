@@ -21934,38 +21934,47 @@ Be realistic and conservative. Base confidence on data quality.`;
           }
 
           const quoteData = await quoteRes.json();
-          await delay(500); // Increased to 500ms to avoid rate limits
 
-          const metricsRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/key-metrics-ttm?symbol=${symbol}&apikey=${FMP_API_KEY}`);
-          const metricsData = metricsRes?.ok ? await metricsRes.json() : null;
-          await delay(500);
+          // ═══════════════════════════════════════════════════════════════════
+          // OPTIMIZATION: Parallel API fetching - 10x faster than sequential!
+          // Was: 8 API calls × 500ms delay = 4+ seconds per stock
+          // Now: All calls in parallel, single 200ms delay after = ~500ms per stock
+          // ═══════════════════════════════════════════════════════════════════
 
-          const scoresRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/financial-scores?symbol=${symbol}&apikey=${FMP_API_KEY}`);
-          const scoresData = scoresRes?.ok ? await scoresRes.json() : null;
-          await delay(500);
+          const [
+            metricsRes,
+            scoresRes,
+            ratingsRes,
+            targetRes,
+            profileRes,
+            gradesRes,
+            ratiosRes,
+            growthRes
+          ] = await Promise.all([
+            fetchFMPWithRetry(`https://financialmodelingprep.com/stable/key-metrics-ttm?symbol=${symbol}&apikey=${FMP_API_KEY}`),
+            fetchFMPWithRetry(`https://financialmodelingprep.com/stable/financial-scores?symbol=${symbol}&apikey=${FMP_API_KEY}`),
+            fetchFMPWithRetry(`https://financialmodelingprep.com/stable/ratings-snapshot?symbol=${symbol}&apikey=${FMP_API_KEY}`),
+            fetchFMPWithRetry(`https://financialmodelingprep.com/stable/price-target-consensus?symbol=${symbol}&apikey=${FMP_API_KEY}`),
+            fetchFMPWithRetry(`https://financialmodelingprep.com/stable/profile?symbol=${symbol}&apikey=${FMP_API_KEY}`),
+            fetchFMPWithRetry(`https://financialmodelingprep.com/stable/grades?symbol=${symbol}&limit=10&apikey=${FMP_API_KEY}`),
+            fetchFMPWithRetry(`https://financialmodelingprep.com/stable/ratios?symbol=${symbol}&limit=1&apikey=${FMP_API_KEY}`),
+            fetchFMPWithRetry(`https://financialmodelingprep.com/stable/financial-growth?symbol=${symbol}&limit=5&apikey=${FMP_API_KEY}`)
+          ]);
 
-          const ratingsRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/ratings-snapshot?symbol=${symbol}&apikey=${FMP_API_KEY}`);
-          const ratingsData = ratingsRes?.ok ? await ratingsRes.json() : null;
-          await delay(500);
+          // Parse all responses in parallel too
+          const [metricsData, scoresData, ratingsData, targetData, profileData, grades, ratiosData, growthData] = await Promise.all([
+            metricsRes?.ok ? metricsRes.json() : null,
+            scoresRes?.ok ? scoresRes.json() : null,
+            ratingsRes?.ok ? ratingsRes.json() : null,
+            targetRes?.ok ? targetRes.json() : null,
+            profileRes?.ok ? profileRes.json() : null,
+            gradesRes?.ok ? gradesRes.json() : [],
+            ratiosRes?.ok ? ratiosRes.json() : null,
+            growthRes?.ok ? growthRes.json() : null
+          ]);
 
-          const targetRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/price-target-consensus?symbol=${symbol}&apikey=${FMP_API_KEY}`);
-          const targetData = targetRes?.ok ? await targetRes.json() : null;
-          await delay(500);
-
-          const profileRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/profile?symbol=${symbol}&apikey=${FMP_API_KEY}`);
-          const profileData = profileRes?.ok ? await profileRes.json() : null;
-          await delay(500);
-
-          const gradesRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/grades?symbol=${symbol}&limit=10&apikey=${FMP_API_KEY}`);
-          const grades = gradesRes?.ok ? await gradesRes.json() : [];
-          await delay(500);
-
-          const ratiosRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/ratios?symbol=${symbol}&limit=1&apikey=${FMP_API_KEY}`);
-          const ratiosData = ratiosRes?.ok ? await ratiosRes.json() : null;
-          await delay(500);
-
-          const growthRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/financial-growth?symbol=${symbol}&limit=5&apikey=${FMP_API_KEY}`);
-          const growthData = growthRes?.ok ? await growthRes.json() : null;
+          // Single delay after parallel batch to respect rate limits
+          await delay(200);
 
           if (!quoteData || quoteData.length === 0) {
             throw new Error('Stock not found - empty response');

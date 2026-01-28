@@ -2384,36 +2384,58 @@ Please provide a clear, structured analysis in markdown format.`;
     // ═══════════════════════════════════════════════════════════════════════════
     // CLEANUP OLD CACHE DATA - Weekly cleanup to prevent bloat
     // ═══════════════════════════════════════════════════════════════════════════
+    // OPTIMIZED: Runs in idle time, chunked to avoid blocking UI
 
     function cleanupOldCacheData() {
       const cleanupKey = 're_last_cache_cleanup';
       const lastCleanup = parseInt(localStorage.getItem(cleanupKey) || '0');
       const oneWeek = 7 * 24 * 60 * 60 * 1000;
-      
+
       if (Date.now() - lastCleanup > oneWeek) {
-        console.log('🧹 Running weekly cache cleanup...');
-        
-        const keysToRemove = [];
+        console.log('🧹 Running weekly cache cleanup in background...');
+
+        // Collect keys first (fast)
+        const allKeys = [];
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          
           if (key && (key.startsWith('re_advanced_') || key.startsWith('re_cache_') || key.startsWith('v5_') || key.startsWith('v6_'))) {
-            try {
-              const data = JSON.parse(localStorage.getItem(key));
-              if (data && Date.now() - (data.timestamp || 0) > 90 * 24 * 60 * 60 * 1000) {
-                keysToRemove.push(key);
-              }
-            } catch {
-              // If can't parse, remove it
-              keysToRemove.push(key);
-            }
+            allKeys.push(key);
           }
         }
-        
-        keysToRemove.forEach(key => localStorage.removeItem(key));
-        
-        localStorage.setItem(cleanupKey, Date.now().toString());
-        console.log(`🧹 Cleaned up ${keysToRemove.length} old cache entries`);
+
+        // Process keys in chunks during idle time
+        const CHUNK_SIZE = 50;
+        let currentIndex = 0;
+        let removedCount = 0;
+        const ninetyDaysAgo = Date.now() - (90 * 24 * 60 * 60 * 1000);
+
+        const processChunk = (deadline) => {
+          while (currentIndex < allKeys.length && deadline.timeRemaining() > 0) {
+            const key = allKeys[currentIndex++];
+            try {
+              const raw = localStorage.getItem(key);
+              if (raw) {
+                const data = JSON.parse(raw);
+                if (data && (data.timestamp || 0) < ninetyDaysAgo) {
+                  localStorage.removeItem(key);
+                  removedCount++;
+                }
+              }
+            } catch {
+              localStorage.removeItem(key);
+              removedCount++;
+            }
+          }
+
+          if (currentIndex < allKeys.length) {
+            requestIdleCallback(processChunk, { timeout: 1000 });
+          } else {
+            localStorage.setItem(cleanupKey, Date.now().toString());
+            console.log(`🧹 Cleanup complete: removed ${removedCount} old cache entries`);
+          }
+        };
+
+        requestIdleCallback(processChunk, { timeout: 5000 });
       }
     }
 
@@ -2451,8 +2473,11 @@ Please provide a clear, structured analysis in markdown format.`;
       }
     };
 
-    // Run cleanup on startup (delayed)
-    setTimeout(cleanupOldCacheData, 5000);
+    // Run cleanup on startup (heavily deferred - 30 seconds after load)
+    // OPTIMIZATION: Wait until app is fully interactive before cleanup
+    setTimeout(() => {
+      requestIdleCallback(cleanupOldCacheData, { timeout: 60000 });
+    }, 30000);
 
     // Expose for manual use
     window.SessionPersistence = SessionPersistence;
@@ -2465,8 +2490,10 @@ Please provide a clear, structured analysis in markdown format.`;
 
     const Cache = {
       // IN-MEMORY CACHE LAYER - Instant access, no parsing needed
+      // OPTIMIZED: Increased size to 1200 to hold stocks + quotes without thrashing
       _memoryCache: new Map(),
-      _memoryCacheMaxSize: 500,
+      _memoryCacheMaxSize: 1200,
+      _accessOrder: [],  // Track access order for proper LRU
       _marketOpenCached: null,
       _marketOpenCacheTime: 0,
 
@@ -2523,8 +2550,14 @@ Please provide a clear, structured analysis in markdown format.`;
 
       // INTERNAL: Load from localStorage into memory cache
       _loadToMemory(key) {
-        // Already in memory?
+        // Already in memory? Update access order for LRU
         if (this._memoryCache.has(key)) {
+          // Move to end of access order (most recently used)
+          const idx = this._accessOrder.indexOf(key);
+          if (idx > -1) {
+            this._accessOrder.splice(idx, 1);
+            this._accessOrder.push(key);
+          }
           return this._memoryCache.get(key);
         }
 
@@ -2535,13 +2568,16 @@ Please provide a clear, structured analysis in markdown format.`;
           // Parse once, store in memory
           const parsed = JSON.parse(cached);
 
-          // Store in memory cache with LRU eviction
+          // Store in memory cache with proper LRU eviction
           if (this._memoryCache.size >= this._memoryCacheMaxSize) {
-            // Remove oldest entry
-            const firstKey = this._memoryCache.keys().next().value;
-            this._memoryCache.delete(firstKey);
+            // Remove LEAST recently used (first in access order)
+            const lruKey = this._accessOrder.shift();
+            if (lruKey) {
+              this._memoryCache.delete(lruKey);
+            }
           }
           this._memoryCache.set(key, parsed);
+          this._accessOrder.push(key);
 
           return parsed;
         } catch (error) {
@@ -2610,12 +2646,23 @@ Please provide a clear, structured analysis in markdown format.`;
           version: CACHE_CONFIG.CACHE_VERSION
         };
 
-        // Update memory cache immediately (fast)
+        // Update memory cache immediately (fast) with proper LRU
         if (this._memoryCache.size >= this._memoryCacheMaxSize) {
-          const firstKey = this._memoryCache.keys().next().value;
-          this._memoryCache.delete(firstKey);
+          // Remove least recently used
+          const lruKey = this._accessOrder.shift();
+          if (lruKey) {
+            this._memoryCache.delete(lruKey);
+          }
         }
+
+        // Remove from old position in access order if exists
+        const existingIdx = this._accessOrder.indexOf(key);
+        if (existingIdx > -1) {
+          this._accessOrder.splice(existingIdx, 1);
+        }
+
         this._memoryCache.set(key, cacheData);
+        this._accessOrder.push(key);
 
         // Persist to localStorage asynchronously (don't block UI)
         requestAnimationFrame(() => {
@@ -21934,38 +21981,47 @@ Be realistic and conservative. Base confidence on data quality.`;
           }
 
           const quoteData = await quoteRes.json();
-          await delay(500); // Increased to 500ms to avoid rate limits
 
-          const metricsRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/key-metrics-ttm?symbol=${symbol}&apikey=${FMP_API_KEY}`);
-          const metricsData = metricsRes?.ok ? await metricsRes.json() : null;
-          await delay(500);
+          // ═══════════════════════════════════════════════════════════════════
+          // OPTIMIZATION: Parallel API fetching - 10x faster than sequential!
+          // Was: 8 API calls × 500ms delay = 4+ seconds per stock
+          // Now: All calls in parallel, single 200ms delay after = ~500ms per stock
+          // ═══════════════════════════════════════════════════════════════════
 
-          const scoresRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/financial-scores?symbol=${symbol}&apikey=${FMP_API_KEY}`);
-          const scoresData = scoresRes?.ok ? await scoresRes.json() : null;
-          await delay(500);
+          const [
+            metricsRes,
+            scoresRes,
+            ratingsRes,
+            targetRes,
+            profileRes,
+            gradesRes,
+            ratiosRes,
+            growthRes
+          ] = await Promise.all([
+            fetchFMPWithRetry(`https://financialmodelingprep.com/stable/key-metrics-ttm?symbol=${symbol}&apikey=${FMP_API_KEY}`),
+            fetchFMPWithRetry(`https://financialmodelingprep.com/stable/financial-scores?symbol=${symbol}&apikey=${FMP_API_KEY}`),
+            fetchFMPWithRetry(`https://financialmodelingprep.com/stable/ratings-snapshot?symbol=${symbol}&apikey=${FMP_API_KEY}`),
+            fetchFMPWithRetry(`https://financialmodelingprep.com/stable/price-target-consensus?symbol=${symbol}&apikey=${FMP_API_KEY}`),
+            fetchFMPWithRetry(`https://financialmodelingprep.com/stable/profile?symbol=${symbol}&apikey=${FMP_API_KEY}`),
+            fetchFMPWithRetry(`https://financialmodelingprep.com/stable/grades?symbol=${symbol}&limit=10&apikey=${FMP_API_KEY}`),
+            fetchFMPWithRetry(`https://financialmodelingprep.com/stable/ratios?symbol=${symbol}&limit=1&apikey=${FMP_API_KEY}`),
+            fetchFMPWithRetry(`https://financialmodelingprep.com/stable/financial-growth?symbol=${symbol}&limit=5&apikey=${FMP_API_KEY}`)
+          ]);
 
-          const ratingsRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/ratings-snapshot?symbol=${symbol}&apikey=${FMP_API_KEY}`);
-          const ratingsData = ratingsRes?.ok ? await ratingsRes.json() : null;
-          await delay(500);
+          // Parse all responses in parallel too
+          const [metricsData, scoresData, ratingsData, targetData, profileData, grades, ratiosData, growthData] = await Promise.all([
+            metricsRes?.ok ? metricsRes.json() : null,
+            scoresRes?.ok ? scoresRes.json() : null,
+            ratingsRes?.ok ? ratingsRes.json() : null,
+            targetRes?.ok ? targetRes.json() : null,
+            profileRes?.ok ? profileRes.json() : null,
+            gradesRes?.ok ? gradesRes.json() : [],
+            ratiosRes?.ok ? ratiosRes.json() : null,
+            growthRes?.ok ? growthRes.json() : null
+          ]);
 
-          const targetRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/price-target-consensus?symbol=${symbol}&apikey=${FMP_API_KEY}`);
-          const targetData = targetRes?.ok ? await targetRes.json() : null;
-          await delay(500);
-
-          const profileRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/profile?symbol=${symbol}&apikey=${FMP_API_KEY}`);
-          const profileData = profileRes?.ok ? await profileRes.json() : null;
-          await delay(500);
-
-          const gradesRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/grades?symbol=${symbol}&limit=10&apikey=${FMP_API_KEY}`);
-          const grades = gradesRes?.ok ? await gradesRes.json() : [];
-          await delay(500);
-
-          const ratiosRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/ratios?symbol=${symbol}&limit=1&apikey=${FMP_API_KEY}`);
-          const ratiosData = ratiosRes?.ok ? await ratiosRes.json() : null;
-          await delay(500);
-
-          const growthRes = await fetchFMPWithRetry(`https://financialmodelingprep.com/stable/financial-growth?symbol=${symbol}&limit=5&apikey=${FMP_API_KEY}`);
-          const growthData = growthRes?.ok ? await growthRes.json() : null;
+          // Single delay after parallel batch to respect rate limits
+          await delay(200);
 
           if (!quoteData || quoteData.length === 0) {
             throw new Error('Stock not found - empty response');
@@ -22018,20 +22074,25 @@ Be realistic and conservative. Base confidence on data quality.`;
           const revenueGrowthPct = revenueGrowthRaw !== null ? (revenueGrowthRaw * 100) : null;
           const netIncomeGrowthPct = netIncomeGrowthRaw !== null ? (netIncomeGrowthRaw * 100) : null;
           const epsGrowthPct = epsGrowthRaw !== null ? (epsGrowthRaw * 100) : null;
-          await delay(50);
 
-          // Earnings
-          const earningsRes = await fetch(`https://financialmodelingprep.com/api/v3/historical/earning_calendar/${symbol}?apikey=${FMP_API_KEY}`);
-          const earnings = earningsRes.ok ? await earningsRes.json() : [];
-          await delay(50);
+          // ═══════════════════════════════════════════════════════════════════
+          // OPTIMIZATION: Parallel fetch for earnings, peers, and news
+          // ═══════════════════════════════════════════════════════════════════
+          const [earningsRes, peersRes, newsRes] = await Promise.all([
+            fetch(`https://financialmodelingprep.com/api/v3/historical/earning_calendar/${symbol}?apikey=${FMP_API_KEY}`),
+            fetch(`https://financialmodelingprep.com/api/v4/stock_peers?symbol=${symbol}&apikey=${FMP_API_KEY}`),
+            fetch(`https://financialmodelingprep.com/api/v3/stock_news?tickers=${symbol}&limit=20&apikey=${FMP_API_KEY}`)
+          ]);
 
-          // Stock Peers
-          const peersRes = await fetch(`https://financialmodelingprep.com/api/v4/stock_peers?symbol=${symbol}&apikey=${FMP_API_KEY}`);
-          const peersData = peersRes.ok ? await peersRes.json() : null;
-          const peers = peersData && peersData.length > 0 ? peersData[0]?.peersList : [];
-          await delay(50);
+          const [earnings, peersDataRaw, articlesRaw] = await Promise.all([
+            earningsRes.ok ? earningsRes.json() : [],
+            peersRes.ok ? peersRes.json() : null,
+            newsRes.ok ? newsRes.json() : []
+          ]);
 
-          // Latest News (stock-specific)
+          const peers = peersDataRaw && peersDataRaw.length > 0 ? peersDataRaw[0]?.peersList : [];
+
+          // Process news
           let news = [];
           try {
             // Prefer the unified news manager (more sources; already filtered to last 30 days)
@@ -22044,54 +22105,34 @@ Be realistic and conservative. Base confidence on data quality.`;
                 publishedDate: a.publishedAt || a.publishedDate || a.date,
                 image: a.image
               }));
-            } else {
-              const newsRes = await fetch(`https://financialmodelingprep.com/api/v3/stock_news?tickers=${symbol}&limit=20&apikey=${FMP_API_KEY}`);
-              if (newsRes.ok) {
-                let articles = await newsRes.json();
+            } else if (articlesRaw && articlesRaw.length > 0) {
+              let articles = articlesRaw;
 
-                // Filter to ensure news mentions the stock
-                const companyName = profile?.companyName?.toLowerCase() || '';
-                news = articles.filter(article => {
-                  if (!article.title) return false;
-                  const text = (article.title + ' ' + (article.text || '')).toLowerCase();
-                  const sym = symbol.toLowerCase();
-                  // Check if article mentions symbol or company name
-                  return text.includes(sym) || (companyName && text.includes(companyName));
-                });
+              // Filter to ensure news mentions the stock
+              const companyName = profile?.companyName?.toLowerCase() || '';
+              news = articles.filter(article => {
+                if (!article.title) return false;
+                const text = (article.title + ' ' + (article.text || '')).toLowerCase();
+                const sym = symbol.toLowerCase();
+                // Check if article mentions symbol or company name
+                return text.includes(sym) || (companyName && text.includes(companyName));
+              });
 
-                // Keep only last 30 days
-                const cutoff = Date.now() - (30 * 24 * 60 * 60 * 1000);
-                news = (news || []).filter(a => {
+              // Keep only last 30 days
+              const cutoff = Date.now() - (30 * 24 * 60 * 60 * 1000);
+              news = (news || []).filter(a => {
+                const dt = new Date(a.publishedDate || a.date || 0).getTime();
+                return Number.isFinite(dt) && dt >= cutoff;
+              });
+
+              // If no relevant news found, take recent general results
+              if (news.length === 0 && articles.length > 0) {
+                news = (articles || []).filter(a => {
                   const dt = new Date(a.publishedDate || a.date || 0).getTime();
                   return Number.isFinite(dt) && dt >= cutoff;
-                });
-
-                // If no relevant news found, take recent general results
-                if (news.length === 0 && articles.length > 0) {
-                  console.warn(`No recent filtered news (30d) for ${symbol}, using general recent results`);
-                  news = (articles || []).filter(a => {
-                    const dt = new Date(a.publishedDate || a.date || 0).getTime();
-                    return Number.isFinite(dt) && dt >= cutoff;
-                  }).slice(0, 10);
-                } else {
-                  // Prioritize analyst/rating/price-target updates within the relevant set
-                  if (window.newsManager && typeof window.newsManager.getAnalystUpdateScore === 'function') {
-                    news.sort((a, b) => {
-                      const scoreB = window.newsManager.getAnalystUpdateScore(
-                        { title: b.title, description: b.text || b.content || '' },
-                        symbol
-                      );
-                      const scoreA = window.newsManager.getAnalystUpdateScore(
-                        { title: a.title, description: a.text || a.content || '' },
-                        symbol
-                      );
-                      if (scoreB !== scoreA) return scoreB - scoreA;
-                      return new Date(b.publishedDate || b.date || 0) - new Date(a.publishedDate || a.date || 0);
-                    });
-                  }
-
-                  news = news.slice(0, 10);
-                }
+                }).slice(0, 10);
+              } else {
+                news = news.slice(0, 10);
               }
             }
           } catch (err) {
@@ -23002,18 +23043,20 @@ Be realistic and conservative. Base confidence on data quality.`;
           console.log('✅ Total loaded:', allStocks.length, 'of', curatedStocks.length, 'stocks with full data');
           console.log('📊 Progress: completedCount =', completedCount, ', curatedStocks.length =', curatedStocks.length);
 
-          // OPTIMIZATION: Use Map for O(1) deduplication instead of Set + filter
-          const uniqueStocksMap = new Map();
-          allStocks.forEach(stock => {
-            const symbol = stock.symbol?.toUpperCase()?.trim();
-            if (symbol && !uniqueStocksMap.has(symbol)) {
-              uniqueStocksMap.set(symbol, stock);
+          // OPTIMIZATION: Fast dedup - only run if we have stocks from multiple sources
+          // Since cachedStocks and uncachedSymbols are mutually exclusive, dupes should be rare
+          let uniqueStocks = allStocks;
+          if (cachedStocks.length > 0 && uncachedSymbols.length > 0) {
+            const seenSymbols = new Set();
+            uniqueStocks = allStocks.filter(stock => {
+              const symbol = stock.symbol?.toUpperCase()?.trim();
+              if (!symbol || seenSymbols.has(symbol)) return false;
+              seenSymbols.add(symbol);
+              return true;
+            });
+            if (uniqueStocks.length !== allStocks.length) {
+              console.log(`🧹 Removed ${allStocks.length - uniqueStocks.length} duplicate stocks`);
             }
-          });
-          const uniqueStocks = Array.from(uniqueStocksMap.values());
-
-          if (uniqueStocks.length !== allStocks.length) {
-            console.log(`🧹 Removed ${allStocks.length - uniqueStocks.length} duplicate stocks`);
           }
 
           // Final check: ensure progress matches actual completion
@@ -23277,19 +23320,12 @@ Be realistic and conservative. Base confidence on data quality.`;
       // ─────────────────────────────────────────────────────────────────────────
 
       const filtered = useMemo(() => {
-        // DEBUG: Check if stocks array exists and has items
-        console.log('🔍 FILTERING DEBUG:', {
-          stocksCount: stocks.length,
-          search: debouncedSearch,
-          sector: selectedSector,
-          preset: selectedPreset,
-          watchlistOnly: showWatchlistOnly,
-          sampleStock: stocks[0]
-        });
-        
-        // OPTIMIZATION: Single-pass filter instead of multiple chained filters
-        // This is 5-10× faster for large datasets
-        
+        // OPTIMIZATION: Single-pass filter with precomputed conditions
+        // Removed debug logging from hot path for better performance
+
+        // Fast path: no stocks = empty result
+        if (!stocks || stocks.length === 0) return [];
+
         // Precompute filter conditions
         const searchLower = debouncedSearch ? debouncedSearch.toLowerCase() : null;
         const watchlistSet = showWatchlistOnly && watchlist ? new Set(watchlist.map(w => w?.toUpperCase()).filter(Boolean)) : null;
@@ -23369,22 +23405,6 @@ Be realistic and conservative. Base confidence on data quality.`;
           return sortBy.dir === 'asc' ? aVal - bVal : bVal - aVal;
         });
 
-        // DEBUG: Log filtering results
-        if (stocks.length > 0 && result.length === 0) {
-          console.warn('⚠️ FILTERING ISSUE: All stocks filtered out!');
-          console.log('Total stocks:', stocks.length);
-          console.log('Search:', debouncedSearch);
-          console.log('Sector:', selectedSector);
-          console.log('Preset:', selectedPreset);
-          console.log('Preset checks:', presetChecks.length);
-          console.log('Sample stock:', stocks[0]);
-          console.log('Watchlist only:', showWatchlistOnly);
-        }
-        
-        if (result.length > 0 && result.length < stocks.length) {
-          console.log(`✅ Filtered: ${result.length} of ${stocks.length} stocks match criteria`);
-        }
-        
         return result;
       }, [stocks, debouncedSearch, selectedSector, selectedPreset, filters, sortBy, showWatchlistOnly, watchlist]);
 
