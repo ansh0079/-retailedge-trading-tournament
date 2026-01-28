@@ -21534,6 +21534,17 @@ Be realistic and conservative. Base confidence on data quality.`;
               const allData = cachedStocks.map(s => s.data);
               SessionPersistence.saveSession(allData, {}, []);
             }
+            
+            // CRITICAL: Remove batch-loaded symbols from uncachedSymbols so we don't fetch them again!
+            const batchLoadedSymbols = new Set(batchQuotes.map(q => q.symbol.toUpperCase()));
+            uncachedSymbols.length = 0; // Clear the array
+            uniqueCuratedStocks.forEach(symbol => {
+              const upperSymbol = symbol.toUpperCase();
+              if (!batchLoadedSymbols.has(upperSymbol) && !cachedStocks.find(s => s.symbol.toUpperCase() === upperSymbol)) {
+                uncachedSymbols.push(symbol);
+              }
+            });
+            console.log(`📊 After batch: ${cachedStocks.length} ready, ${uncachedSymbols.length} still need individual fetch`);
           }
 
           const allStocks = [];
@@ -21580,28 +21591,20 @@ Be realistic and conservative. Base confidence on data quality.`;
             });
           };
 
-          // Process cached stocks immediately (no delays needed!)
+          // Process cached stocks INSTANTLY in one batch update!
+          console.log(`🚀 Processing ${cachedStocks.length} cached stocks instantly...`);
+          const processedStocks = [];
+          
           cachedStocks.forEach(({ symbol, data: stockData }) => {
             try {
               stockData.index = 'Curated';
               const ai = generateAIAnalysis(stockData);
 
-              // ML prediction can be async, but don't block on it for cached stocks
-              computeMLPrediction(symbol).then(mlPrediction => {
-                // Update ML prediction if available
-                const stockIndex = allStocks.findIndex(s => s.symbol === symbol);
-                if (stockIndex >= 0) {
-                  allStocks[stockIndex].mlPrediction = mlPrediction;
-                }
-              }).catch(() => {
-                // Ignore ML prediction errors for cached stocks
-              });
-
               const stockWithAnalysis = {
                 ...stockData,
                 ...ai,
                 aiScore: ai.aiScore,
-                mlPrediction: { predPct: null, conf: null, trend: null }, // Will be updated async
+                mlPrediction: { predPct: null, conf: null, trend: null },
                 subscores: ai.subscores ? { ...ai.subscores } : null,
                 topDrivers: ai.topDrivers ? {
                   positive: ai.topDrivers.positive ? [...ai.topDrivers.positive] : [],
@@ -21614,22 +21617,45 @@ Be realistic and conservative. Base confidence on data quality.`;
                 earningsHistory: stockData.earningsHistory ? [...stockData.earningsHistory] : [],
                 analystGradeHistory: stockData.analystGradeHistory ? [...stockData.analystGradeHistory] : [],
               };
+              processedStocks.push(stockWithAnalysis);
               allStocks.push(stockWithAnalysis);
-
-              // Display stock immediately
-              updateStocksIncrementally(stockWithAnalysis);
-
-              completedCount++;
-              setLoadingProgress({ current: completedCount, total: uniqueCuratedStocks.length });
-              console.log(`⚡ ${symbol} (cached): $${stockData.price} | P/E: ${stockData.pe.toFixed(1)} | ROE: ${stockData.roe.toFixed(1)}%`);
             } catch (err) {
-              console.error(`❌ ${symbol} (cached) processing failed:`, err);
-              completedCount++;
-              setLoadingProgress({ current: completedCount, total: curatedStocks.length });
+              console.warn(`⚠️ ${symbol} processing error:`, err.message);
             }
           });
 
-          // Only fetch uncached stocks in batches
+          // ONE batch update for all cached stocks - instant UI!
+          if (processedStocks.length > 0) {
+            processedStocks.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
+            setStocks(processedStocks);
+            setLoading(false);
+            completedCount = processedStocks.length;
+            setLoadingProgress({ current: completedCount, total: uniqueCuratedStocks.length });
+            console.log(`✅ ${processedStocks.length} stocks displayed instantly!`);
+            
+            // ML predictions in background (don't block UI)
+            setTimeout(() => {
+              processedStocks.slice(0, 50).forEach((stock, i) => {
+                setTimeout(() => {
+                  computeMLPrediction(stock.symbol).then(ml => {
+                    setStocks(prev => prev.map(s => 
+                      s.symbol === stock.symbol ? { ...s, mlPrediction: ml } : s
+                    ));
+                  }).catch(() => {});
+                }, i * 100);
+              });
+            }, 2000);
+          }
+
+          // Skip slow individual fetch if we already have most stocks from batch loading
+          // Only fetch remaining uncached stocks if there are very few left
+          if (uncachedSymbols.length > 0 && uncachedSymbols.length <= 20) {
+            console.log(`📡 Fetching ${uncachedSymbols.length} remaining stocks individually...`);
+          } else if (uncachedSymbols.length > 20) {
+            console.log(`⏭️ Skipping slow individual fetch for ${uncachedSymbols.length} stocks - use batch quotes instead`);
+            uncachedSymbols.length = 0; // Skip slow fetch
+          }
+          
           if (uncachedSymbols.length > 0) {
             // Helper function to add timeout to promises
             const withTimeout = (promise, timeoutMs, symbol) => {
