@@ -782,6 +782,51 @@ app.get('/api/reddit/:subreddit/search', async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// BATCH QUOTES ENDPOINT - Proxies FMP batch quote requests
+// ═══════════════════════════════════════════════════════════════════════════════
+
+app.post('/api/quotes/batch', async (req, res) => {
+  try {
+    const { symbols } = req.body;
+
+    if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
+      return res.status(400).json({ error: 'symbols array is required' });
+    }
+
+    // Limit batch size to 100 (FMP limit)
+    const batchSymbols = symbols.slice(0, 100);
+    const symbolString = batchSymbols.join(',');
+
+    console.log(`📊 Batch quote request for ${batchSymbols.length} symbols...`);
+
+    const url = `https://financialmodelingprep.com/stable/quote/${symbolString}?apikey=${FMP_API_KEY}`;
+
+    const response = await fetchWithRetry(url, {
+      timeoutMs: 30000,
+      retries: 2
+    });
+
+    if (response.status === 429) {
+      console.warn('⏳ FMP rate limited on batch quotes');
+      return res.status(429).json({ error: 'Rate limited, please retry' });
+    }
+
+    const data = await response.json();
+
+    if (Array.isArray(data)) {
+      console.log(`✅ Batch quotes: Got ${data.length} quotes`);
+      res.json(data);
+    } else {
+      console.warn('⚠️ Unexpected batch quote response:', data);
+      res.json([]);
+    }
+  } catch (error) {
+    console.error('❌ Batch quotes error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch batch quotes: ' + error.message });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'CORS Proxy Server Running' });

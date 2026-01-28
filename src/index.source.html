@@ -2581,27 +2581,6 @@ Please provide a clear, structured analysis in markdown format.`;
         const key = this.key(symbol, type);
         return this._loadToMemory(key);
       },
-      
-      // ═══════════════════════════════════════════════════════════════════════════
-      // BATCH CACHE GET - 10x faster than sequential Cache.get() calls!
-      // ═══════════════════════════════════════════════════════════════════════════
-      getBatch(symbols, type = 'stock') {
-        const results = {
-          cached: [],
-          uncached: []
-        };
-        
-        symbols.forEach(symbol => {
-          const data = this.get(symbol, type);
-          if (data) {
-            results.cached.push({ symbol, data });
-          } else {
-            results.uncached.push(symbol);
-          }
-        });
-        
-        return results;
-      },
 
       // Check if cache is expired - uses memory cache, no redundant reads
       isExpired(symbol, type = 'stock') {
@@ -23058,6 +23037,33 @@ Be realistic and conservative. Base confidence on data quality.`;
               setLastUpdateTime(startTime);
               console.log('✅ Final sync: Stocks set:', uniqueStocks.length, 'unique stocks displayed');
               console.log('📊 Sample stocks:', uniqueStocks.slice(0, 5).map(s => s.symbol).join(', '));
+
+              // SAVE SESSION for instant restore on next page load
+              try {
+                const sessionKey = 're_fast_session_v1';
+                const sessionData = {
+                  stocks: uniqueStocks.slice(0, 500).map(s => ({
+                    symbol: s.symbol,
+                    name: s.name,
+                    companyName: s.companyName,
+                    price: s.price,
+                    changePct: s.changePct,
+                    marketCap: s.marketCap,
+                    pe: s.pe,
+                    roe: s.roe,
+                    sector: s.sector,
+                    industry: s.industry,
+                    aiScore: s.aiScore,
+                    verdict: s.verdict,
+                    volume: s.volume
+                  })),
+                  timestamp: Date.now()
+                };
+                localStorage.setItem(sessionKey, JSON.stringify(sessionData));
+                console.log(`💾 Session saved: ${sessionData.stocks.length} stocks for instant restore`);
+              } catch (e) {
+                console.warn('Session save failed:', e);
+              }
             }, { timeout: 500 });
 
             if (uniqueStocks.length < uniqueCuratedStocks.length) {
