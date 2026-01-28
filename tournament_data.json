@@ -473,7 +473,59 @@
           "portfolioValue": 50000
         }
       ]
+    },
+    {
+      "timestamp": "2026-01-28T15:09:52.053Z",
+      "time": "10:09 AM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T15:12:46.093Z",
+      "time": "10:12 AM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
     }
   ],
-  "savedAt": "2026-01-28T15:07:24.961Z"
+  "savedAt": "2026-01-28T15:12:46.094Z"
 }

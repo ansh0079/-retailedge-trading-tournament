@@ -21,6 +21,56 @@ const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY;
 const FMP_API_KEY = process.env.FMP_API_KEY || 'h43nCTpMeyiIiNquebaqktc7ChUHMxIz';
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// PARALLEL INDIVIDUAL QUOTE FETCHING (FMP Starter Plan Compatible)
+// ═══════════════════════════════════════════════════════════════════════════════
+// FMP Starter plan doesn't support batch quote endpoint with comma-separated symbols
+// This helper fetches quotes individually but in parallel batches of 5 for performance
+
+async function fetchQuotesParallel(symbols, options = {}) {
+  const { concurrency = 5, delayMs = 250 } = options;
+  const results = [];
+
+  // Split into parallel batches
+  const chunks = [];
+  for (let i = 0; i < symbols.length; i += concurrency) {
+    chunks.push(symbols.slice(i, i + concurrency));
+  }
+
+  for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+    const chunk = chunks[chunkIndex];
+
+    // Fetch all symbols in this chunk in parallel
+    const promises = chunk.map(async symbol => {
+      try {
+        const url = `https://financialmodelingprep.com/stable/quote/${symbol}?apikey=${FMP_API_KEY}`;
+        const response = await fetchWithRetry(url, { timeoutMs: 10000, retries: 1 });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (Array.isArray(data) && data.length > 0) {
+            return data[0];
+          }
+        }
+        return null;
+      } catch (error) {
+        console.warn(`[fetchQuotesParallel] Failed for ${symbol}:`, error.message);
+        return null;
+      }
+    });
+
+    const batchResults = await Promise.all(promises);
+    results.push(...batchResults.filter(Boolean));
+
+    // Delay between batches for rate limiting
+    if (chunkIndex < chunks.length - 1) {
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+  }
+
+  return results;
+}
+
 // Log which AI API keys are available
 console.log('🤖 AI API Keys Status:');
 console.log(`   - Claude (Sonnet): ${CLAUDE_API_KEY ? '✅ Available' : '❌ Not set'}`);
@@ -1461,32 +1511,28 @@ function generateReasoning(team, action, symbol) {
 // REAL AI DECISION MAKING - Each team uses Claude to analyze and decide trades
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// Fetch market data for AI analysis
+// Fetch market data for AI analysis (FMP Starter plan compatible)
 async function fetchMarketDataForAI(symbols) {
   try {
-    const symbolList = symbols.slice(0, 10).join(','); // Limit to 10 for API efficiency
-    const url = `https://financialmodelingprep.com/stable/quote?symbol=${symbolList}&apikey=${FMP_API_KEY}`;
-    const response = await fetchWithRetry(url, { timeoutMs: 10000, retries: 1 });
-    const data = await response.json();
+    // Use parallel individual fetching (Starter plan compatible)
+    const limitedSymbols = symbols.slice(0, 10); // Limit to 10 for efficiency
+    const data = await fetchQuotesParallel(limitedSymbols, { concurrency: 5, delayMs: 200 });
 
-    if (Array.isArray(data)) {
-      return data.map(quote => ({
-        symbol: quote.symbol,
-        price: quote.price,
-        change: quote.change,
-        changesPercentage: quote.changesPercentage,
-        dayHigh: quote.dayHigh,
-        dayLow: quote.dayLow,
-        volume: quote.volume,
-        avgVolume: quote.avgVolume,
-        marketCap: quote.marketCap,
-        pe: quote.pe,
-        eps: quote.eps,
-        yearHigh: quote.yearHigh,
-        yearLow: quote.yearLow
-      }));
-    }
-    return [];
+    return data.map(quote => ({
+      symbol: quote.symbol,
+      price: quote.price,
+      change: quote.change,
+      changesPercentage: quote.changesPercentage,
+      dayHigh: quote.dayHigh,
+      dayLow: quote.dayLow,
+      volume: quote.volume,
+      avgVolume: quote.avgVolume,
+      marketCap: quote.marketCap,
+      pe: quote.pe,
+      eps: quote.eps,
+      yearHigh: quote.yearHigh,
+      yearLow: quote.yearLow
+    }));
   } catch (error) {
     console.error('[AI] Error fetching market data:', error.message);
     return [];
@@ -1917,31 +1963,15 @@ let filteredStocksCache = {
   cacheDuration: 5 * 60 * 1000    // 5 minutes
 };
 
-// Fetch technical data for filtering
+// Fetch technical data for filtering (FMP Starter plan compatible)
 async function fetchTechnicalData(symbols) {
   try {
-    // Batch fetch quotes
-    const batchSize = 50;
-    const allQuotes = [];
+    console.log(`[SmartFilter] Fetching technical data for ${symbols.length} symbols (parallel individual calls)...`);
 
-    for (let i = 0; i < symbols.length; i += batchSize) {
-      const batch = symbols.slice(i, i + batchSize);
-      const symbolList = batch.join(',');
-      const url = `https://financialmodelingprep.com/stable/quote?symbol=${symbolList}&apikey=${FMP_API_KEY}`;
+    // Use parallel individual fetching (Starter plan compatible)
+    const allQuotes = await fetchQuotesParallel(symbols, { concurrency: 5, delayMs: 250 });
 
-      const response = await fetchWithRetry(url, { timeoutMs: 15000, retries: 2 });
-      const data = await response.json();
-
-      if (Array.isArray(data)) {
-        allQuotes.push(...data);
-      }
-
-      // Small delay between batches to avoid rate limits
-      if (i + batchSize < symbols.length) {
-        await sleep(200);
-      }
-    }
-
+    console.log(`[SmartFilter] Got ${allQuotes.length}/${symbols.length} quotes`);
     return allQuotes;
   } catch (error) {
     console.error('[SmartFilter] Error fetching technical data:', error.message);
