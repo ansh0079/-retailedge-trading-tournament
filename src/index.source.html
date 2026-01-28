@@ -8798,27 +8798,75 @@ Be realistic and conservative. Base confidence on data quality.`;
       const bullFactors = [];
       const bearFactors = [];
 
-      // Extract metrics
+      // Extract metrics with more data points
       const pe = num(stock.pe, 0);
       const roe = num(stock.roe, 0);
       const rsi = num(stock.rsi, 50);
       const changePct = num(stock.changePct, 0);
       const price = num(stock.price, 0);
+      const marketCap = num(stock.marketCap, 0);
+      const eps = num(stock.eps, 0);
+      const growth = num(stock.revenueGrowth, 0);
+      const debt = num(stock.debtToEquity, 0);
+      const margin = num(stock.profitMargin, 0);
+      const beta = num(stock.beta, 1);
+      const volume = num(stock.volume, 0);
+      const avgVolume = num(stock.avgVolume, 1);
+      
+      // Advanced calculations
+      const peg = growth > 0 && pe > 0 ? pe / growth : null; // PEG ratio
+      const volumeRatio = avgVolume > 0 ? volume / avgVolume : 1;
+      const isMegaCap = marketCap > 200e9; // $200B+
+      const isLargeCap = marketCap > 10e9; // $10B+
+      const isGrowthStock = growth > 15;
+      const isValueStock = pe > 0 && pe < 15;
 
       // Helper: importance ranking for factor sorting
       const importanceRank = { high: 3, medium: 2, low: 1 };
 
-      // BULLISH FACTORS
-      if (pe > 0 && pe < 15) {
+      // ═══════════════════════════════════════════════════════════════════════════
+      // ENHANCED BULLISH FACTORS (More Sophisticated)
+      // ═══════════════════════════════════════════════════════════════════════════
+      
+      // Deep Value + Quality Combo (Warren Buffett style)
+      if (pe > 0 && pe < 12 && roe > 18 && debt < 0.5 && growth > 8) {
+        bullFactors.push({
+          factor: "Quality Deep Value",
+          detail: `Exceptional combination: Low P/E (${pe.toFixed(1)}), strong ROE (${roe.toFixed(1)}%), low debt (${debt.toFixed(2)}×), and ${growth.toFixed(1)}% growth.`,
+          importance: "high",
+          category: "fundamental"
+        });
+      }
+      
+      // PEG Ratio Value (Growth at reasonable price)
+      else if (peg !== null && peg < 1 && peg > 0.1 && growth > 10) {
+        bullFactors.push({
+          factor: "Growth at Reasonable Price",
+          detail: `PEG ratio of ${peg.toFixed(2)} indicates growth (${growth.toFixed(1)}%) is underpriced relative to P/E (${pe.toFixed(1)}).`,
+          importance: "high",
+          category: "fundamental"
+        });
+      }
+      
+      // Classic Value Play
+      else if (pe > 0 && pe < 15) {
         bullFactors.push({
           factor: "Attractive Valuation",
-          detail: `P/E ratio of ${pe.toFixed(1)} suggests undervaluation vs. market average.`,
+          detail: `P/E ratio of ${pe.toFixed(1)} suggests undervaluation vs. market average (${isMegaCap ? 'mega-cap' : isLargeCap ? 'large-cap' : 'mid-cap'} stock).`,
           importance: "high",
           category: "fundamental"
         });
       }
 
-      if (roe > 20) {
+      // Profitability + Efficiency
+      if (roe > 25 && margin > 15) {
+        bullFactors.push({
+          factor: "High-Quality Business Model",
+          detail: `Exceptional ROE (${roe.toFixed(1)}%) with strong profit margins (${margin.toFixed(1)}%) indicates pricing power and efficiency.`,
+          importance: "high",
+          category: "fundamental"
+        });
+      } else if (roe > 20) {
         bullFactors.push({
           factor: "Superior Capital Efficiency",
           detail: `ROE of ${roe.toFixed(1)}% demonstrates exceptional profitability.`,
@@ -8826,17 +8874,43 @@ Be realistic and conservative. Base confidence on data quality.`;
           category: "fundamental"
         });
       }
-
-      if (rsi < 35) {
+      
+      // Balance Sheet Strength
+      if (debt < 0.3 && roe > 15 && marketCap > 1e9) {
         bullFactors.push({
-          factor: "Oversold Technical Setup",
-          detail: `RSI of ${rsi.toFixed(0)} indicates potential mean reversion opportunity.`,
+          factor: "Fortress Balance Sheet",
+          detail: `Low debt-to-equity (${debt.toFixed(2)}×) with strong ROE (${roe.toFixed(1)}%) provides stability and flexibility.`,
           importance: "medium",
-          category: "technical"
+          category: "fundamental"
         });
       }
 
-      if (changePct > 5) {
+      // Aggressive Growth
+      if (growth > 25 && roe > 10) {
+        bullFactors.push({
+          factor: "High-Growth Story",
+          detail: `Revenue growing ${growth.toFixed(1)}% while maintaining ${roe.toFixed(1)}% ROE shows strong market position.`,
+          importance: "high",
+          category: "fundamental"
+        });
+      }
+
+      // Technical Strength
+      if (rsi > 55 && rsi < 68 && changePct > 2 && changePct < 8) {
+        bullFactors.push({
+          factor: "Healthy Bullish Momentum",
+          detail: `RSI at ${rsi.toFixed(0)} with ${changePct.toFixed(1)}% gain shows controlled uptrend without overextension.`,
+          importance: "medium",
+          category: "technical"
+        });
+      } else if (rsi < 35 && changePct > -10) {
+        bullFactors.push({
+          factor: "Oversold Technical Setup",
+          detail: `RSI of ${rsi.toFixed(0)} indicates potential mean reversion opportunity (not in freefall).`,
+          importance: "medium",
+          category: "technical"
+        });
+      } else if (changePct > 5) {
         bullFactors.push({
           factor: "Strong Momentum",
           detail: `Recent price gain of ${changePct.toFixed(1)}% shows buying pressure.`,
@@ -8844,27 +8918,70 @@ Be realistic and conservative. Base confidence on data quality.`;
           category: "technical"
         });
       }
-
-      if (pe > 0 && pe < 20 && roe > 15) {
+      
+      // Volume Confirmation
+      if (volumeRatio > 1.5 && changePct > 3) {
         bullFactors.push({
-          factor: "Value-Quality Combination",
-          detail: `Reasonable valuation (P/E ${pe.toFixed(1)}) paired with strong returns (ROE ${roe.toFixed(1)}%).`,
+          factor: "Volume-Confirmed Rally",
+          detail: `Volume ${(volumeRatio * 100 - 100).toFixed(0)}% above average confirms institutional interest in the move.`,
+          importance: "medium",
+          category: "technical"
+        });
+      }
+      
+      // Low Volatility + Growth (Steady compounder)
+      if (beta < 0.9 && roe > 15 && growth > 10 && debt < 0.5) {
+        bullFactors.push({
+          factor: "Defensive Growth Compounder",
+          detail: `Low volatility (β ${beta.toFixed(2)}) with ${growth.toFixed(1)}% growth and ${roe.toFixed(1)}% ROE — rare combination.`,
           importance: "high",
           category: "fundamental"
         });
       }
 
-      // BEARISH FACTORS
-      if (pe > 35) {
+      // ═══════════════════════════════════════════════════════════════════════════
+      // ENHANCED BEARISH FACTORS (Better Risk Detection)
+      // ═══════════════════════════════════════════════════════════════════════════
+      
+      // Value Trap Detection
+      if (pe > 0 && pe < 10 && roe < 8 && growth < 0) {
+        bearFactors.push({
+          factor: "Potential Value Trap",
+          detail: `Low P/E (${pe.toFixed(1)}) with poor ROE (${roe.toFixed(1)}%) and negative growth (${growth.toFixed(1)}%) suggests structural problems.`,
+          importance: "high",
+          category: "fundamental"
+        });
+      }
+      
+      // Expensive Growth with Execution Risk
+      else if (pe > 50 && peg !== null && peg > 3 && growth < 25) {
+        bearFactors.push({
+          factor: "Overpriced Relative to Growth",
+          detail: `PEG of ${peg.toFixed(1)} indicates P/E (${pe.toFixed(1)}) is too high for ${growth.toFixed(1)}% growth rate.`,
+          importance: "high",
+          category: "fundamental"
+        });
+      }
+      
+      // Classic Overvaluation
+      else if (pe > 35) {
         bearFactors.push({
           factor: "Premium Valuation Risk",
-          detail: `P/E ratio of ${pe.toFixed(1)} leaves little margin for safety.`,
+          detail: `P/E ratio of ${pe.toFixed(1)} leaves little margin for safety${isGrowthStock ? ', even for growth stock' : ''}.`,
           importance: "high",
           category: "fundamental"
         });
       }
 
-      if (roe < 8 && roe > 0) {
+      // Deteriorating Fundamentals
+      if (roe < 8 && roe > 0 && growth < 5) {
+        bearFactors.push({
+          factor: "Weak Business Economics",
+          detail: `ROE of ${roe.toFixed(1)}% with ${growth.toFixed(1)}% growth suggests competitive disadvantage or poor management.`,
+          importance: "high",
+          category: "fundamental"
+        });
+      } else if (roe < 8 && roe > 0) {
         bearFactors.push({
           factor: "Below-Average Returns",
           detail: `ROE of ${roe.toFixed(1)}% suggests weak capital efficiency.`,
@@ -8872,8 +8989,43 @@ Be realistic and conservative. Base confidence on data quality.`;
           category: "fundamental"
         });
       }
+      
+      // Debt Warning
+      if (debt > 2 && roe < 12) {
+        bearFactors.push({
+          factor: "Elevated Leverage Risk",
+          detail: `High debt-to-equity (${debt.toFixed(2)}×) with modest ROE (${roe.toFixed(1)}%) limits financial flexibility.`,
+          importance: "high",
+          category: "fundamental"
+        });
+      } else if (debt > 3) {
+        bearFactors.push({
+          factor: "Balance Sheet Concern",
+          detail: `Debt-to-equity of ${debt.toFixed(2)}× is elevated — vulnerable to rising rates or earnings miss.`,
+          importance: "medium",
+          category: "fundamental"
+        });
+      }
+      
+      // Low Margins + High Valuation
+      if (margin < 5 && pe > 20) {
+        bearFactors.push({
+          factor: "Thin Margins at Rich Valuation",
+          detail: `Profit margin of ${margin.toFixed(1)}% with P/E ${pe.toFixed(1)} offers little cushion for disappointment.`,
+          importance: "medium",
+          category: "fundamental"
+        });
+      }
 
-      if (rsi > 72) {
+      // Technical Warnings
+      if (rsi > 72 && changePct > 10) {
+        bearFactors.push({
+          factor: "Severely Overbought",
+          detail: `RSI of ${rsi.toFixed(0)} with ${changePct.toFixed(1)}% rally suggests high probability of sharp pullback.`,
+          importance: "high",
+          category: "technical"
+        });
+      } else if (rsi > 72) {
         bearFactors.push({
           factor: "Overbought Condition",
           detail: `RSI of ${rsi.toFixed(0)} increases probability of near-term pullback.`,
@@ -8881,13 +9033,31 @@ Be realistic and conservative. Base confidence on data quality.`;
           category: "technical"
         });
       }
-
-      if (changePct < -5) {
+      
+      // Falling Knife
+      if (changePct < -15 && volumeRatio > 2) {
+        bearFactors.push({
+          factor: "Capitulation Selling",
+          detail: `Down ${Math.abs(changePct).toFixed(1)}% on heavy volume suggests panic or negative catalyst — wait for stabilization.`,
+          importance: "high",
+          category: "technical"
+        });
+      } else if (changePct < -5) {
         bearFactors.push({
           factor: "Negative Momentum",
           detail: `Recent decline of ${changePct.toFixed(1)}% signals selling pressure.`,
           importance: "medium",
           category: "technical"
+        });
+      }
+      
+      // High Volatility Risk
+      if (beta > 1.8 && marketCap < 10e9) {
+        bearFactors.push({
+          factor: "Elevated Volatility Risk",
+          detail: `Beta of ${beta.toFixed(2)} with smaller market cap (${(marketCap/1e9).toFixed(1)}B) amplifies downside risk.`,
+          importance: "medium",
+          category: "risk"
         });
       }
 
@@ -8955,6 +9125,123 @@ Be realistic and conservative. Base confidence on data quality.`;
         ]
       };
 
+      // ═══════════════════════════════════════════════════════════════════════════
+      // ENHANCED: Detailed Risk Assessment with Reasons
+      // ═══════════════════════════════════════════════════════════════════════════
+      const riskReasons = [];
+      let riskLevel = 'Medium';
+      
+      // High volatility
+      if (beta > 1.8) {
+        riskReasons.push(`High volatility (β ${beta.toFixed(2)})`);
+        riskLevel = 'High';
+      } else if (beta > 1.4) {
+        riskReasons.push(`Above-average volatility (β ${beta.toFixed(2)})`);
+      }
+      
+      // Debt concerns
+      if (debt > 2) {
+        riskReasons.push(`Elevated debt (${debt.toFixed(2)}× equity)`);
+        riskLevel = 'High';
+      } else if (debt > 1.5) {
+        riskReasons.push(`Moderate debt (${debt.toFixed(2)}× equity)`);
+      }
+      
+      // Valuation risk
+      if (pe > 50) {
+        riskReasons.push(`Extreme valuation (P/E ${pe.toFixed(1)})`);
+        riskLevel = 'High';
+      } else if (pe > 35) {
+        riskReasons.push(`Premium valuation (P/E ${pe.toFixed(1)})`);
+        if (riskLevel === 'Medium') riskLevel = 'Medium-High';
+      }
+      
+      // Profitability concerns
+      if (roe < 5 && roe > 0) {
+        riskReasons.push(`Weak profitability (ROE ${roe.toFixed(1)}%)`);
+        if (riskLevel === 'Medium') riskLevel = 'Medium-High';
+      }
+      
+      // Negative growth
+      if (growth < -10) {
+        riskReasons.push(`Revenue declining ${Math.abs(growth).toFixed(1)}%`);
+        riskLevel = 'High';
+      }
+      
+      // Technical breakdown
+      if (changePct < -15) {
+        riskReasons.push(`Severe downtrend (-${Math.abs(changePct).toFixed(1)}%)`);
+        if (riskLevel === 'Medium') riskLevel = 'Medium-High';
+      }
+      
+      // Low liquidity (small cap + low volume)
+      if (marketCap < 1e9 && volumeRatio < 0.5) {
+        riskReasons.push('Low liquidity (small-cap, thin volume)');
+        if (riskLevel === 'Medium') riskLevel = 'Medium-High';
+      }
+      
+      // Default if no risks found
+      if (riskReasons.length === 0) {
+        riskReasons.push('Standard market risk');
+        riskLevel = 'Low-Medium';
+      }
+      
+      const riskAssessment = {
+        level: riskLevel,
+        score: subscores.risk,
+        reasons: riskReasons,
+        summary: riskReasons.length > 2 
+          ? `${riskLevel} risk: ${riskReasons.slice(0, 2).join(', ')} +${riskReasons.length - 2} more`
+          : `${riskLevel} risk: ${riskReasons.join(', ')}`
+      };
+
+      // ═══════════════════════════════════════════════════════════════════════════
+      // ENHANCED: Quick Key Factors Summary
+      // ═══════════════════════════════════════════════════════════════════════════
+      const keyFactors = [];
+      
+      // Valuation
+      if (pe > 0 && pe < 12) keyFactors.push('🔵 Deep Value');
+      else if (pe > 0 && pe < 18) keyFactors.push('💎 Value');
+      else if (pe > 40) keyFactors.push('⚠️ Expensive');
+      
+      // Quality
+      if (roe > 25) keyFactors.push('⭐ Elite ROE');
+      else if (roe > 18) keyFactors.push('✅ Strong ROE');
+      else if (roe < 8 && roe > 0) keyFactors.push('⚠️ Weak ROE');
+      
+      // Growth
+      if (growth > 25) keyFactors.push('🚀 High Growth');
+      else if (growth > 15) keyFactors.push('📈 Growing');
+      else if (growth < -5) keyFactors.push('📉 Declining');
+      
+      // Balance sheet
+      if (debt < 0.3 && marketCap > 1e9) keyFactors.push('💪 Strong Balance Sheet');
+      else if (debt > 2) keyFactors.push('⚠️ High Debt');
+      
+      // Momentum
+      if (changePct > 10) keyFactors.push('🔥 Strong Momentum');
+      else if (changePct > 5) keyFactors.push('📊 Positive Momentum');
+      else if (changePct < -10) keyFactors.push('🔴 Weak Momentum');
+      
+      // Technical
+      if (rsi < 30) keyFactors.push('💡 Oversold');
+      else if (rsi > 75) keyFactors.push('🔴 Overbought');
+      else if (rsi > 55 && rsi < 68) keyFactors.push('✅ Healthy Trend');
+      
+      // Volume
+      if (volumeRatio > 2) keyFactors.push('📢 High Volume');
+      
+      // Size
+      if (isMegaCap) keyFactors.push('🏢 Mega-Cap');
+      else if (marketCap < 2e9) keyFactors.push('🔬 Small-Cap');
+      
+      // PEG (if calculable)
+      if (peg !== null && peg < 1 && peg > 0.1) keyFactors.push('💰 Growth at Value');
+      
+      // Fallback
+      if (keyFactors.length === 0) keyFactors.push('📊 Market Average');
+
       const result = {
         verdict,
         confidence,
@@ -8969,6 +9256,8 @@ Be realistic and conservative. Base confidence on data quality.`;
         subscores,
         aiScore: score, // Unified 0-100 scale
         health: score, // Health = AI score for consistency
+        riskAssessment, // NEW: Detailed risk with reasons
+        keyFactors, // NEW: Quick visual summary
       };
       
       // Cache result (limit cache size to 2000 entries)
@@ -20597,6 +20886,118 @@ Be realistic and conservative. Base confidence on data quality.`;
                               <p className="text-cyan-400 font-bold">{stats.symbolsTraded.length}</p>
                             </div>
                           </div>
+
+                          {/* Performance Metrics */}
+                          {teamData?.metrics && (
+                            <div className="pt-4 border-t border-slate-700">
+                              <p className="text-slate-400 text-sm mb-3 flex items-center gap-2">
+                                <i className="fas fa-chart-line text-green-400"></i>
+                                Performance Metrics
+                              </p>
+                              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                                <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                                  <p className="text-slate-500 text-xs mb-1">Win Rate</p>
+                                  <p className={`text-lg font-bold ${(teamData.metrics.winRate || 0) >= 50 ? 'text-green-400' : 'text-amber-400'}`}>
+                                    {(teamData.metrics.winRate || 0).toFixed(1)}%
+                                  </p>
+                                </div>
+                                <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                                  <p className="text-slate-500 text-xs mb-1">Profit Factor</p>
+                                  <p className={`text-lg font-bold ${(teamData.metrics.profitFactor || 0) >= 1.5 ? 'text-green-400' : (teamData.metrics.profitFactor || 0) >= 1 ? 'text-amber-400' : 'text-red-400'}`}>
+                                    {(teamData.metrics.profitFactor || 0).toFixed(2)}
+                                  </p>
+                                </div>
+                                <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                                  <p className="text-slate-500 text-xs mb-1">Max Drawdown</p>
+                                  <p className="text-red-400 text-lg font-bold">
+                                    -{(teamData.metrics.maxDrawdown || 0).toFixed(2)}%
+                                  </p>
+                                </div>
+                                <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                                  <p className="text-slate-500 text-xs mb-1">Avg Gain</p>
+                                  <p className="text-green-400 text-lg font-bold">
+                                    +${(teamData.metrics.avgGain || 0).toFixed(2)}
+                                  </p>
+                                </div>
+                                <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                                  <p className="text-slate-500 text-xs mb-1">Avg Loss</p>
+                                  <p className="text-red-400 text-lg font-bold">
+                                    -${(teamData.metrics.avgLoss || 0).toFixed(2)}
+                                  </p>
+                                </div>
+                              </div>
+                              {/* Best/Worst Trade */}
+                              <div className="grid grid-cols-2 gap-3 mt-3">
+                                {teamData.metrics.bestTrade && (
+                                  <div className="bg-green-500/10 p-3 rounded-lg border border-green-500/30">
+                                    <p className="text-slate-400 text-xs mb-1">Best Trade</p>
+                                    <p className="text-green-400 font-bold">
+                                      {teamData.metrics.bestTrade.symbol}: +${teamData.metrics.bestTrade.pnl?.toFixed(2)}
+                                    </p>
+                                  </div>
+                                )}
+                                {teamData.metrics.worstTrade && (
+                                  <div className="bg-red-500/10 p-3 rounded-lg border border-red-500/30">
+                                    <p className="text-slate-400 text-xs mb-1">Worst Trade</p>
+                                    <p className="text-red-400 font-bold">
+                                      {teamData.metrics.worstTrade.symbol}: ${teamData.metrics.worstTrade.pnl?.toFixed(2)}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Sector Allocation */}
+                          {teamData?.sectorAllocation && teamData.sectorAllocation.sectors?.length > 0 && (
+                            <div className="pt-4 border-t border-slate-700">
+                              <p className="text-slate-400 text-sm mb-3 flex items-center gap-2">
+                                <i className="fas fa-chart-pie text-purple-400"></i>
+                                Sector Allocation
+                              </p>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Sector Bars */}
+                                <div className="space-y-2">
+                                  {teamData.sectorAllocation.sectors.slice(0, 6).map((sector, idx) => {
+                                    const colors = ['bg-cyan-500', 'bg-purple-500', 'bg-green-500', 'bg-amber-500', 'bg-red-500', 'bg-blue-500'];
+                                    return (
+                                      <div key={sector.sector} className="flex items-center gap-2">
+                                        <div className="w-24 text-xs text-slate-400 truncate">{sector.sector}</div>
+                                        <div className="flex-1 bg-slate-800 rounded-full h-4 overflow-hidden">
+                                          <div
+                                            className={`h-full ${colors[idx % colors.length]} rounded-full transition-all duration-500`}
+                                            style={{width: `${Math.min(sector.percentage, 100)}%`}}
+                                          ></div>
+                                        </div>
+                                        <div className="w-16 text-right text-xs text-white font-semibold">
+                                          {sector.percentage.toFixed(1)}%
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                {/* Cash vs Invested */}
+                                <div className="flex flex-col justify-center">
+                                  <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700">
+                                    <div className="flex justify-between mb-2">
+                                      <span className="text-slate-400 text-sm">Cash</span>
+                                      <span className="text-cyan-400 font-bold">{teamData.sectorAllocation.cashPercentage?.toFixed(1)}%</span>
+                                    </div>
+                                    <div className="bg-slate-700 rounded-full h-3 overflow-hidden">
+                                      <div
+                                        className="h-full bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full"
+                                        style={{width: `${100 - (teamData.sectorAllocation.cashPercentage || 0)}%`}}
+                                      ></div>
+                                    </div>
+                                    <div className="flex justify-between mt-2">
+                                      <span className="text-slate-400 text-sm">Invested</span>
+                                      <span className="text-purple-400 font-bold">{(100 - (teamData.sectorAllocation.cashPercentage || 0)).toFixed(1)}%</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })()}
@@ -24190,6 +24591,9 @@ Be realistic and conservative. Base confidence on data quality.`;
         );
 
         console.log('✅ Application initialized successfully');
+        
+        // Initialize AI Cost Dashboard
+        initializeAICostDashboard();
       } catch (error) {
         console.error('❌ Failed to initialize application:', error);
         document.getElementById('root').innerHTML = `

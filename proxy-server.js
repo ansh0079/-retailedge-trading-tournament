@@ -16,12 +16,319 @@ const PORT = process.env.PORT || 3002; // Use environment variable for cloud dep
 
 // API Keys - Use environment variables for security
 const CLAUDE_API_KEY = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
+const KIMI_API_KEY = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY;
 const FMP_API_KEY = process.env.FMP_API_KEY || 'h43nCTpMeyiIiNquebaqktc7ChUHMxIz';
 
-if (!CLAUDE_API_KEY) {
-  console.error('⚠️  WARNING: ANTHROPIC_API_KEY not set in environment variables');
-  console.error('   Please set ANTHROPIC_API_KEY in your .env file or hosting platform');
+// Log which AI API keys are available
+console.log('🤖 AI API Keys Status:');
+console.log(`   - Claude (Sonnet): ${CLAUDE_API_KEY ? '✅ Available' : '❌ Not set'}`);
+console.log(`   - Kimi (K2): ${KIMI_API_KEY ? '✅ Available' : '❌ Not set'}`);
+console.log(`   - DeepSeek (V3): ${DEEPSEEK_API_KEY ? '✅ Available' : '❌ Not set'}`);
+console.log(`   - Gemini (Pro): ${GEMINI_API_KEY ? '✅ Available' : '❌ Not set'}`);
+
+if (!CLAUDE_API_KEY && !KIMI_API_KEY && !DEEPSEEK_API_KEY && !GEMINI_API_KEY) {
+  console.error('⚠️  WARNING: No AI API keys found. Set at least one of:');
+  console.error('   ANTHROPIC_API_KEY, KIMI_API_KEY, DEEPSEEK_API_KEY, or GEMINI_API_KEY');
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AI COST MANAGER - Budget Tracking & Controls
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class AICostManager {
+  constructor() {
+    // Cost per 1K tokens (USD)
+    this.aiPricing = {
+      'claude-3-sonnet': { input: 0.003, output: 0.015 },   // $3/$15 per 1M tokens
+      'claude-3-haiku': { input: 0.00025, output: 0.00125 }, // $0.25/$1.25 per 1M tokens
+      'deepseek-chat': { input: 0.00014, output: 0.00028 }, // $0.14/$0.28 per 1M tokens (CHEAPEST!)
+      'gemini-pro': { input: 0.0005, output: 0.0015 },      // $0.50/$1.50 per 1M tokens
+      'kimi-k2': { input: 0.0003, output: 0.0006 }          // ~$0.30/$0.60 per 1M tokens
+    };
+    
+    // Budget limits
+    this.dailyBudget = 1.00;   // $1/day
+    this.monthlyBudget = 10.00; // $10/month
+    
+    // Track spending
+    this.spending = this.loadSpendingData();
+    
+    // Tournament state
+    this.tournamentPausedByBudget = false;
+  }
+  
+  loadSpendingData() {
+    const dataFile = path.join(__dirname, 'ai_cost_data.json');
+    try {
+      if (fs.existsSync(dataFile)) {
+        const data = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+        const today = new Date().toDateString();
+        
+        // Reset daily spending if new day
+        if (data.lastUpdated !== today) {
+          data.today = 0;
+          data.lastUpdated = today;
+        }
+        
+        return data;
+      }
+    } catch (error) {
+      console.warn('Could not load cost data:', error.message);
+    }
+    
+    // Default structure
+    return {
+      today: 0,
+      thisMonth: 0,
+      totalRequests: 0,
+      lastUpdated: new Date().toDateString(),
+      byTeam: {
+        'Value Hunter': { cost: 0, requests: 0 },
+        'Growth Seeker': { cost: 0, requests: 0 },
+        'Momentum Trader': { cost: 0, requests: 0 },
+        'Risk Manager': { cost: 0, requests: 0 }
+      },
+      byModel: {}
+    };
+  }
+  
+  saveSpendingData() {
+    const dataFile = path.join(__dirname, 'ai_cost_data.json');
+    try {
+      this.spending.lastUpdated = new Date().toDateString();
+      fs.writeFileSync(dataFile, JSON.stringify(this.spending, null, 2));
+    } catch (error) {
+      console.error('Failed to save cost data:', error.message);
+    }
+  }
+  
+  estimateCost(model, inputTokens, outputTokens = 500) {
+    const pricing = this.aiPricing[model];
+    if (!pricing) return 0;
+    
+    const inputCost = (inputTokens / 1000) * pricing.input;
+    const outputCost = (outputTokens / 1000) * pricing.output;
+    
+    return inputCost + outputCost;
+  }
+  
+  canAffordAnalysis() {
+    const remainingDaily = this.dailyBudget - this.spending.today;
+    const remainingMonthly = this.monthlyBudget - this.spending.thisMonth;
+    
+    if (remainingDaily < 0.01) {
+      console.warn(`⛔ Daily budget exhausted ($${this.spending.today.toFixed(2)} / $${this.dailyBudget})`);
+      return false;
+    }
+    
+    if (remainingMonthly < 0.01) {
+      console.warn(`⛔ Monthly budget exhausted ($${this.spending.thisMonth.toFixed(2)} / $${this.monthlyBudget})`);
+      return false;
+    }
+    
+    return true;
+  }
+  
+  recordCost(teamName, model, inputTokens, outputTokens) {
+    const cost = this.estimateCost(model, inputTokens, outputTokens);
+    
+    this.spending.today += cost;
+    this.spending.thisMonth += cost;
+    this.spending.totalRequests++;
+    
+    // Track by team
+    if (this.spending.byTeam[teamName]) {
+      this.spending.byTeam[teamName].cost += cost;
+      this.spending.byTeam[teamName].requests++;
+    }
+    
+    // Track by model
+    if (!this.spending.byModel[model]) {
+      this.spending.byModel[model] = { cost: 0, requests: 0 };
+    }
+    this.spending.byModel[model].cost += cost;
+    this.spending.byModel[model].requests++;
+    
+    this.saveSpendingData();
+    
+    console.log(`💰 [${teamName}] ${model}: $${cost.toFixed(4)} | Daily: $${this.spending.today.toFixed(4)} / $${this.dailyBudget} | Monthly: $${this.spending.thisMonth.toFixed(2)} / $${this.monthlyBudget}`);
+    
+    // Check if we should pause tournament
+    if (!this.canAffordAnalysis() && !this.tournamentPausedByBudget) {
+      console.error('⛔ AI BUDGET EXCEEDED - Tournament should be paused!');
+      this.tournamentPausedByBudget = true;
+    }
+    
+    return cost;
+  }
+  
+  estimateTokenCount(data) {
+    // Rough estimation: 1 token ≈ 4 characters
+    const jsonString = JSON.stringify(data);
+    return Math.ceil(jsonString.length / 4);
+  }
+  
+  getSpendingReport() {
+    return {
+      today: this.spending.today,
+      dailyBudget: this.dailyBudget,
+      remainingDaily: this.dailyBudget - this.spending.today,
+      monthly: this.spending.thisMonth,
+      monthlyBudget: this.monthlyBudget,
+      remainingMonthly: this.monthlyBudget - this.spending.thisMonth,
+      totalRequests: this.spending.totalRequests,
+      byTeam: this.spending.byTeam,
+      byModel: this.spending.byModel,
+      budgetExceeded: !this.canAffordAnalysis()
+    };
+  }
+  
+  resetIfNewMonth() {
+    const now = new Date();
+    const lastUpdate = new Date(this.spending.lastUpdated);
+    
+    if (now.getMonth() !== lastUpdate.getMonth() || now.getFullYear() !== lastUpdate.getFullYear()) {
+      console.log('📊 New month - resetting monthly AI budget');
+      this.spending.thisMonth = 0;
+      this.saveSpendingData();
+    }
+  }
+}
+
+// Initialize global cost manager
+const costManager = new AICostManager();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AI COST ALERT SYSTEM - Budget Warnings & Notifications
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class AICostAlertSystem {
+  constructor(costManager) {
+    this.costManager = costManager;
+    this.alerts = [];
+    this.lastAlertTime = {};
+
+    // Alert thresholds (percentages of budget)
+    this.thresholds = {
+      dailyWarning: 0.50,    // 50% of daily budget
+      dailyCritical: 0.80,   // 80% of daily budget
+      monthlyWarning: 0.50,  // 50% of monthly budget
+      monthlyCritical: 0.80, // 80% of monthly budget
+      perAnalysisHigh: 0.05  // Alert if single analysis > 5 cents
+    };
+
+    // Minimum time between same alert type (ms)
+    this.alertCooldown = 5 * 60 * 1000; // 5 minutes
+  }
+
+  checkAlerts() {
+    const report = this.costManager.getSpendingReport();
+    const alerts = [];
+    const now = Date.now();
+
+    // Daily budget alerts
+    const dailyPercent = report.today / report.dailyBudget;
+    if (dailyPercent >= this.thresholds.dailyCritical) {
+      if (this.canAlert('daily_critical')) {
+        alerts.push({
+          type: 'CRITICAL',
+          category: 'daily',
+          message: `Daily AI spending at ${(dailyPercent * 100).toFixed(0)}% ($${report.today.toFixed(4)} / $${report.dailyBudget})`,
+          action: 'Tournament will pause when budget exhausted',
+          timestamp: new Date().toISOString()
+        });
+        this.lastAlertTime['daily_critical'] = now;
+      }
+    } else if (dailyPercent >= this.thresholds.dailyWarning) {
+      if (this.canAlert('daily_warning')) {
+        alerts.push({
+          type: 'WARNING',
+          category: 'daily',
+          message: `Daily AI spending at ${(dailyPercent * 100).toFixed(0)}% ($${report.today.toFixed(4)} / $${report.dailyBudget})`,
+          action: 'Consider reducing trade frequency',
+          timestamp: new Date().toISOString()
+        });
+        this.lastAlertTime['daily_warning'] = now;
+      }
+    }
+
+    // Monthly budget alerts
+    const monthlyPercent = report.monthly / report.monthlyBudget;
+    if (monthlyPercent >= this.thresholds.monthlyCritical) {
+      if (this.canAlert('monthly_critical')) {
+        alerts.push({
+          type: 'CRITICAL',
+          category: 'monthly',
+          message: `Monthly AI spending at ${(monthlyPercent * 100).toFixed(0)}% ($${report.monthly.toFixed(2)} / $${report.monthlyBudget})`,
+          action: 'Increase budget or switch to cheaper models',
+          timestamp: new Date().toISOString()
+        });
+        this.lastAlertTime['monthly_critical'] = now;
+      }
+    } else if (monthlyPercent >= this.thresholds.monthlyWarning) {
+      if (this.canAlert('monthly_warning')) {
+        alerts.push({
+          type: 'WARNING',
+          category: 'monthly',
+          message: `Monthly AI spending at ${(monthlyPercent * 100).toFixed(0)}% ($${report.monthly.toFixed(2)} / $${report.monthlyBudget})`,
+          action: 'Monitor spending closely',
+          timestamp: new Date().toISOString()
+        });
+        this.lastAlertTime['monthly_warning'] = now;
+      }
+    }
+
+    // Budget exhausted alert
+    if (report.budgetExceeded) {
+      if (this.canAlert('budget_exhausted')) {
+        alerts.push({
+          type: 'CRITICAL',
+          category: 'exhausted',
+          message: 'AI budget exhausted - Tournament paused',
+          action: 'Add budget or wait for daily reset',
+          timestamp: new Date().toISOString()
+        });
+        this.lastAlertTime['budget_exhausted'] = now;
+      }
+    }
+
+    // Store and log alerts
+    if (alerts.length > 0) {
+      this.alerts.push(...alerts);
+      // Keep only last 50 alerts
+      if (this.alerts.length > 50) {
+        this.alerts = this.alerts.slice(-50);
+      }
+
+      alerts.forEach(alert => {
+        const icon = alert.type === 'CRITICAL' ? '🚨' : '⚠️';
+        console.log(`${icon} [COST ALERT] ${alert.message} - ${alert.action}`);
+      });
+    }
+
+    return alerts;
+  }
+
+  canAlert(alertKey) {
+    const lastTime = this.lastAlertTime[alertKey];
+    if (!lastTime) return true;
+    return (Date.now() - lastTime) > this.alertCooldown;
+  }
+
+  getRecentAlerts(limit = 10) {
+    return this.alerts.slice(-limit);
+  }
+
+  clearAlerts() {
+    this.alerts = [];
+    this.lastAlertTime = {};
+  }
+}
+
+// Initialize alert system
+const costAlertSystem = new AICostAlertSystem(costManager);
 
 // Enable CORS for all routes
 app.use(cors());
@@ -819,25 +1126,193 @@ async function fetchMarketDataForAI(symbols) {
   }
 }
 
-// Get AI trading decision from Claude
-async function getAITradingDecision(team, marketData, competitivePosition) {
-  if (!CLAUDE_API_KEY) {
-    console.log('[AI] No Claude API key - using simulated decision');
+// ═══════════════════════════════════════════════════════════════════════════════
+// AI MODEL API CALLS - Each team uses their respective AI model
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Call Claude API (Sonnet) for Team 1
+async function callClaudeAPI(prompt, teamName = 'Value Hunter') {
+  if (!CLAUDE_API_KEY) return null;
+  
+  // Check budget before making API call
+  if (!costManager.canAffordAnalysis()) {
+    console.warn(`⛔ [${teamName}] Budget exceeded - skipping Claude API call`);
     return null;
   }
 
   try {
-    // Build context about current holdings
-    const holdingsSummary = Object.entries(team.holdings || {})
-      .map(([sym, pos]) => `${sym}: ${pos.shares} shares @ $${pos.avgCost.toFixed(2)} (P/L: ${pos.unrealizedPnL >= 0 ? '+' : ''}$${pos.unrealizedPnL.toFixed(2)})`)
-      .join('\n') || 'No current holdings';
+    const response = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': CLAUDE_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json'
+      },
+      timeoutMs: 30000,
+      retries: 1,
+      body: JSON.stringify({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 300,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
 
-    // Build market data summary
-    const marketSummary = marketData.slice(0, 8).map(s =>
-      `${s.symbol}: $${s.price?.toFixed(2)} (${s.changesPercentage >= 0 ? '+' : ''}${s.changesPercentage?.toFixed(2)}%) Vol: ${(s.volume/1000000).toFixed(1)}M P/E: ${s.pe?.toFixed(1) || 'N/A'}`
-    ).join('\n');
+    const result = await response.json();
+    if (result.error) {
+      console.error('[Claude API] Error:', result.error.message);
+      return null;
+    }
+    
+    // Track cost
+    if (result.usage) {
+      costManager.recordCost(
+        teamName,
+        'claude-3-sonnet',
+        result.usage.input_tokens || 0,
+        result.usage.output_tokens || 0
+      );
+    }
+    
+    return result.content?.[0]?.text || '';
+  } catch (error) {
+    console.error('[Claude API] Request failed:', error.message);
+    return null;
+  }
+}
 
-    const prompt = `You are ${team.name}, an AI trading agent with a ${team.strategy} strategy. You are ${team.personality} and focus on ${team.focuses.join(', ')}.
+// Call Kimi API (K2) for Team 2
+async function callKimiAPI(prompt) {
+  if (!KIMI_API_KEY) return null;
+
+  try {
+    const response = await fetchWithRetry('https://api.moonshot.cn/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${KIMI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      timeoutMs: 30000,
+      retries: 1,
+      body: JSON.stringify({
+        model: 'moonshot-v1-8k',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 300,
+        temperature: 0.7
+      })
+    });
+
+    const result = await response.json();
+    if (result.error) {
+      console.error('[Kimi API] Error:', result.error.message || result.error);
+      return null;
+    }
+    return result.choices?.[0]?.message?.content || '';
+  } catch (error) {
+    console.error('[Kimi API] Request failed:', error.message);
+    return null;
+  }
+}
+
+// Call DeepSeek API (V3) for Team 3
+async function callDeepSeekAPI(prompt, teamName = 'Momentum Trader') {
+  if (!DEEPSEEK_API_KEY) return null;
+  
+  // Check budget before making API call
+  if (!costManager.canAffordAnalysis()) {
+    console.warn(`⛔ [${teamName}] Budget exceeded - skipping DeepSeek API call`);
+    return null;
+  }
+
+  try {
+    const response = await fetchWithRetry('https://api.deepseek.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      timeoutMs: 30000,
+      retries: 1,
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 300,
+        temperature: 0.7
+      })
+    });
+
+    const result = await response.json();
+    if (result.error) {
+      console.error('[DeepSeek API] Error:', result.error.message || result.error);
+      return null;
+    }
+    
+    // Track cost
+    if (result.usage) {
+      costManager.recordCost(
+        teamName,
+        'deepseek-chat',
+        result.usage.prompt_tokens || 0,
+        result.usage.completion_tokens || 0
+      );
+    }
+    return result.choices?.[0]?.message?.content || '';
+  } catch (error) {
+    console.error('[DeepSeek API] Request failed:', error.message);
+    return null;
+  }
+}
+
+// Call Gemini API (Pro) for Team 4
+async function callGeminiAPI(prompt) {
+  if (!GEMINI_API_KEY) return null;
+
+  try {
+    const response = await fetchWithRetry(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeoutMs: 30000,
+        retries: 1,
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: prompt }]
+          }],
+          generationConfig: {
+            maxOutputTokens: 300,
+            temperature: 0.7
+          }
+        })
+      }
+    );
+
+    const result = await response.json();
+    if (result.error) {
+      console.error('[Gemini API] Error:', result.error.message || result.error);
+      return null;
+    }
+    return result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  } catch (error) {
+    console.error('[Gemini API] Request failed:', error.message);
+    return null;
+  }
+}
+
+// Get AI trading decision - routes to the correct AI based on team
+async function getAITradingDecision(team, marketData, competitivePosition) {
+  // Build context about current holdings
+  const holdingsSummary = Object.entries(team.holdings || {})
+    .map(([sym, pos]) => `${sym}: ${pos.shares} shares @ $${pos.avgCost.toFixed(2)} (P/L: ${pos.unrealizedPnL >= 0 ? '+' : ''}$${pos.unrealizedPnL.toFixed(2)})`)
+    .join('\n') || 'No current holdings';
+
+  // Build market data summary
+  const marketSummary = marketData.slice(0, 8).map(s =>
+    `${s.symbol}: $${s.price?.toFixed(2)} (${s.changesPercentage >= 0 ? '+' : ''}${s.changesPercentage?.toFixed(2)}%) Vol: ${(s.volume/1000000).toFixed(1)}M P/E: ${s.pe?.toFixed(1) || 'N/A'}`
+  ).join('\n');
+
+  const prompt = `You are ${team.name}, an AI trading agent with a ${team.strategy} strategy. You are ${team.personality} and focus on ${team.focuses.join(', ')}.
 
 TOURNAMENT STATUS:
 - Your Portfolio: $${team.portfolioValue.toFixed(2)} (Cash: $${team.cash.toFixed(2)})
@@ -861,42 +1336,53 @@ Respond in this EXACT JSON format only:
 
 If HOLD, use: {"action": "HOLD", "symbol": null, "shares": 0, "reasoning": "explanation"}`;
 
-    const response = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': CLAUDE_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json'
-      },
-      timeoutMs: 30000,
-      retries: 1,
-      body: JSON.stringify({
-        model: 'claude-3-5-haiku-20241022', // Use Haiku for cost efficiency
-        max_tokens: 300,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
+  let content = null;
 
-    const result = await response.json();
+  // Route to the correct AI API based on team model
+  try {
+    switch (team.model) {
+      case 'Claude-3-Sonnet':
+        console.log(`[AI] Calling Claude Sonnet API for ${team.name}...`);
+        content = await callClaudeAPI(prompt);
+        break;
 
-    if (result.error) {
-      console.error(`[AI] Claude API error for ${team.name}:`, result.error.message);
-      return null;
+      case 'Kimi-K2':
+        console.log(`[AI] Calling Kimi K2 API for ${team.name}...`);
+        content = await callKimiAPI(prompt);
+        break;
+
+      case 'DeepSeek-V3':
+        console.log(`[AI] Calling DeepSeek V3 API for ${team.name}...`);
+        content = await callDeepSeekAPI(prompt);
+        break;
+
+      case 'Gemini-Pro':
+        console.log(`[AI] Calling Gemini Pro API for ${team.name}...`);
+        content = await callGeminiAPI(prompt);
+        break;
+
+      default:
+        console.log(`[AI] Unknown model ${team.model} for ${team.name}, trying Claude fallback...`);
+        content = await callClaudeAPI(prompt);
     }
 
-    const content = result.content?.[0]?.text || '';
+    if (!content) {
+      console.log(`[AI] No response from ${team.model} for ${team.name} - using smart fallback`);
+      return null;
+    }
 
     // Parse JSON response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const decision = JSON.parse(jsonMatch[0]);
-      console.log(`[AI] ${team.name} decision: ${decision.action} ${decision.shares || ''} ${decision.symbol || ''}`);
+      console.log(`[AI] ${team.name} (${team.model}) decision: ${decision.action} ${decision.shares || ''} ${decision.symbol || ''}`);
       return decision;
     }
 
+    console.log(`[AI] Could not parse JSON from ${team.model} response for ${team.name}`);
     return null;
   } catch (error) {
-    console.error(`[AI] Error getting decision for ${team.name}:`, error.message);
+    console.error(`[AI] Error getting decision for ${team.name} (${team.model}):`, error.message);
     return null;
   }
 }
@@ -1038,6 +1524,329 @@ function calculateSectorAllocation(team) {
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// SMART FILTER - 2-Tier Filtering System
+// Tier 1: Technical screening narrows ~950 stocks to ~50 (score-based)
+// Tier 2: DeepSeek AI analysis narrows ~50 to top ~15 for AI teams
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Filter configuration thresholds
+const FILTER_CONFIG = {
+  PRICE_MOVE_THRESHOLD: 2.0,      // Minimum % price move to consider
+  VOLUME_SPIKE_THRESHOLD: 1.5,    // Volume must be 1.5x average
+  RSI_OVERSOLD: 30,               // RSI below this = oversold
+  RSI_OVERBOUGHT: 70,             // RSI above this = overbought
+  MIN_SCORE: 40,                  // Minimum score to pass Tier 1
+  MAX_TIER1_RESULTS: 50,          // Max stocks from Tier 1 for AI analysis
+  MAX_FINAL_STOCKS: 15            // Final narrowed list for teams
+};
+
+// Cache for filtered stocks (refreshed every 5 minutes)
+let filteredStocksCache = {
+  tier1Stocks: [],                // Stocks that passed technical screen
+  aiFilteredStocks: [],           // Stocks approved by DeepSeek AI
+  stocks: [],                     // Final list for teams (alias for aiFilteredStocks)
+  lastUpdate: null,
+  cacheDuration: 5 * 60 * 1000    // 5 minutes
+};
+
+// Fetch technical data for filtering
+async function fetchTechnicalData(symbols) {
+  try {
+    // Batch fetch quotes
+    const batchSize = 50;
+    const allQuotes = [];
+
+    for (let i = 0; i < symbols.length; i += batchSize) {
+      const batch = symbols.slice(i, i + batchSize);
+      const symbolList = batch.join(',');
+      const url = `https://financialmodelingprep.com/stable/quote?symbol=${symbolList}&apikey=${FMP_API_KEY}`;
+
+      const response = await fetchWithRetry(url, { timeoutMs: 15000, retries: 2 });
+      const data = await response.json();
+
+      if (Array.isArray(data)) {
+        allQuotes.push(...data);
+      }
+
+      // Small delay between batches to avoid rate limits
+      if (i + batchSize < symbols.length) {
+        await sleep(200);
+      }
+    }
+
+    return allQuotes;
+  } catch (error) {
+    console.error('[SmartFilter] Error fetching technical data:', error.message);
+    return [];
+  }
+}
+
+// Fetch RSI and technical indicators for a stock
+async function fetchTechnicalIndicators(symbol) {
+  try {
+    const url = `https://financialmodelingprep.com/stable/technical-indicator/1day/${symbol}?period=14&type=rsi&apikey=${FMP_API_KEY}`;
+    const response = await fetchWithRetry(url, { timeoutMs: 10000, retries: 1 });
+    const data = await response.json();
+
+    if (Array.isArray(data) && data.length > 0) {
+      return {
+        rsi: data[0].rsi,
+        date: data[0].date
+      };
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
+// Smart Filter: Screen stocks based on technical criteria
+async function smartFilterStocks(watchlist) {
+  const now = Date.now();
+
+  // Return cached results if still valid
+  if (filteredStocksCache.lastUpdate &&
+      (now - filteredStocksCache.lastUpdate) < filteredStocksCache.cacheDuration &&
+      filteredStocksCache.stocks.length > 0) {
+    console.log(`[SmartFilter] Using cached results (${filteredStocksCache.stocks.length} stocks)`);
+    return filteredStocksCache.stocks;
+  }
+
+  console.log(`[SmartFilter] Screening ${watchlist.length} stocks...`);
+
+  // Fetch all quotes
+  const quotes = await fetchTechnicalData(watchlist);
+
+  if (quotes.length === 0) {
+    console.log('[SmartFilter] No quotes received, using random selection');
+    return watchlist.slice(0, 20);
+  }
+
+  const results = [];
+
+  for (const quote of quotes) {
+    if (!quote.symbol || !quote.price) continue;
+
+    let score = 0;
+    const signals = [];
+
+    // 1. Price Move Score (25 points)
+    const changePercent = Math.abs(quote.changesPercentage || 0);
+    if (changePercent >= FILTER_CONFIG.PRICE_MOVE_THRESHOLD) {
+      score += 25;
+      signals.push(`Price ${quote.changesPercentage >= 0 ? '+' : ''}${quote.changesPercentage?.toFixed(1)}%`);
+    }
+
+    // 2. Volume Spike Score (20 points)
+    const volumeRatio = quote.avgVolume > 0 ? quote.volume / quote.avgVolume : 1;
+    if (volumeRatio >= FILTER_CONFIG.VOLUME_SPIKE_THRESHOLD) {
+      score += 20;
+      signals.push(`Volume ${volumeRatio.toFixed(1)}x avg`);
+    }
+
+    // 3. Near 52-week High/Low (20 points)
+    if (quote.yearHigh && quote.price >= quote.yearHigh * 0.95) {
+      score += 20;
+      signals.push('Near 52w high');
+    } else if (quote.yearLow && quote.price <= quote.yearLow * 1.05) {
+      score += 20;
+      signals.push('Near 52w low');
+    }
+
+    // 4. Market Cap preference (10 points for mid-large cap)
+    if (quote.marketCap >= 10000000000) { // $10B+
+      score += 10;
+      signals.push('Large cap');
+    } else if (quote.marketCap >= 2000000000) { // $2B+
+      score += 5;
+      signals.push('Mid cap');
+    }
+
+    // 5. P/E Ratio signals (15 points)
+    if (quote.pe && quote.pe > 0) {
+      if (quote.pe < 15) {
+        score += 15;
+        signals.push(`Low P/E (${quote.pe.toFixed(1)})`);
+      } else if (quote.pe > 50) {
+        score += 10;
+        signals.push(`High P/E (${quote.pe.toFixed(1)})`);
+      }
+    }
+
+    // 6. Day range position (10 points)
+    if (quote.dayHigh && quote.dayLow && quote.dayHigh !== quote.dayLow) {
+      const dayRange = (quote.price - quote.dayLow) / (quote.dayHigh - quote.dayLow);
+      if (dayRange >= 0.8) {
+        score += 10;
+        signals.push('Near day high');
+      } else if (dayRange <= 0.2) {
+        score += 10;
+        signals.push('Near day low');
+      }
+    }
+
+    // Only include stocks that pass minimum score
+    if (score >= FILTER_CONFIG.MIN_SCORE) {
+      results.push({
+        symbol: quote.symbol,
+        price: quote.price,
+        change: quote.change,
+        changesPercentage: quote.changesPercentage,
+        volume: quote.volume,
+        avgVolume: quote.avgVolume,
+        volumeRatio: Math.round(volumeRatio * 100) / 100,
+        marketCap: quote.marketCap,
+        pe: quote.pe,
+        yearHigh: quote.yearHigh,
+        yearLow: quote.yearLow,
+        score: score,
+        signals: signals,
+        sector: getStockSector(quote.symbol)
+      });
+    }
+  }
+
+  // Sort by score (highest first)
+  results.sort((a, b) => b.score - a.score);
+
+  // Limit to MAX_TIER1_RESULTS for Tier 2 processing
+  const tier1Results = results.slice(0, FILTER_CONFIG.MAX_TIER1_RESULTS);
+
+  // Cache Tier 1 results
+  filteredStocksCache.tier1Stocks = tier1Results;
+
+  console.log(`[SmartFilter] ✅ TIER 1: ${results.length} stocks passed technical screen (Score ≥ ${FILTER_CONFIG.MIN_SCORE})`);
+  console.log(`[SmartFilter] Top ${tier1Results.length} stocks sent to Tier 2 AI analysis`);
+
+  // Log top 10 from Tier 1
+  if (tier1Results.length > 0) {
+    console.log('[SmartFilter] Tier 1 Top 10:');
+    tier1Results.slice(0, 10).forEach((s, i) => {
+      console.log(`  ${i+1}. ${s.symbol}: Score ${s.score} - ${s.signals.join(', ')}`);
+    });
+  }
+
+  // Tier 2: AI-powered filtering using DeepSeek
+  const aiFilteredStocks = await tier2AIFilter(tier1Results);
+
+  // Cache final results
+  filteredStocksCache.aiFilteredStocks = aiFilteredStocks;
+  filteredStocksCache.stocks = aiFilteredStocks; // Alias for backward compatibility
+  filteredStocksCache.lastUpdate = now;
+
+  return aiFilteredStocks;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TIER 2: Unbiased Technical Filtering with Sector Diversification
+// Uses pure scoring + sector balancing - NO AI to avoid bias toward any team
+// (Using DeepSeek here would give Team 3 an unfair advantage)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function tier2AIFilter(tier1Stocks) {
+  if (tier1Stocks.length === 0) {
+    console.log('[SmartFilter] TIER 2: No stocks from Tier 1 to analyze');
+    return [];
+  }
+
+  console.log(`\n[SmartFilter] 📊 TIER 2: Unbiased selection from ${tier1Stocks.length} stocks...`);
+
+  // Group stocks by sector
+  const sectorGroups = {};
+  for (const stock of tier1Stocks) {
+    const sector = stock.sector || 'Other';
+    if (!sectorGroups[sector]) {
+      sectorGroups[sector] = [];
+    }
+    sectorGroups[sector].push(stock);
+  }
+
+  // Sort each sector's stocks by score
+  for (const sector of Object.keys(sectorGroups)) {
+    sectorGroups[sector].sort((a, b) => b.score - a.score);
+  }
+
+  // Sort sectors by their top stock's score
+  const sectors = Object.keys(sectorGroups).sort((a, b) =>
+    (sectorGroups[b][0]?.score || 0) - (sectorGroups[a][0]?.score || 0)
+  );
+
+  console.log(`[SmartFilter] Found stocks in ${sectors.length} sectors`);
+
+  // Select stocks using round-robin across sectors for diversity
+  const selected = [];
+  const sectorCounts = {};
+
+  // First pass: Take top stock from each sector (ensures diversity)
+  for (const sector of sectors) {
+    if (selected.length >= FILTER_CONFIG.MAX_FINAL_STOCKS) break;
+
+    const topStock = sectorGroups[sector][0];
+    if (topStock) {
+      topStock.tier2Rank = selected.length + 1;
+      topStock.selectionMethod = 'sector_top';
+      selected.push(topStock);
+      sectorCounts[sector] = 1;
+    }
+  }
+
+  // Second pass: Fill remaining slots with highest-scoring stocks
+  // ensuring sector balance (max 3 per sector to prevent concentration)
+  if (selected.length < FILTER_CONFIG.MAX_FINAL_STOCKS) {
+    const remaining = tier1Stocks
+      .filter(s => !selected.find(sel => sel.symbol === s.symbol))
+      .sort((a, b) => b.score - a.score);
+
+    for (const stock of remaining) {
+      if (selected.length >= FILTER_CONFIG.MAX_FINAL_STOCKS) break;
+
+      const sector = stock.sector || 'Other';
+      const currentCount = sectorCounts[sector] || 0;
+
+      // Allow max 3 stocks per sector for diversity
+      if (currentCount < 3) {
+        stock.tier2Rank = selected.length + 1;
+        stock.selectionMethod = 'score_fill';
+        selected.push(stock);
+        sectorCounts[sector] = currentCount + 1;
+      }
+    }
+  }
+
+  // Third pass: If still not enough, take any remaining by score (ignore sector limit)
+  if (selected.length < FILTER_CONFIG.MAX_FINAL_STOCKS) {
+    const stillRemaining = tier1Stocks
+      .filter(s => !selected.find(sel => sel.symbol === s.symbol))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, FILTER_CONFIG.MAX_FINAL_STOCKS - selected.length);
+
+    for (const stock of stillRemaining) {
+      stock.tier2Rank = selected.length + 1;
+      stock.selectionMethod = 'overflow';
+      selected.push(stock);
+    }
+  }
+
+  console.log(`[SmartFilter] ✅ TIER 2: Selected ${selected.length} stocks (unbiased, sector-balanced):`);
+
+  // Log selected stocks
+  selected.forEach((s, i) => {
+    console.log(`  ${i+1}. ${s.symbol} | Score: ${s.score} | ${s.sector} | ${s.signals.slice(0, 2).join(', ')}`);
+  });
+
+  // Log sector distribution
+  const finalSectorCounts = {};
+  selected.forEach(s => {
+    finalSectorCounts[s.sector] = (finalSectorCounts[s.sector] || 0) + 1;
+  });
+  console.log('[SmartFilter] Sector distribution:',
+    Object.entries(finalSectorCounts).map(([s, c]) => `${s}: ${c}`).join(', ')
+  );
+
+  return selected;
+}
+
 // Fetch real-time prices from FMP API
 async function fetchRealTimePrices(symbols) {
   const now = Date.now();
@@ -1114,81 +1923,101 @@ async function getRealTimePrice(symbol) {
   return priceCache.prices[symbol] || null;
 }
 
-async function simulateTrade(team) {
-  // Get competitive position to influence trading behavior
+async function executeAITrade(team, filteredStocks) {
+  // Get competitive position
   const competitivePos = getCompetitivePosition(team);
-
-  // Trailing teams may be more aggressive (more buys), leading teams more defensive (more sells)
-  let buyProbability = 0.5;
-  if (competitivePos.isTrailing) {
-    buyProbability = 0.65; // Trailing teams buy more aggressively
-  } else if (competitivePos.isLeading) {
-    buyProbability = 0.4; // Leading teams take profits more often
-  }
-
-  // Determine action - but can only sell if we have holdings
   const holdingsSymbols = Object.keys(team.holdings).filter(s => team.holdings[s].shares > 0);
-  let action, symbol;
 
-  if (holdingsSymbols.length === 0 || Math.random() < buyProbability) {
-    // BUY - pick random symbol from watchlist
-    action = 'BUY';
-    symbol = tournamentState.watchlist[Math.floor(Math.random() * tournamentState.watchlist.length)];
+  // Try to get real AI decision
+  const aiDecision = await getAITradingDecision(team, filteredStocks, competitivePos);
+
+  let action, symbol, shares, reasoning;
+
+  if (aiDecision && aiDecision.action !== 'HOLD') {
+    // Use AI decision
+    action = aiDecision.action;
+    symbol = aiDecision.symbol;
+    shares = aiDecision.shares || Math.floor(10 + Math.random() * 30);
+    reasoning = aiDecision.reasoning || generateReasoning(team, action, symbol);
+
+    console.log(`[AI Trade] ${team.name}: ${action} ${shares} ${symbol}`);
+  } else if (aiDecision && aiDecision.action === 'HOLD') {
+    // AI decided to hold - skip this trade
+    console.log(`[AI Trade] ${team.name}: HOLD - ${aiDecision.reasoning}`);
+    return null;
   } else {
-    // SELL - pick from holdings
-    action = 'SELL';
-    symbol = holdingsSymbols[Math.floor(Math.random() * holdingsSymbols.length)];
+    // Fallback to smart selection from filtered stocks
+    console.log(`[AI Trade] ${team.name}: Using smart fallback selection`);
+
+    // Trailing teams may be more aggressive
+    let buyProbability = 0.5;
+    if (competitivePos.isTrailing) {
+      buyProbability = 0.65;
+    } else if (competitivePos.isLeading) {
+      buyProbability = 0.4;
+    }
+
+    if (holdingsSymbols.length === 0 || Math.random() < buyProbability) {
+      action = 'BUY';
+      // Pick from filtered stocks (prioritize higher scores)
+      if (filteredStocks.length > 0) {
+        // Weight selection toward higher-scoring stocks
+        const topStocks = filteredStocks.slice(0, Math.min(10, filteredStocks.length));
+        symbol = topStocks[Math.floor(Math.random() * topStocks.length)].symbol;
+      } else {
+        symbol = tournamentState.watchlist[Math.floor(Math.random() * tournamentState.watchlist.length)];
+      }
+    } else {
+      action = 'SELL';
+      symbol = holdingsSymbols[Math.floor(Math.random() * holdingsSymbols.length)];
+    }
+
+    shares = Math.floor(10 + Math.random() * 40);
+    reasoning = generateReasoning(team, action, symbol);
   }
 
-  // Get real-time price from FMP API
+  // Get real-time price
   let price = await getRealTimePrice(symbol);
-
-  // If we couldn't get a real price, skip this trade
   if (!price) {
-    console.log(`[Tournament] Skipping trade - no price available for ${symbol}`);
+    console.log(`[Tournament] Skipping trade - no price for ${symbol}`);
     return null;
   }
 
-  // Adjust position size based on competitive position and strategy
-  let baseShares = 5 + Math.random() * 45; // 5-50 shares base
-
-  // Trailing aggressive/momentum teams take larger positions
+  // Adjust shares based on strategy and position
   if (competitivePos.isTrailing && (team.strategy === 'aggressive' || team.strategy === 'momentum')) {
-    baseShares *= 1.3; // 30% larger positions when trailing
+    shares = Math.floor(shares * 1.3);
   }
-  // Leading conservative teams take smaller positions
   if (competitivePos.isLeading && team.strategy === 'conservative') {
-    baseShares *= 0.8; // 20% smaller positions when leading
+    shares = Math.floor(shares * 0.8);
   }
 
-  let shares = Math.floor(baseShares);
   const tradeValue = price * shares;
 
-  // For BUY: check if team has enough cash
+  // Validate BUY
   if (action === 'BUY') {
     if (team.cash < tradeValue) {
-      // Reduce shares to what we can afford (minimum 1 share)
       shares = Math.floor(team.cash / price);
       if (shares < 1) {
-        console.log(`[Tournament] ${team.name} cannot afford to buy ${symbol} - insufficient cash`);
+        console.log(`[Tournament] ${team.name} cannot afford ${symbol}`);
         return null;
       }
     }
   }
 
-  // For SELL: check if team has enough shares
+  // Validate SELL
   if (action === 'SELL') {
     const holding = team.holdings[symbol];
     if (!holding || holding.shares < shares) {
       shares = holding ? holding.shares : 0;
       if (shares < 1) {
-        console.log(`[Tournament] ${team.name} has no ${symbol} shares to sell`);
+        console.log(`[Tournament] ${team.name} has no ${symbol} to sell`);
         return null;
       }
     }
   }
 
-  const reasoning = generateReasoning(team, action, symbol);
+  // Get filtered stock data for additional context
+  const stockData = filteredStocks.find(s => s.symbol === symbol);
 
   return {
     time: new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York' }),
@@ -1201,6 +2030,9 @@ async function simulateTrade(team) {
     price: Math.round(price * 100) / 100,
     shares,
     reasoning,
+    aiGenerated: !!aiDecision,
+    filterScore: stockData?.score || null,
+    filterSignals: stockData?.signals || [],
     competitiveContext: {
       rank: competitivePos.rank,
       position: competitivePos.position,
@@ -1214,21 +2046,23 @@ async function executeTradingRound() {
 
   console.log('[Tournament] Executing trading round...');
 
-  // Pre-fetch prices for a batch of random stocks to populate cache
-  const randomSymbols = [];
-  for (let i = 0; i < 20; i++) {
-    const symbol = tournamentState.watchlist[Math.floor(Math.random() * tournamentState.watchlist.length)];
-    if (!randomSymbols.includes(symbol)) {
-      randomSymbols.push(symbol);
-    }
+  // Run SmartFilter to get screened stocks for all teams
+  const filteredStocks = await smartFilterStocks(tournamentState.watchlist);
+
+  // Store filtered stocks in tournament state for API access
+  tournamentState.filteredStocks = filteredStocks;
+
+  // Pre-fetch prices for filtered stocks
+  const symbolsToFetch = filteredStocks.slice(0, 30).map(s => s.symbol);
+  if (symbolsToFetch.length > 0) {
+    await fetchRealTimePrices(symbolsToFetch);
   }
-  await fetchRealTimePrices(randomSymbols);
 
   // Each team has a chance to make a trade
   for (const team of tournamentState.teams) {
     // 40% chance per team per round to make a trade
     if (Math.random() < 0.4) {
-      const trade = await simulateTrade(team);
+      const trade = await executeAITrade(team, filteredStocks);
 
       // Skip if trade failed (no price available)
       if (!trade) continue;
@@ -1515,7 +2349,17 @@ app.get('/api/tournament/status/current', async (req, res) => {
   }
 });
 
-// Tournament results endpoint - returns trades with AI reasoning
+// Get AI cost spending report
+app.get('/api/ai/costs', (req, res) => {
+  try {
+    const report = costManager.getSpendingReport();
+    res.json(report);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Tournament results endpoint - returns trades with AI reasoning, metrics, and sector allocation
 app.get('/api/tournament/results', async (req, res) => {
   try {
     const marketStatus = getMarketStatus();
@@ -1523,33 +2367,56 @@ app.get('/api/tournament/results', async (req, res) => {
       status: tournamentState.running ? 'running' : 'idle',
       marketOpen: marketStatus.open,
       marketMessage: marketStatus.message,
-      dataSource: 'Real-time FMP API',
+      dataSource: 'Real-time FMP API + 2-Tier Unbiased Filtering',
       watchlistCount: tournamentState.watchlist.length,
+      filtering: {
+        tier1Count: filteredStocksCache.tier1Stocks?.length || 0,
+        tier2Count: filteredStocksCache.aiFilteredStocks?.length || 0,
+        method: 'Unbiased technical scoring + sector diversification (no AI bias)',
+        description: `${tournamentState.watchlist.length} stocks → Tier 1 Technical Screen → ${filteredStocksCache.tier1Stocks?.length || 0} stocks → Tier 2 Sector-Balanced Selection → ${filteredStocksCache.aiFilteredStocks?.length || 0} stocks for teams`
+      },
+      filteredStocksCount: tournamentState.filteredStocks?.length || 0,
+      filteredStocks: (tournamentState.filteredStocks || []).slice(0, 20), // Final filtered stocks for teams
       trades: tournamentState.trades,
       portfolioHistory: tournamentState.portfolioHistory,
-      teams: tournamentState.teams.map(t => ({
-        id: t.id,
-        name: t.name,
-        model: t.model,
-        strategy: t.strategy,
-        portfolioValue: Math.round(t.portfolioValue * 100) / 100,
-        cash: Math.round(t.cash * 100) / 100,
-        invested: Math.round(t.invested * 100) / 100,
-        realizedPnL: Math.round((t.realizedPnL || 0) * 100) / 100,
-        unrealizedPnL: Math.round((t.unrealizedPnL || 0) * 100) / 100,
-        totalPnL: Math.round(((t.realizedPnL || 0) + (t.unrealizedPnL || 0)) * 100) / 100,
-        totalTrades: t.totalTrades,
-        holdings: Object.entries(t.holdings || {}).map(([symbol, pos]) => ({
-          symbol,
-          shares: pos.shares,
-          avgCost: Math.round(pos.avgCost * 100) / 100,
-          currentPrice: Math.round(pos.currentPrice * 100) / 100,
-          marketValue: Math.round(pos.marketValue * 100) / 100,
-          unrealizedPnL: Math.round(pos.unrealizedPnL * 100) / 100,
-          pnlPercent: Math.round((pos.unrealizedPnL / (pos.avgCost * pos.shares)) * 10000) / 100
-        })),
-        tradeHistory: (t.tradeHistory || []).slice(0, 20) // Last 20 trades
-      }))
+      teams: tournamentState.teams.map(t => {
+        // Calculate performance metrics
+        const metrics = calculatePerformanceMetrics(t);
+        // Calculate sector allocation
+        const sectorAllocation = calculateSectorAllocation(t);
+
+        return {
+          id: t.id,
+          name: t.name,
+          model: t.model,
+          strategy: t.strategy,
+          personality: t.personality,
+          focuses: t.focuses,
+          portfolioValue: Math.round(t.portfolioValue * 100) / 100,
+          cash: Math.round(t.cash * 100) / 100,
+          invested: Math.round(t.invested * 100) / 100,
+          realizedPnL: Math.round((t.realizedPnL || 0) * 100) / 100,
+          unrealizedPnL: Math.round((t.unrealizedPnL || 0) * 100) / 100,
+          totalPnL: Math.round(((t.realizedPnL || 0) + (t.unrealizedPnL || 0)) * 100) / 100,
+          totalTrades: t.totalTrades,
+          // Performance Metrics
+          metrics: metrics,
+          // Sector Allocation
+          sectorAllocation: sectorAllocation,
+          // Holdings with sector info
+          holdings: Object.entries(t.holdings || {}).map(([symbol, pos]) => ({
+            symbol,
+            sector: getStockSector(symbol),
+            shares: pos.shares,
+            avgCost: Math.round(pos.avgCost * 100) / 100,
+            currentPrice: Math.round(pos.currentPrice * 100) / 100,
+            marketValue: Math.round(pos.marketValue * 100) / 100,
+            unrealizedPnL: Math.round(pos.unrealizedPnL * 100) / 100,
+            pnlPercent: Math.round((pos.unrealizedPnL / (pos.avgCost * pos.shares)) * 10000) / 100
+          })),
+          tradeHistory: (t.tradeHistory || []).slice(0, 20) // Last 20 trades
+        };
+      })
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
