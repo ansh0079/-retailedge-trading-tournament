@@ -2417,33 +2417,50 @@ Please provide a clear, structured analysis in markdown format.`;
     window.SessionPersistence = SessionPersistence;
     window.refreshThrottler = refreshThrottler;
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ULTRA-FAST CACHE - In-memory layer + localStorage persistence
+    // Eliminates redundant localStorage reads and parsing
+    // ═══════════════════════════════════════════════════════════════════════════
+
     const Cache = {
-      // Check if market is currently open (9:30 AM - 4:00 PM ET, Mon-Fri)
+      // IN-MEMORY CACHE LAYER - Instant access, no parsing needed
+      _memoryCache: new Map(),
+      _memoryCacheMaxSize: 500,
+      _marketOpenCached: null,
+      _marketOpenCacheTime: 0,
+
+      // Check if market is currently open (cached for 1 minute)
       isMarketOpen() {
-        const now = new Date();
-        const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+        const now = Date.now();
+        if (this._marketOpenCached !== null && (now - this._marketOpenCacheTime) < 60000) {
+          return this._marketOpenCached;
+        }
+
+        const date = new Date();
+        const et = new Date(date.toLocaleString('en-US', { timeZone: 'America/New_York' }));
         const day = et.getDay();
         const hour = et.getHours();
         const minute = et.getMinutes();
 
         // Weekend
-        if (day === 0 || day === 6) return false;
+        if (day === 0 || day === 6) {
+          this._marketOpenCached = false;
+          this._marketOpenCacheTime = now;
+          return false;
+        }
 
-        // Before market open (9:30 AM)
-        if (hour < 9 || (hour === 9 && minute < 30)) return false;
-
-        // After market close (4:00 PM)
-        if (hour >= 16) return false;
-
-        return true;
+        // Before market open (9:30 AM) or after close (4:00 PM)
+        const isOpen = !(hour < 9 || (hour === 9 && minute < 30) || hour >= 16);
+        this._marketOpenCached = isOpen;
+        this._marketOpenCacheTime = now;
+        return isOpen;
       },
 
       // Get appropriate cache duration - Smart intervals based on data type and market hours
       getCacheDuration(type = 'STOCK_DATA') {
-        // For quotes, use market-aware duration
         if (type === 'QUOTE_DATA') {
-          return this.isMarketOpen() 
-            ? CACHE_CONFIG.QUOTE_DATA_MARKET_OPEN 
+          return this.isMarketOpen()
+            ? CACHE_CONFIG.QUOTE_DATA_MARKET_OPEN
             : CACHE_CONFIG.QUOTE_DATA_MARKET_CLOSED;
         }
 
@@ -2463,130 +2480,135 @@ Please provide a clear, structured analysis in markdown format.`;
         return `${CACHE_CONFIG.CACHE_VERSION}_${type}_${symbol.toUpperCase()}`;
       },
 
-      // Get cached data - ALWAYS returns data if available (stale-while-revalidate)
+      // INTERNAL: Load from localStorage into memory cache
+      _loadToMemory(key) {
+        // Already in memory?
+        if (this._memoryCache.has(key)) {
+          return this._memoryCache.get(key);
+        }
+
+        try {
+          const cached = localStorage.getItem(key);
+          if (!cached) return null;
+
+          // Parse once, store in memory
+          const parsed = JSON.parse(cached);
+
+          // Store in memory cache with LRU eviction
+          if (this._memoryCache.size >= this._memoryCacheMaxSize) {
+            // Remove oldest entry
+            const firstKey = this._memoryCache.keys().next().value;
+            this._memoryCache.delete(firstKey);
+          }
+          this._memoryCache.set(key, parsed);
+
+          return parsed;
+        } catch (error) {
+          return null;
+        }
+      },
+
+      // Get cached data - INSTANT from memory, falls back to localStorage
       get(symbol, type = 'stock') {
-        try {
-          const key = this.key(symbol, type);
-          const cached = localStorage.getItem(key);
+        const key = this.key(symbol, type);
+        const cached = this._loadToMemory(key);
 
-          if (!cached) return null;
+        if (!cached) return null;
 
-          // Try to decompress (handle both compressed and uncompressed)
-          let parsed;
-          try {
-            parsed = this.decompressData(cached);
-          } catch {
-            parsed = JSON.parse(cached);
-          }
-
-          const { data, timestamp } = parsed;
-          const age = Date.now() - timestamp;
-
-          // Update last accessed in index
-          this.updateIndex(symbol, type, timestamp);
-
-          // STALE-WHILE-REVALIDATE: Always return cached data, let caller decide if refresh needed
-          console.log(`✅ Cache HIT for ${symbol} (${Math.round(age / 1000 / 60)}min old)`);
-          return data;
-        } catch (error) {
-          console.warn(`Cache read error for ${symbol}:`, error);
-          return null;
-        }
+        // Return data immediately - no logging in hot path
+        return cached.data;
       },
-      
-      // Check if cache is expired (separate from get for stale-while-revalidate)
+
+      // Get with metadata (for when you need timestamp too)
+      getWithMeta(symbol, type = 'stock') {
+        const key = this.key(symbol, type);
+        return this._loadToMemory(key);
+      },
+
+      // Check if cache is expired - uses memory cache, no redundant reads
       isExpired(symbol, type = 'stock') {
-        try {
-          const key = this.key(symbol, type);
-          const cached = localStorage.getItem(key);
-          if (!cached) return true;
+        const key = this.key(symbol, type);
+        const cached = this._loadToMemory(key);
 
-          let parsed;
-          try {
-            parsed = this.decompressData(cached);
-          } catch {
-            parsed = JSON.parse(cached);
-          }
+        if (!cached) return true;
 
-          const { timestamp } = parsed;
-          const age = Date.now() - timestamp;
-          const maxAge = this.getCacheDuration(type === 'quote' ? 'QUOTE_DATA' : 'STOCK_DATA');
-          
-          return age > maxAge;
-        } catch {
-          return true;
-        }
+        const age = Date.now() - cached.timestamp;
+        const maxAge = this.getCacheDuration(type === 'quote' ? 'QUOTE_DATA' : 'STOCK_DATA');
+        return age > maxAge;
       },
 
-      // Get cache timestamp
+      // Get cache timestamp - uses memory cache
       getTimestamp(symbol, type = 'stock') {
-        try {
-          const key = this.key(symbol, type);
-          const cached = localStorage.getItem(key);
-          if (!cached) return null;
-          
-          let parsed;
-          try {
-            parsed = this.decompressData(cached);
-          } catch {
-            parsed = JSON.parse(cached);
-          }
-          return parsed.timestamp;
-        } catch {
-          return null;
-        }
+        const key = this.key(symbol, type);
+        const cached = this._loadToMemory(key);
+        return cached ? cached.timestamp : null;
       },
 
-      // Set cached data
+      // Set cached data - writes to both memory and localStorage
       set(symbol, data, type = 'stock') {
-        try {
-          const key = this.key(symbol, type);
-          const cacheData = {
-            data,
-            timestamp: Date.now(),
-            version: CACHE_CONFIG.CACHE_VERSION
-          };
-          const compressedData = this.compressData(cacheData);
+        const key = this.key(symbol, type);
+        const cacheData = {
+          data,
+          timestamp: Date.now(),
+          version: CACHE_CONFIG.CACHE_VERSION
+        };
 
-          localStorage.setItem(key, compressedData);
-
-          // Update index
-          this.updateIndex(symbol, type, Date.now());
-
-          console.log(`💾 Cached ${symbol} (${type})`);
-
-          // Clean up old caches if storage is getting full
-          this.cleanup();
-        } catch (error) {
-          if (error.name === 'QuotaExceededError') {
-            console.warn('Cache storage full, cleaning up...');
-            this.aggressiveCleanup();
-          } else {
-            console.warn(`Cache write error for ${symbol}:`, error);
-          }
+        // Update memory cache immediately (fast)
+        if (this._memoryCache.size >= this._memoryCacheMaxSize) {
+          const firstKey = this._memoryCache.keys().next().value;
+          this._memoryCache.delete(firstKey);
         }
+        this._memoryCache.set(key, cacheData);
+
+        // Persist to localStorage asynchronously (don't block UI)
+        requestAnimationFrame(() => {
+          try {
+            localStorage.setItem(key, JSON.stringify(cacheData));
+          } catch (error) {
+            if (error.name === 'QuotaExceededError') {
+              this.aggressiveCleanup();
+              try {
+                localStorage.setItem(key, JSON.stringify(cacheData));
+              } catch { /* give up */ }
+            }
+          }
+        });
       },
 
       // Remove specific cache
       remove(symbol, type = 'stock') {
+        const key = this.key(symbol, type);
+        this._memoryCache.delete(key);
         try {
-          const key = this.key(symbol, type);
           localStorage.removeItem(key);
-        } catch (error) {
-          console.warn(`Cache remove error for ${symbol}:`, error);
-        }
+        } catch { /* ignore */ }
       },
 
       // Clear all caches
       clear() {
+        this._memoryCache.clear();
         try {
           const keys = Object.keys(localStorage);
           const cacheKeys = keys.filter(k => k.startsWith(CACHE_CONFIG.CACHE_VERSION));
           cacheKeys.forEach(key => localStorage.removeItem(key));
           console.log(`🧹 Cleared ${cacheKeys.length} cached items`);
-        } catch (error) {
-          console.warn('Cache clear error:', error);
-        }
+        } catch { /* ignore */ }
+      },
+
+      // Preload frequently accessed stocks into memory (call on app init)
+      preloadToMemory(symbols) {
+        const startTime = performance.now();
+        let loaded = 0;
+
+        symbols.forEach(symbol => {
+          const quoteKey = this.key(symbol, 'quote');
+          const stockKey = this.key(symbol, 'stock');
+
+          if (this._loadToMemory(quoteKey)) loaded++;
+          if (this._loadToMemory(stockKey)) loaded++;
+        });
+
+        console.log(`⚡ Preloaded ${loaded} cache entries to memory in ${(performance.now() - startTime).toFixed(0)}ms`);
       },
 
       // Remove oldest caches to free up space
@@ -2621,26 +2643,20 @@ Please provide a clear, structured analysis in markdown format.`;
       async fetchWithCache(symbol, type, fetchFunction, options = {}) {
         const { forceRefresh = false } = options;
 
-        // Always return cached data immediately if available
+        // Always return cached data immediately if available (from memory!)
         const cached = this.get(symbol, type);
         if (cached && !forceRefresh) {
-          // Check if cache needs refresh
-          const key = this.key(symbol, type);
-          const cachedItem = localStorage.getItem(key);
-          if (cachedItem) {
-            try {
-              const { timestamp } = JSON.parse(cachedItem);
-              const age = Date.now() - timestamp;
-              const maxAge = this.getCacheDuration(type === 'quote' ? 'QUOTE_DATA' : type === 'news' ? 'NEWS_DATA' : type === 'sentiment' ? 'SENTIMENT_DATA' : 'STOCK_DATA');
+          // Use memory-cached metadata instead of re-reading localStorage
+          if (this.isExpired(symbol, type)) {
+            // Trigger background refresh - use requestIdleCallback for better performance
+            const refresh = () => fetchFunction(symbol).then(data => {
+              if (data) this.set(symbol, data, type);
+            }).catch(() => { });
 
-              // Trigger background refresh if expired
-              if (age >= maxAge) {
-                setTimeout(() => fetchFunction(symbol).then(data => {
-                  if (data) this.set(symbol, data, type);
-                }).catch(() => { }), 1000);
-              }
-            } catch (e) {
-              // Ignore parse errors
+            if ('requestIdleCallback' in window) {
+              requestIdleCallback(refresh, { timeout: 5000 });
+            } else {
+              setTimeout(refresh, 1000);
             }
           }
           return cached;
@@ -2656,7 +2672,6 @@ Please provide a clear, structured analysis in markdown format.`;
         } catch (error) {
           // Return stale cache as fallback
           if (cached) {
-            console.warn(`Using stale cache for ${symbol}`);
             return cached;
           }
           throw error;
@@ -2698,41 +2713,25 @@ Please provide a clear, structured analysis in markdown format.`;
         }
       },
 
-      // Get cache statistics
+      // Get cache statistics (optimized - no full scan)
       stats() {
-        const keys = Object.keys(localStorage);
-        const cacheKeys = keys.filter(k => k.startsWith(CACHE_CONFIG.CACHE_VERSION));
-
-        let totalSize = 0;
-        cacheKeys.forEach(key => {
-          totalSize += localStorage.getItem(key).length;
-        });
-
         return {
-          count: cacheKeys.length,
-          sizeKB: Math.round(totalSize / 1024),
-          marketOpen: this.isMarketOpen()
+          memoryCount: this._memoryCache.size,
+          marketOpen: this.isMarketOpen(),
+          // Only do full localStorage scan if explicitly requested
+          getFullStats: () => {
+            const keys = Object.keys(localStorage);
+            const cacheKeys = keys.filter(k => k.startsWith(CACHE_CONFIG.CACHE_VERSION));
+            let totalSize = 0;
+            cacheKeys.forEach(key => {
+              totalSize += (localStorage.getItem(key) || '').length;
+            });
+            return {
+              localStorageCount: cacheKeys.length,
+              sizeKB: Math.round(totalSize / 1024)
+            };
+          }
         };
-      },
-
-      // Compress data before storing
-      compressData(data) {
-        try {
-          // Simple JSON compression (removes whitespace)
-          const compressed = JSON.stringify(data).replace(/\s+/g, '');
-          return compressed;
-        } catch {
-          return JSON.stringify(data);
-        }
-      },
-
-      decompressData(compressed) {
-        try {
-          return JSON.parse(compressed);
-        } catch (error) {
-          console.warn('Failed to decompress data:', error);
-          return null;
-        }
       },
 
       // Cache index management
@@ -24584,6 +24583,12 @@ Be realistic and conservative. Base confidence on data quality.`;
           return;
         }
 
+        // ⚡ INSTANT STARTUP: Preload cache to memory BEFORE React renders
+        const defaultSymbols = typeof DEMO_STOCKS !== 'undefined'
+          ? DEMO_STOCKS.map(s => s.symbol)
+          : ['AAPL', 'MSFT', 'GOOGL', 'NVDA', 'AMZN', 'TSLA', 'META', 'JPM', 'V', 'UNH'];
+        Cache.preloadToMemory(defaultSymbols);
+
         ReactDOM.createRoot(rootElement).render(
           <ErrorBoundary>
             <App />
@@ -24591,7 +24596,7 @@ Be realistic and conservative. Base confidence on data quality.`;
         );
 
         console.log('✅ Application initialized successfully');
-        
+
         // Initialize AI Cost Dashboard
         initializeAICostDashboard();
       } catch (error) {
