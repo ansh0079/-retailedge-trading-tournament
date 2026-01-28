@@ -2176,6 +2176,129 @@ Please provide a clear, structured analysis in markdown format.`;
       }
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // VIEWPORT LOADER - Only load visible stocks for instant startup
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    const ViewportLoader = {
+      observer: null,
+      visibleSymbols: new Set(),
+      loadedEnhanced: new Set(),
+      pendingLoads: new Map(),
+      onVisibleCallback: null,
+      
+      init(callback) {
+        if (typeof IntersectionObserver === 'undefined') {
+          console.warn('⚠️ IntersectionObserver not supported');
+          return;
+        }
+        
+        this.onVisibleCallback = callback;
+        
+        this.observer = new IntersectionObserver((entries) => {
+          entries.forEach(entry => {
+            const symbol = entry.target.dataset.symbol;
+            if (!symbol) return;
+            
+            if (entry.isIntersecting) {
+              this.onSymbolVisible(symbol);
+            } else {
+              this.visibleSymbols.delete(symbol);
+            }
+          });
+        }, {
+          rootMargin: '100px', // Load before element is visible
+          threshold: 0.01
+        });
+        
+        console.log('👁️ ViewportLoader initialized');
+      },
+      
+      observe(element, symbol) {
+        if (!this.observer || !element) return;
+        element.dataset.symbol = symbol;
+        this.observer.observe(element);
+      },
+      
+      unobserve(element) {
+        if (!this.observer || !element) return;
+        this.observer.unobserve(element);
+        const symbol = element.dataset.symbol;
+        if (symbol) this.visibleSymbols.delete(symbol);
+      },
+      
+      onSymbolVisible(symbol) {
+        this.visibleSymbols.add(symbol);
+        
+        // Skip if already loaded enhanced data
+        if (this.loadedEnhanced.has(symbol)) return;
+        
+        // Skip if load already pending
+        if (this.pendingLoads.has(symbol)) return;
+        
+        // Mark as pending and load
+        this.pendingLoads.set(symbol, true);
+        
+        if (this.onVisibleCallback) {
+          this.onVisibleCallback(symbol).finally(() => {
+            this.pendingLoads.delete(symbol);
+            this.loadedEnhanced.add(symbol);
+          });
+        }
+      },
+      
+      isVisible(symbol) {
+        return this.visibleSymbols.has(symbol);
+      },
+      
+      getVisibleSymbols() {
+        return Array.from(this.visibleSymbols);
+      },
+      
+      destroy() {
+        if (this.observer) {
+          this.observer.disconnect();
+        }
+        this.visibleSymbols.clear();
+        this.loadedEnhanced.clear();
+        this.pendingLoads.clear();
+      }
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PLACEHOLDER STOCK GENERATOR - Instant UI with loading states
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    const PlaceholderManager = {
+      // Create placeholder stocks for instant display
+      createPlaceholders(symbols) {
+        return symbols.map((symbol, index) => ({
+          symbol: symbol.toUpperCase(),
+          name: symbol,
+          price: null,
+          changePct: null,
+          marketCap: null,
+          pe: null,
+          roe: null,
+          aiScore: null,
+          verdict: 'Loading...',
+          _isPlaceholder: true,
+          _loadOrder: index
+        }));
+      },
+      
+      // Merge real data into placeholder
+      mergeWithPlaceholder(placeholder, realData) {
+        if (!realData) return placeholder;
+        return {
+          ...placeholder,
+          ...realData,
+          _isPlaceholder: false,
+          _loadOrder: placeholder._loadOrder
+        };
+      }
+    };
+
     // Run cleanup on startup (delayed)
     setTimeout(cleanupOldCacheData, 5000);
 
@@ -21374,25 +21497,36 @@ Be realistic and conservative. Base confidence on data quality.`;
         }
         window.isFetchingStocks = true;
 
-        setLoading(true);
-        setLoadingProgress({ current: 0, total: curatedStocks.length });
         setErrors([]);
         const startTime = new Date();
         
-        // ⚡ INSTANT LOAD: Show cached stocks IMMEDIATELY (before any API calls)
+        // ═══════════════════════════════════════════════════════════════════
+        // INSTANT UI: Show placeholders immediately, then populate with data
+        // ═══════════════════════════════════════════════════════════════════
+        
+        // Step 1: Check for cached data first (instant display)
+        let hasCachedData = false;
         try {
           const instantCached = await window.PrefetchManager?.loadAllFromCache();
           if (instantCached && instantCached.length > 0) {
             console.log(`⚡ INSTANT: Displaying ${instantCached.length} cached stocks immediately!`);
             setStocks(instantCached.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0)));
-            setLoading(false); // Stop showing loader - we have data!
-          } else {
-            setStocks([]); // Only clear if no cache
+            setLoading(false);
+            hasCachedData = true;
           }
         } catch (e) {
-          console.warn('Instant load failed:', e);
-          setStocks([]);
+          console.warn('Instant cache load failed:', e);
         }
+        
+        // Step 2: If no cached data, show placeholders for instant UI
+        if (!hasCachedData) {
+          console.log(`🎯 Showing ${curatedStocks.length} placeholder cards instantly...`);
+          const placeholders = PlaceholderManager.createPlaceholders(curatedStocks);
+          setStocks(placeholders);
+          setLoading(false); // Hide spinner - we have UI!
+        }
+        
+        setLoadingProgress({ current: 0, total: curatedStocks.length });
 
         // Track if we should force completion
         let forceComplete = false;
