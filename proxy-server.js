@@ -1,5 +1,6 @@
 // Simple CORS Proxy for StockTwits and Reddit APIs
 // Run with: node proxy-server.js
+require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
@@ -91,7 +92,10 @@ async function executeFetch(url, options) {
         signal: controller.signal,
         headers: {
           ...headers,
-          'User-Agent': 'RetailEdgePro/1.0'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/plain, */*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': 'https://financialmodelingprep.com/'
         }
       });
 
@@ -159,7 +163,7 @@ async function fetchQuotesParallel(symbols, options = {}) {
     // Fetch all symbols in this chunk in parallel
     const promises = chunk.map(async symbol => {
       try {
-        const url = `https://financialmodelingprep.com/stable/quote/${symbol}?apikey=${FMP_API_KEY}`;
+        const url = `https://financialmodelingprep.com/stable/quote?symbol=${symbol}&apikey=${FMP_API_KEY}`;
         const response = await fetchWithRetry(url, { timeoutMs: 10000, retries: 2 });
 
         if (!response.ok) {

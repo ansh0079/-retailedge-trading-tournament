@@ -1,0 +1,30 @@
+{
+  "today": 0.00007153999999999998,
+  "thisMonth": 0.00007153999999999998,
+  "totalRequests": 1,
+  "lastUpdated": "Wed Jan 28 2026",
+  "byTeam": {
+    "Value Hunter": {
+      "cost": 0,
+      "requests": 0
+    },
+    "Growth Seeker": {
+      "cost": 0,
+      "requests": 0
+    },
+    "Momentum Trader": {
+      "cost": 0.00007153999999999998,
+      "requests": 1
+    },
+    "Risk Manager": {
+      "cost": 0,
+      "requests": 0
+    }
+  },
+  "byModel": {
+    "deepseek-chat": {
+      "cost": 0.00007153999999999998,
+      "requests": 1
+    }
+  }
+}
