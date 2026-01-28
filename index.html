@@ -22470,15 +22470,32 @@ Be realistic and conservative. Base confidence on data quality.`;
                   continue;
                 }
                 
-                if (response.ok) {
-                  const data = await response.json();
-                  if (Array.isArray(data)) {
-                    const batchStocks = [];
-                    
-                    // OPTIMIZATION: Batch AI computation using requestIdleCallback
-                    const pendingAI = [];
-                    
-                    data.forEach(quote => {
+                if (!response.ok) {
+                  const errorText = await response.text();
+                  console.error(`❌ Batch ${batchNum} failed with ${response.status}:`, errorText.substring(0, 200));
+                  continue;
+                }
+                
+                const data = await response.json();
+                
+                if (!Array.isArray(data)) {
+                  console.error(`❌ Batch ${batchNum} returned non-array:`, typeof data, data);
+                  continue;
+                }
+                
+                if (data.length === 0) {
+                  console.warn(`⚠️ Batch ${batchNum} returned empty array for ${batch.length} symbols`);
+                  continue;
+                }
+                
+                console.log(`✅ Batch ${batchNum} received ${data.length} stocks`);
+                
+                const batchStocks = [];
+                
+                // OPTIMIZATION: Batch AI computation using requestIdleCallback
+                const pendingAI = [];
+                
+                data.forEach(quote => {
                       if (!quote || !quote.symbol) return;
                       
                       // FIX: Check if we have cached data with full fields for screeners
@@ -22557,15 +22574,13 @@ Be realistic and conservative. Base confidence on data quality.`;
                       setLoadingProgress({ current: displayedCount, total: uncachedSymbols.length });
                       console.log(`✅ Batch ${batchNum}: ${batchStocks.length} stocks DISPLAYED! Total visible: ${displayedCount}`);
                     }
-                  }
-                }
                 
                 // OPTIMIZATION: Reduced delay between batches (50ms instead of 150ms!)
                 if (i + BATCH_SIZE < uncachedSymbols.length) {
                   await new Promise(r => setTimeout(r, 50));
                 }
               } catch (error) {
-                console.warn(`Batch ${batchNum} failed:`, error.message);
+                console.error(`❌ Batch ${batchNum} exception:`, error.message, error.stack);
               }
             }
             
