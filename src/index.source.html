@@ -22276,6 +22276,9 @@ Be realistic and conservative. Base confidence on data quality.`;
         setErrors([]);
         const startTime = new Date();
         
+        // FIX: Declare at function scope so it's accessible in finally block
+        let uniqueCuratedStocks = [];
+        
         // ═══════════════════════════════════════════════════════════════════
         // ULTRA-FAST STARTUP: Check localStorage first (sync), then IndexedDB
         // ═══════════════════════════════════════════════════════════════════
@@ -22342,7 +22345,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           setLoading(false);
         }
         
-        setLoadingProgress({ current: 0, total: curatedStocks.length });
+        setLoadingProgress({ current: 0, total: curatedStocks.length || 0 });
 
         // Track if we should force completion
         let forceComplete = false;
@@ -22411,7 +22414,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           // ═══════════════════════════════════════════════════════════════════
           
           // Remove duplicates from curatedStocks before processing
-          const uniqueCuratedStocks = [...new Set(curatedStocks.map(s => String(s).toUpperCase().trim()).filter(s => s))];
+          uniqueCuratedStocks = [...new Set(curatedStocks.map(s => String(s).toUpperCase().trim()).filter(s => s))];
 
           // SINGLE BATCH OPERATION instead of 951 individual calls!
           const batchStart = performance.now();
