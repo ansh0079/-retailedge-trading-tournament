@@ -1343,7 +1343,9 @@ function saveTournamentState() {
         name: t.name,
         model: t.model,
         strategy: t.strategy,
-        personality: t.personality,
+        strategyDescription: t.strategyDescription,
+        positionSizeMultiplier: t.positionSizeMultiplier,
+        confidenceThreshold: t.confidenceThreshold,
         focuses: t.focuses,
         portfolioValue: t.portfolioValue,
         cash: t.cash,
@@ -1397,34 +1399,42 @@ function loadTournamentState() {
   return false;
 }
 
-// Team configurations with distinct AI personalities
+// Team configurations - Strategy-based approach (no personality labels)
 const TEAM_CONFIGS = {
   1: {
-    name: 'Claude (Sonnet)',
+    name: 'Team Alpha',
     model: 'Claude-3-Sonnet',
     strategy: 'balanced',
-    personality: 'analytical and cautious',
+    strategyDescription: 'Balanced approach with moderate risk tolerance',
+    positionSizeMultiplier: 1.0,
+    confidenceThreshold: 60,
     focuses: ['fundamentals', 'long-term value', 'risk management']
   },
   2: {
-    name: 'Kimi',
+    name: 'Team Beta',
     model: 'Kimi-K2',
     strategy: 'aggressive',
-    personality: 'bold and trend-following',
+    strategyDescription: 'High-risk strategy seeking maximum returns',
+    positionSizeMultiplier: 1.3,
+    confidenceThreshold: 50,
     focuses: ['momentum', 'breakouts', 'market sentiment']
   },
   3: {
-    name: 'DeepSeek V3',
+    name: 'Team Gamma',
     model: 'DeepSeek-V3',
     strategy: 'conservative',
-    personality: 'conservative and dividend-focused',
+    strategyDescription: 'Capital preservation with steady growth focus',
+    positionSizeMultiplier: 0.7,
+    confidenceThreshold: 70,
     focuses: ['stability', 'dividends', 'blue chips']
   },
   4: {
-    name: 'Gemini Pro',
+    name: 'Team Delta',
     model: 'Gemini-Pro',
     strategy: 'momentum',
-    personality: 'data-driven and adaptive',
+    strategyDescription: 'Technical analysis and trend-following approach',
+    positionSizeMultiplier: 1.2,
+    confidenceThreshold: 55,
     focuses: ['technical analysis', 'patterns', 'volume']
   }
 };
@@ -1880,12 +1890,21 @@ async function getAITradingDecision(team, marketData, competitivePosition) {
     `${s.symbol}: $${s.price?.toFixed(2)} (${s.changesPercentage >= 0 ? '+' : ''}${s.changesPercentage?.toFixed(2)}%) Vol: ${(s.volume / 1000000).toFixed(1)}M P/E: ${s.pe?.toFixed(1) || 'N/A'}`
   ).join('\n');
 
-  const prompt = `You are ${team.name}, an AI trading agent with a ${team.strategy} strategy. You are ${team.personality} and focus on ${team.focuses.join(', ')}.
+  const prompt = `You are an AI trading agent for ${team.name}.
+
+ASSIGNED TRADING STRATEGY: ${team.strategy.toUpperCase()}
+Strategy Description: ${team.strategyDescription}
+
+STRATEGY PARAMETERS:
+- Position Sizing Multiplier: ${team.positionSizeMultiplier}x
+- Confidence Threshold: ${team.confidenceThreshold}%
+- Focus Areas: ${team.focuses.join(', ')}
 
 TOURNAMENT STATUS:
-- Your Portfolio: $${team.portfolioValue.toFixed(2)} (Cash: $${team.cash.toFixed(2)})
-- Position: Rank ${competitivePosition.rank} of ${competitivePosition.totalTeams}
-- ${competitivePosition.isLeading ? 'You are LEADING!' : competitivePosition.isTrailing ? `TRAILING by ${competitivePosition.gapPercent}%` : 'Middle of the pack'}
+- Your Portfolio Value: $${team.portfolioValue.toFixed(2)}
+- Available Cash: $${team.cash.toFixed(2)}
+- Current Rank: ${competitivePosition.rank} of ${competitivePosition.totalTeams}
+- Status: ${competitivePosition.isLeading ? 'LEADING the tournament!' : competitivePosition.isTrailing ? `TRAILING by ${competitivePosition.gapPercent}%` : 'Middle of the pack'}
 
 CURRENT HOLDINGS:
 ${holdingsSummary}
@@ -1893,11 +1912,16 @@ ${holdingsSummary}
 MARKET DATA (Today's movers):
 ${marketSummary}
 
-Based on your strategy and the market conditions, decide on ONE trade action. Consider:
-1. Your strategy (${team.strategy}) and risk tolerance
-2. Current holdings and diversification
-3. Competitive position in tournament
-4. Today's market movements
+TASK: Analyze the market data and make ONE trading decision that aligns with your ${team.strategy} strategy.
+
+Consider:
+1. Your strategy parameters (${team.strategy} with ${team.confidenceThreshold}% confidence threshold)
+2. Current portfolio allocation and diversification
+3. Competitive position in the tournament
+4. Market movements and opportunities
+5. Focus areas: ${team.focuses.join(', ')}
+
+Execute the ${team.strategy} strategy using your analytical capabilities. Make decisions that fit the strategy's risk profile and objectives.
 
 Respond in this EXACT JSON format only:
 {"action": "BUY" or "SELL" or "HOLD", "symbol": "TICKER", "shares": number, "reasoning": "2-3 sentence explanation"}

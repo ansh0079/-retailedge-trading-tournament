@@ -32,12 +32,12 @@
         "breakouts",
         "market sentiment"
       ],
-      "portfolioValue": 49997.603,
-      "cash": 17067.899999999998,
-      "invested": 32929.703,
+      "portfolioValue": 49997.602999999996,
+      "cash": 15.319999999997709,
+      "invested": 49982.282999999996,
       "realizedPnL": 0,
       "unrealizedPnL": -2.397000000000844,
-      "totalTrades": 5,
+      "totalTrades": 9,
       "holdings": {
         "MCD": {
           "shares": 30,
@@ -78,9 +78,157 @@
           "currentPrice": 73.03,
           "marketValue": 2336.96,
           "unrealizedPnL": 0
+        },
+        "D": {
+          "shares": 24,
+          "avgCost": 60.9,
+          "totalCost": 1461.6,
+          "currentPrice": 60.9,
+          "marketValue": 1461.6,
+          "unrealizedPnL": 0
+        },
+        "ADBE": {
+          "shares": 52,
+          "avgCost": 299.39,
+          "totalCost": 15568.279999999999,
+          "currentPrice": 299.39,
+          "marketValue": 15568.279999999999,
+          "unrealizedPnL": 0
+        },
+        "PINS": {
+          "shares": 1,
+          "avgCost": 22.7,
+          "totalCost": 22.7,
+          "currentPrice": 22.7,
+          "marketValue": 22.7,
+          "unrealizedPnL": 0
         }
       },
       "tradeHistory": [
+        {
+          "time": "2:22:09 PM",
+          "timestamp": "2026-01-28T19:22:09.355Z",
+          "team": "Kimi",
+          "teamId": 2,
+          "model": "Kimi-K2",
+          "action": "BUY",
+          "symbol": "PINS",
+          "price": 22.7,
+          "shares": 1,
+          "reasoning": "Local analysis: Near 52-week low. [Local analysis: HOLD]",
+          "analysisSource": "local",
+          "aiGenerated": false,
+          "aiPriority": null,
+          "localScore": 55,
+          "localVerdict": "HOLD",
+          "filterScore": 40,
+          "filterSignals": [
+            "Near 52w low",
+            "Large cap",
+            "Near day low"
+          ],
+          "competitiveContext": {
+            "rank": 4,
+            "position": "trailing",
+            "gapToLeader": "0.00"
+          },
+          "costBasis": 22.7,
+          "cashAfter": 15.319999999997709,
+          "portfolioValueAfter": 49997.602999999996
+        },
+        {
+          "time": "1:44:30 PM",
+          "timestamp": "2026-01-28T18:44:30.301Z",
+          "team": "Kimi",
+          "teamId": 2,
+          "model": "Kimi-K2",
+          "action": "BUY",
+          "symbol": "ADBE",
+          "price": 299.39,
+          "shares": 8,
+          "reasoning": "Local analysis: Near 52-week low. [Local analysis: HOLD]",
+          "analysisSource": "ai",
+          "aiGenerated": true,
+          "aiPriority": "CRITICAL",
+          "localScore": 55,
+          "localVerdict": "HOLD",
+          "filterScore": 40,
+          "filterSignals": [
+            "Near 52w low",
+            "Large cap",
+            "Near day low"
+          ],
+          "competitiveContext": {
+            "rank": 4,
+            "position": "trailing",
+            "gapToLeader": "0.00"
+          },
+          "costBasis": 299.39,
+          "cashAfter": 38.01999999999771,
+          "portfolioValueAfter": 49997.602999999996
+        },
+        {
+          "time": "1:40:48 PM",
+          "timestamp": "2026-01-28T18:40:48.796Z",
+          "team": "Kimi",
+          "teamId": 2,
+          "model": "Kimi-K2",
+          "action": "BUY",
+          "symbol": "ADBE",
+          "price": 299.39,
+          "shares": 44,
+          "reasoning": "Local analysis: Near 52-week low. [Local analysis: HOLD]",
+          "analysisSource": "local",
+          "aiGenerated": false,
+          "aiPriority": null,
+          "localScore": 55,
+          "localVerdict": "HOLD",
+          "filterScore": 40,
+          "filterSignals": [
+            "Near 52w low",
+            "Large cap",
+            "Near day low"
+          ],
+          "competitiveContext": {
+            "rank": 4,
+            "position": "trailing",
+            "gapToLeader": "0.00"
+          },
+          "costBasis": 299.39,
+          "cashAfter": 2433.1399999999976,
+          "portfolioValueAfter": 49997.603
+        },
+        {
+          "time": "1:36:14 PM",
+          "timestamp": "2026-01-28T18:36:14.370Z",
+          "team": "Kimi",
+          "teamId": 2,
+          "model": "Kimi-K2",
+          "action": "BUY",
+          "symbol": "D",
+          "price": 60.9,
+          "shares": 24,
+          "reasoning": "Local analysis: Near 52-week high. [Local analysis: HOLD]",
+          "analysisSource": "ai",
+          "aiGenerated": true,
+          "aiPriority": "MEDIUM",
+          "localScore": 55,
+          "localVerdict": "HOLD",
+          "filterScore": 40,
+          "filterSignals": [
+            "Near 52w high",
+            "Large cap",
+            "Near day low"
+          ],
+          "competitiveContext": {
+            "rank": 4,
+            "position": "trailing",
+            "gapToLeader": "0.00"
+          },
+          "costBasis": 60.9,
+          "cashAfter": 15606.299999999997,
+          "portfolioValueAfter": 49997.602999999996
+        },
         {
           "time": "1:32:31 PM",
           "timestamp": "2026-01-28T18:32:31.656Z",
@@ -321,6 +469,122 @@
     }
   ],
   "trades": [
+    {
+      "time": "2:22:09 PM",
+      "timestamp": "2026-01-28T19:22:09.355Z",
+      "team": "Kimi",
+      "teamId": 2,
+      "model": "Kimi-K2",
+      "action": "BUY",
+      "symbol": "PINS",
+      "price": 22.7,
+      "shares": 1,
+      "reasoning": "Local analysis: Near 52-week low. [Local analysis: HOLD]",
+      "analysisSource": "local",
+      "aiGenerated": false,
+      "aiPriority": null,
+      "localScore": 55,
+      "localVerdict": "HOLD",
+      "filterScore": 40,
+      "filterSignals": [
+        "Near 52w low",
+        "Large cap",
+        "Near day low"
+      ],
+      "competitiveContext": {
+        "rank": 4,
+        "position": "trailing",
+        "gapToLeader": "0.00"
+      },
+      "costBasis": 22.7
+    },
+    {
+      "time": "1:44:30 PM",
+      "timestamp": "2026-01-28T18:44:30.301Z",
+      "team": "Kimi",
+      "teamId": 2,
+      "model": "Kimi-K2",
+      "action": "BUY",
+      "symbol": "ADBE",
+      "price": 299.39,
+      "shares": 8,
+      "reasoning": "Local analysis: Near 52-week low. [Local analysis: HOLD]",
+      "analysisSource": "ai",
+      "aiGenerated": true,
+      "aiPriority": "CRITICAL",
+      "localScore": 55,
+      "localVerdict": "HOLD",
+      "filterScore": 40,
+      "filterSignals": [
+        "Near 52w low",
+        "Large cap",
+        "Near day low"
+      ],
+      "competitiveContext": {
+        "rank": 4,
+        "position": "trailing",
+        "gapToLeader": "0.00"
+      },
+      "costBasis": 299.39
+    },
+    {
+      "time": "1:40:48 PM",
+      "timestamp": "2026-01-28T18:40:48.796Z",
+      "team": "Kimi",
+      "teamId": 2,
+      "model": "Kimi-K2",
+      "action": "BUY",
+      "symbol": "ADBE",
+      "price": 299.39,
+      "shares": 44,
+      "reasoning": "Local analysis: Near 52-week low. [Local analysis: HOLD]",
+      "analysisSource": "local",
+      "aiGenerated": false,
+      "aiPriority": null,
+      "localScore": 55,
+      "localVerdict": "HOLD",
+      "filterScore": 40,
+      "filterSignals": [
+        "Near 52w low",
+        "Large cap",
+        "Near day low"
+      ],
+      "competitiveContext": {
+        "rank": 4,
+        "position": "trailing",
+        "gapToLeader": "0.00"
+      },
+      "costBasis": 299.39
+    },
+    {
+      "time": "1:36:14 PM",
+      "timestamp": "2026-01-28T18:36:14.370Z",
+      "team": "Kimi",
+      "teamId": 2,
+      "model": "Kimi-K2",
+      "action": "BUY",
+      "symbol": "D",
+      "price": 60.9,
+      "shares": 24,
+      "reasoning": "Local analysis: Near 52-week high. [Local analysis: HOLD]",
+      "analysisSource": "ai",
+      "aiGenerated": true,
+      "aiPriority": "MEDIUM",
+      "localScore": 55,
+      "localVerdict": "HOLD",
+      "filterScore": 40,
+      "filterSignals": [
+        "Near 52w high",
+        "Large cap",
+        "Near day low"
+      ],
+      "competitiveContext": {
+        "rank": 4,
+        "position": "trailing",
+        "gapToLeader": "0.00"
+      },
+      "costBasis": 60.9
+    },
     {
       "time": "1:32:31 PM",
       "timestamp": "2026-01-28T18:32:31.656Z",
@@ -2420,7 +2684,423 @@
           "portfolioValue": 50000
         }
       ]
+    },
+    {
+      "timestamp": "2026-01-28T18:36:14.372Z",
+      "time": "01:36 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 49997.6
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T18:40:48.802Z",
+      "time": "01:40 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 49997.6
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T18:44:30.302Z",
+      "time": "01:44 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 49997.6
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T18:49:08.708Z",
+      "time": "01:49 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 49997.6
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T18:52:49.043Z",
+      "time": "01:52 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 49997.6
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T18:57:26.894Z",
+      "time": "01:57 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 49997.6
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T19:01:01.373Z",
+      "time": "02:01 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 49997.6
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T19:05:43.293Z",
+      "time": "02:05 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 49997.6
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T19:09:21.597Z",
+      "time": "02:09 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 49997.6
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T19:14:16.390Z",
+      "time": "02:14 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 49997.6
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T19:17:33.129Z",
+      "time": "02:17 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 49997.6
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T19:22:09.523Z",
+      "time": "02:22 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 49997.6
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T19:25:49.034Z",
+      "time": "02:25 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 49997.6
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T19:30:33.468Z",
+      "time": "02:30 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 49997.6
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T19:34:05.182Z",
+      "time": "02:34 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 49997.6
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-01-28T19:38:42.744Z",
+      "time": "02:38 PM",
+      "teams": [
+        {
+          "id": 1,
+          "name": "Claude (Sonnet)",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 2,
+          "name": "Kimi",
+          "portfolioValue": 49997.6
+        },
+        {
+          "id": 3,
+          "name": "DeepSeek V3",
+          "portfolioValue": 50000
+        },
+        {
+          "id": 4,
+          "name": "Gemini Pro",
+          "portfolioValue": 50000
+        }
+      ]
     }
   ],
-  "savedAt": "2026-01-28T18:33:04.811Z"
+  "savedAt": "2026-01-28T19:39:36.623Z"
 }
