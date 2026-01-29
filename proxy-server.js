@@ -802,6 +802,12 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
+// Serve Technical Analysis Scripts (Located in root)
+app.get('/technical-analysis-engine.js', (req, res) => res.sendFile(path.join(__dirname, 'technical-analysis-engine.js')));
+app.get('/technical-analysis-ui.js', (req, res) => res.sendFile(path.join(__dirname, 'technical-analysis-ui.js')));
+app.get('/technical-analysis-integration.js', (req, res) => res.sendFile(path.join(__dirname, 'technical-analysis-integration.js')));
+app.get('/fix-stock-columns.js', (req, res) => res.sendFile(path.join(__dirname, 'fix-stock-columns.js')));
+
 // Serve static files from dist folder
 app.use(express.static(path.join(__dirname, 'dist'), {
   index: false, // Don't serve index.html automatically
