@@ -1342,11 +1342,7 @@ function saveTournamentState() {
         id: t.id,
         name: t.name,
         model: t.model,
-        strategy: t.strategy,
-        strategyDescription: t.strategyDescription,
-        positionSizeMultiplier: t.positionSizeMultiplier,
-        confidenceThreshold: t.confidenceThreshold,
-        focuses: t.focuses,
+        description: t.description,
         portfolioValue: t.portfolioValue,
         cash: t.cash,
         invested: t.invested,
@@ -1399,43 +1395,27 @@ function loadTournamentState() {
   return false;
 }
 
-// Team configurations - Strategy-based approach (no personality labels)
+// Team configurations - Full AI Autonomy (no predefined strategies)
 const TEAM_CONFIGS = {
   1: {
     name: 'Team Alpha',
     model: 'Claude-3-Sonnet',
-    strategy: 'balanced',
-    strategyDescription: 'Balanced approach with moderate risk tolerance',
-    positionSizeMultiplier: 1.0,
-    confidenceThreshold: 60,
-    focuses: ['fundamentals', 'long-term value', 'risk management']
+    description: 'AI trading agent with full autonomy to determine strategy'
   },
   2: {
     name: 'Team Beta',
     model: 'Kimi-K2',
-    strategy: 'aggressive',
-    strategyDescription: 'High-risk strategy seeking maximum returns',
-    positionSizeMultiplier: 1.3,
-    confidenceThreshold: 50,
-    focuses: ['momentum', 'breakouts', 'market sentiment']
+    description: 'AI trading agent with full autonomy to determine strategy'
   },
   3: {
     name: 'Team Gamma',
     model: 'DeepSeek-V3',
-    strategy: 'conservative',
-    strategyDescription: 'Capital preservation with steady growth focus',
-    positionSizeMultiplier: 0.7,
-    confidenceThreshold: 70,
-    focuses: ['stability', 'dividends', 'blue chips']
+    description: 'AI trading agent with full autonomy to determine strategy'
   },
   4: {
     name: 'Team Delta',
     model: 'Gemini-Pro',
-    strategy: 'momentum',
-    strategyDescription: 'Technical analysis and trend-following approach',
-    positionSizeMultiplier: 1.2,
-    confidenceThreshold: 55,
-    focuses: ['technical analysis', 'patterns', 'volume']
+    description: 'AI trading agent with full autonomy to determine strategy'
   }
 };
 
@@ -1892,13 +1872,7 @@ async function getAITradingDecision(team, marketData, competitivePosition) {
 
   const prompt = `You are an AI trading agent for ${team.name}.
 
-ASSIGNED TRADING STRATEGY: ${team.strategy.toUpperCase()}
-Strategy Description: ${team.strategyDescription}
-
-STRATEGY PARAMETERS:
-- Position Sizing Multiplier: ${team.positionSizeMultiplier}x
-- Confidence Threshold: ${team.confidenceThreshold}%
-- Focus Areas: ${team.focuses.join(', ')}
+FULL AUTONOMY: You have complete freedom to determine your own trading strategy and approach.
 
 TOURNAMENT STATUS:
 - Your Portfolio Value: $${team.portfolioValue.toFixed(2)}
@@ -1912,21 +1886,27 @@ ${holdingsSummary}
 MARKET DATA (Today's movers):
 ${marketSummary}
 
-TASK: Analyze the market data and make ONE trading decision that aligns with your ${team.strategy} strategy.
+YOUR TASK:
+You have complete autonomy to trade as you see fit. You may:
+- Choose ANY trading strategy (aggressive, conservative, balanced, momentum, value, growth, etc.)
+- Adjust your approach based on market conditions
+- Change strategies mid-tournament if you think it's beneficial
+- Use any analytical method you prefer (technical, fundamental, sentiment, etc.)
+- Determine your own risk tolerance and position sizing
 
 Consider:
-1. Your strategy parameters (${team.strategy} with ${team.confidenceThreshold}% confidence threshold)
-2. Current portfolio allocation and diversification
-3. Competitive position in the tournament
-4. Market movements and opportunities
-5. Focus areas: ${team.focuses.join(', ')}
+1. Current market conditions and opportunities
+2. Your portfolio allocation and diversification
+3. Your competitive position in the tournament
+4. Your own assessment of risk vs. reward
+5. Any strategy or approach you think will maximize returns
 
-Execute the ${team.strategy} strategy using your analytical capabilities. Make decisions that fit the strategy's risk profile and objectives.
+Make ONE trading decision (BUY, SELL, or HOLD) based on your independent analysis and chosen approach.
 
 Respond in this EXACT JSON format only:
-{"action": "BUY" or "SELL" or "HOLD", "symbol": "TICKER", "shares": number, "reasoning": "2-3 sentence explanation"}
+{"action": "BUY" or "SELL" or "HOLD", "symbol": "TICKER", "shares": number, "reasoning": "Explain your strategy choice and trade rationale in 2-3 sentences"}
 
-If HOLD, use: {"action": "HOLD", "symbol": null, "shares": 0, "reasoning": "explanation"}`;
+If HOLD, use: {"action": "HOLD", "symbol": null, "shares": 0, "reasoning": "Explain why you're holding and what you're waiting for"}`;
 
   let content = null;
 
@@ -2980,6 +2960,179 @@ function initMarketChecker() {
 
 // Start the market checker when server starts
 initMarketChecker();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// FMP API ENDPOINTS - Stock Fundamentals, Technicals, and Analyst Ratings
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Get comprehensive stock data for AI analysis (fundamentals + technicals + ratings)
+app.get('/api/stock/:symbol/comprehensive', async (req, res) => {
+  try {
+    const { symbol } = req.params;
+
+    if (!FMP_API_KEY) {
+      return res.status(500).json({ error: 'FMP API key not configured' });
+    }
+
+    console.log(`[FMP] Fetching comprehensive data for ${symbol}`);
+
+    // Fetch all data in parallel
+    const [
+      quoteRes,
+      metricsRes,
+      ratiosRes,
+      growthRes,
+      scoresRes,
+      gradesRes,
+      targetRes,
+      ratingsRes
+    ] = await Promise.allSettled([
+      // Quote
+      rateLimitedFetch(`https://financialmodelingprep.com/api/v3/quote/${symbol}?apikey=${FMP_API_KEY}`),
+      // Key metrics
+      rateLimitedFetch(`https://financialmodelingprep.com/api/v3/key-metrics-ttm/${symbol}?apikey=${FMP_API_KEY}`),
+      // Ratios
+      rateLimitedFetch(`https://financialmodelingprep.com/api/v3/ratios-ttm/${symbol}?apikey=${FMP_API_KEY}`),
+      // Financial growth
+      rateLimitedFetch(`https://financialmodelingprep.com/api/v3/financial-growth/${symbol}?apikey=${FMP_API_KEY}&limit=1`),
+      // Financial scores
+      rateLimitedFetch(`https://financialmodelingprep.com/api/v3/score/${symbol}?apikey=${FMP_API_KEY}`),
+      // Analyst grades
+      rateLimitedFetch(`https://financialmodelingprep.com/api/v3/grade/${symbol}?apikey=${FMP_API_KEY}&limit=5`),
+      // Price targets
+      rateLimitedFetch(`https://financialmodelingprep.com/api/v3/price-target/${symbol}?apikey=${FMP_API_KEY}`),
+      // Analyst ratings
+      rateLimitedFetch(`https://financialmodelingprep.com/api/v3/rating/${symbol}?apikey=${FMP_API_KEY}`)
+    ]);
+
+    // Parse responses
+    const quote = quoteRes.status === 'fulfilled' ? await quoteRes.value.json() : [];
+    const metrics = metricsRes.status === 'fulfilled' ? await metricsRes.value.json() : [];
+    const ratios = ratiosRes.status === 'fulfilled' ? await ratiosRes.value.json() : [];
+    const growth = growthRes.status === 'fulfilled' ? await growthRes.value.json() : [];
+    const scores = scoresRes.status === 'fulfilled' ? await scoresRes.value.json() : [];
+    const grades = gradesRes.status === 'fulfilled' ? await gradesRes.value.json() : [];
+    const targets = targetRes.status === 'fulfilled' ? await targetRes.value.json() : [];
+    const ratings = ratingsRes.status === 'fulfilled' ? await ratingsRes.value.json() : [];
+
+    // Combine all data
+    const comprehensiveData = {
+      symbol,
+      quote: quote[0] || {},
+      fundamentals: {
+        metrics: metrics[0] || {},
+        ratios: ratios[0] || {},
+        growth: growth[0] || {},
+        scores: scores[0] || {}
+      },
+      analysts: {
+        grades: grades || [],
+        priceTargets: targets || [],
+        ratings: ratings || []
+      },
+      timestamp: new Date().toISOString()
+    };
+
+    res.json(comprehensiveData);
+  } catch (error) {
+    console.error(`[FMP] Error fetching comprehensive data:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get fundamentals only (key metrics + ratios + growth)
+app.get('/api/stock/:symbol/fundamentals', async (req, res) => {
+  try {
+    const { symbol } = req.params;
+
+    if (!FMP_API_KEY) {
+      return res.status(500).json({ error: 'FMP API key not configured' });
+    }
+
+    const [metricsRes, ratiosRes, growthRes] = await Promise.allSettled([
+      rateLimitedFetch(`https://financialmodelingprep.com/api/v3/key-metrics-ttm/${symbol}?apikey=${FMP_API_KEY}`),
+      rateLimitedFetch(`https://financialmodelingprep.com/api/v3/ratios-ttm/${symbol}?apikey=${FMP_API_KEY}`),
+      rateLimitedFetch(`https://financialmodelingprep.com/api/v3/financial-growth/${symbol}?apikey=${FMP_API_KEY}&limit=1`)
+    ]);
+
+    const metrics = metricsRes.status === 'fulfilled' ? await metricsRes.value.json() : [];
+    const ratios = ratiosRes.status === 'fulfilled' ? await ratiosRes.value.json() : [];
+    const growth = growthRes.status === 'fulfilled' ? await growthRes.value.json() : [];
+
+    res.json({
+      symbol,
+      metrics: metrics[0] || {},
+      ratios: ratios[0] || {},
+      growth: growth[0] || {},
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error(`[FMP] Error fetching fundamentals:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get analyst ratings and price targets
+app.get('/api/stock/:symbol/analysts', async (req, res) => {
+  try {
+    const { symbol } = req.params;
+
+    if (!FMP_API_KEY) {
+      return res.status(500).json({ error: 'FMP API key not configured' });
+    }
+
+    const [gradesRes, targetRes, ratingsRes] = await Promise.allSettled([
+      rateLimitedFetch(`https://financialmodelingprep.com/api/v3/grade/${symbol}?apikey=${FMP_API_KEY}&limit=10`),
+      rateLimitedFetch(`https://financialmodelingprep.com/api/v3/price-target/${symbol}?apikey=${FMP_API_KEY}`),
+      rateLimitedFetch(`https://financialmodelingprep.com/api/v3/rating/${symbol}?apikey=${FMP_API_KEY}`)
+    ]);
+
+    const grades = gradesRes.status === 'fulfilled' ? await gradesRes.value.json() : [];
+    const targets = targetRes.status === 'fulfilled' ? await targetRes.value.json() : [];
+    const ratings = ratingsRes.status === 'fulfilled' ? await ratingsRes.value.json() : [];
+
+    res.json({
+      symbol,
+      grades: grades || [],
+      priceTargets: targets || [],
+      ratings: ratings || [],
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error(`[FMP] Error fetching analyst data:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get technical indicators (price history for chart)
+app.get('/api/stock/:symbol/technicals', async (req, res) => {
+  try {
+    const { symbol } = req.params;
+    const { period = '1day', from, to } = req.query;
+
+    if (!FMP_API_KEY) {
+      return res.status(500).json({ error: 'FMP API key not configured' });
+    }
+
+    // Build URL with optional date range
+    let url = `https://financialmodelingprep.com/api/v3/historical-chart/${period}/${symbol}?apikey=${FMP_API_KEY}`;
+    if (from) url += `&from=${from}`;
+    if (to) url += `&to=${to}`;
+
+    const response = await rateLimitedFetch(url);
+    const data = await response.json();
+
+    res.json({
+      symbol,
+      period,
+      data: data || [],
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error(`[FMP] Error fetching technicals:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Tournament status endpoint
 app.get('/api/tournament/status/current', async (req, res) => {
