@@ -1,0 +1,9 @@
+﻿# Cursor IDE - Files to exclude from indexing
+dist/
+build/
+node_modules/
+src/index.source.html
+*.md
+*.log
+ai_cost_data.json
+.git/

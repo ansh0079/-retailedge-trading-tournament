@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Data Loading</title>
+</head>
+<body>
+    <h1>Debug PE, ROE, and FMP Rating Data Loading</h1>
+    <div id="results"></div>
+    
+    <script>
+        const API_KEY = 'h43nCTpMeyiIiNquebaqktc7ChUHMxIz';
+        const testSymbol = 'AAPL';
+        
+        async function debugDataLoading() {
+            const resultsDiv = document.getElementById('results');
+            
+            try {
+                resultsDiv.innerHTML += '<h2>Testing data loading for ' + testSymbol + '...</h2>';
+                
+                // Test quote endpoint
+                const quoteUrl = `https://financialmodelingprep.com/api/v3/quote/${testSymbol}?apikey=${API_KEY}`;
+                console.log('Quote URL:', quoteUrl);
+                
+                const quoteResponse = await fetch(quoteUrl);
+                const quoteData = await quoteResponse.json();
+                console.log('Quote Data:', quoteData);
+                
+                resultsDiv.innerHTML += '<h3>Quote Data:</h3>';
+                resultsDiv.innerHTML += '<pre>' + JSON.stringify(quoteData, null, 2) + '</pre>';
+                
+                if (quoteData && quoteData[0]) {
+                    const quote = quoteData[0];
+                    resultsDiv.innerHTML += '<p><strong>PE from quote:</strong> ' + (quote.pe || 'MISSING') + '</p>';
+                    resultsDiv.innerHTML += '<p><strong>Price:</strong> ' + quote.price + '</p>';
+                }
+                
+                // Test ratios endpoint
+                const ratiosUrl = `https://financialmodelingprep.com/api/v3/ratios/${testSymbol}?apikey=${API_KEY}`;
+                const ratiosResponse = await fetch(ratiosUrl);
+                const ratiosData = await ratiosResponse.json();
+                
+                resultsDiv.innerHTML += '<h3>Ratios Data:</h3>';
+                resultsDiv.innerHTML += '<pre>' + JSON.stringify(ratiosData, null, 2) + '</pre>';
+                
+                if (ratiosData && ratiosData[0]) {
+                    const ratios = ratiosData[0];
+                    resultsDiv.innerHTML += '<p><strong>ROE from ratios:</strong> ' + (ratios.returnOnEquityTTM || 'MISSING') + '</p>';
+                    resultsDiv.innerHTML += '<p><strong>PE from ratios:</strong> ' + (ratios.peRatio || 'MISSING') + '</p>';
+                }
+                
+                // Test key metrics endpoint
+                const metricsUrl = `https://financialmodelingprep.com/api/v3/key-metrics-ttm/${testSymbol}?apikey=${API_KEY}`;
+                const metricsResponse = await fetch(metricsUrl);
+                const metricsData = await metricsResponse.json();
+                
+                resultsDiv.innerHTML += '<h3>Key Metrics Data:</h3>';
+                resultsDiv.innerHTML += '<pre>' + JSON.stringify(metricsData, null, 2) + '</pre>';
+                
+                if (metricsData && metricsData[0]) {
+                    const metrics = metricsData[0];
+                    resultsDiv.innerHTML += '<p><strong>ROE from metrics:</strong> ' + (metrics.returnOnEquityTTM || 'MISSING') + '</p>';
+                    resultsDiv.innerHTML += '<p><strong>PE from metrics:</strong> ' + (metrics.peRatioTTM || 'MISSING') + '</p>';
+                }
+                
+                // Test ratings endpoint
+                const ratingsUrl = `https://financialmodelingprep.com/api/v3/rating/${testSymbol}?apikey=${API_KEY}`;
+                const ratingsResponse = await fetch(ratingsUrl);
+                const ratingsData = await ratingsResponse.json();
+                
+                resultsDiv.innerHTML += '<h3>Ratings Data:</h3>';
+                resultsDiv.innerHTML += '<pre>' + JSON.stringify(ratingsData, null, 2) + '</pre>';
+                
+                if (ratingsData && ratingsData[0]) {
+                    const rating = ratingsData[0];
+                    resultsDiv.innerHTML += '<p><strong>FMP Rating:</strong> ' + (rating.rating || 'MISSING') + '</p>';
+                    resultsDiv.innerHTML += '<p><strong>Rating Score:</strong> ' + (rating.ratingScore || 'MISSING') + '</p>';
+                }
+                
+            } catch (error) {
+                console.error('Debug error:', error);
+                resultsDiv.innerHTML += '<p style="color: red;"><strong>Error:</strong> ' + error.message + '</p>';
+            }
+        }
+        
+        // Run the debug when page loads
+        window.onload = debugDataLoading;
+    </script>
+</body>
+</html>

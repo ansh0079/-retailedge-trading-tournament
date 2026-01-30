@@ -22265,16 +22265,31 @@ Be realistic and conservative. Base confidence on data quality.`;
             yearLow: quote.yearLow || 0,
 
             // Valuation Metrics - Use quote.pe first as it's most reliable
-            pe: quote.pe || metrics?.peRatioTTM || ratios?.peRatio || (metrics?.earningsYieldTTM && metrics.earningsYieldTTM !== 0 ? (1 / metrics.earningsYieldTTM) : null),
+            pe: (() => {
+              const peValue = quote.pe || metrics?.peRatioTTM || ratios?.peRatio;
+              if (peValue && peValue > 0 && peValue < 1000) return peValue; // Valid PE range
+              if (metrics?.earningsYieldTTM && metrics.earningsYieldTTM !== 0) {
+                const calculatedPE = 1 / metrics.earningsYieldTTM;
+                return (calculatedPE > 0 && calculatedPE < 1000) ? calculatedPE : null;
+              }
+              return null;
+            })(),
             priceToBook: ratios?.priceToBookRatio || 0,
             priceToSales: ratios?.priceToSalesRatio || 0,
             enterpriseValue: metrics?.enterpriseValueTTM || 0,
             evToEbitda: metrics?.evToEBITDATTM || 0,
 
-            // Profitability - Convert to percentage
+            // Profitability - Convert to percentage and ensure valid range
             roe: (() => {
               const roeValue = metrics?.returnOnEquityTTM || ratios?.returnOnEquityTTM || ratios?.returnOnEquity;
-              return roeValue ? (roeValue * 100) : null;
+              if (!roeValue) return null;
+              
+              // If already in percentage (>1), use as is
+              if (roeValue > 1) return roeValue;
+              
+              // If decimal (0-1), convert to percentage
+              const roePercent = roeValue * 100;
+              return (roePercent >= -100 && roePercent <= 500) ? roePercent : null; // Valid ROE range
             })(),
             roa: metrics?.returnOnAssetsTTM ? (metrics.returnOnAssetsTTM * 100) : 0,
             roic: metrics?.returnOnInvestedCapitalTTM ? (metrics.returnOnInvestedCapitalTTM * 100) : 0,
@@ -22298,8 +22313,23 @@ Be realistic and conservative. Base confidence on data quality.`;
             piotroskiScore: scores?.piotroskiScore || 0,
             altmanZScore: scores?.altmanZScore || 0,
 
-            // Analyst Data
-            analystRating: ratings?.rating || ratings?.ratingRecommendation || 'N/A',
+            // Analyst Data - Improved rating extraction
+            analystRating: (() => {
+              const rating = ratings?.rating || ratings?.ratingRecommendation;
+              if (!rating || rating === 'N/A') return null;
+              
+              // Clean up rating text
+              const cleanRating = String(rating).trim().toUpperCase();
+              
+              // Map common rating formats
+              if (cleanRating.includes('STRONG BUY') || cleanRating.includes('A+')) return 'A+';
+              if (cleanRating.includes('BUY') || cleanRating.includes('A')) return 'A';
+              if (cleanRating.includes('HOLD') || cleanRating.includes('B')) return 'B';
+              if (cleanRating.includes('SELL') || cleanRating.includes('C')) return 'C';
+              if (cleanRating.includes('STRONG SELL') || cleanRating.includes('D')) return 'D';
+              
+              return cleanRating.length > 0 ? cleanRating : null;
+            })(),
             overallScore: ratings?.overallScore || 0,
             priceTarget: target?.lastQuarterAvgPriceTarget || 0,
             priceTargetLow: target?.lastMonthAvgPriceTarget || 0,
@@ -22344,7 +22374,12 @@ Be realistic and conservative. Base confidence on data quality.`;
           console.log(`✅ ${symbol} FINAL VALUES:`, {
             pe: stockData.pe,
             roe: stockData.roe,
-            analystRating: stockData.analystRating
+            analystRating: stockData.analystRating,
+            rawQuotePE: quote.pe,
+            rawMetricsPE: metrics?.peRatioTTM,
+            rawRatiosROE: ratios?.returnOnEquityTTM,
+            rawMetricsROE: metrics?.returnOnEquityTTM,
+            rawRating: ratings?.rating
           });
 
           // Cache the result

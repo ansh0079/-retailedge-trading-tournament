@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test FMP API Endpoints</title>
+</head>
+<body>
+    <h1>Testing FMP API Endpoints</h1>
+    <div id="results"></div>
+    
+    <script>
+        const API_KEY = 'h43nCTpMeyiIiNquebaqktc7ChUHMxIz';
+        const testSymbol = 'AAPL';
+        
+        async function testEndpoints() {
+            const resultsDiv = document.getElementById('results');
+            
+            const endpoints = [
+                {
+                    name: 'Quote (v3)',
+                    url: `https://financialmodelingprep.com/api/v3/quote/${testSymbol}?apikey=${API_KEY}`
+                },
+                {
+                    name: 'Quote (stable)',
+                    url: `https://financialmodelingprep.com/stable/quote?symbol=${testSymbol}&apikey=${API_KEY}`
+                },
+                {
+                    name: 'Key Metrics TTM (v3)',
+                    url: `https://financialmodelingprep.com/api/v3/key-metrics-ttm/${testSymbol}?apikey=${API_KEY}`
+                },
+                {
+                    name: 'Key Metrics TTM (stable)',
+                    url: `https://financialmodelingprep.com/stable/key-metrics-ttm?symbol=${testSymbol}&apikey=${API_KEY}`
+                },
+                {
+                    name: 'Ratios (v3)',
+                    url: `https://financialmodelingprep.com/api/v3/ratios/${testSymbol}?apikey=${API_KEY}`
+                },
+                {
+                    name: 'Ratios (stable)',
+                    url: `https://financialmodelingprep.com/stable/ratios?symbol=${testSymbol}&limit=1&apikey=${API_KEY}`
+                },
+                {
+                    name: 'Rating (v3)',
+                    url: `https://financialmodelingprep.com/api/v3/rating/${testSymbol}?apikey=${API_KEY}`
+                },
+                {
+                    name: 'Rating (stable)',
+                    url: `https://financialmodelingprep.com/stable/rating?symbol=${testSymbol}&apikey=${API_KEY}`
+                }
+            ];
+            
+            for (const endpoint of endpoints) {
+                try {
+                    resultsDiv.innerHTML += `<h3>Testing: ${endpoint.name}</h3>`;
+                    resultsDiv.innerHTML += `<p>URL: ${endpoint.url}</p>`;
+                    
+                    const response = await fetch(endpoint.url);
+                    const data = await response.json();
+                    
+                    resultsDiv.innerHTML += `<p><strong>Status:</strong> ${response.status}</p>`;
+                    
+                    if (response.ok) {
+                        resultsDiv.innerHTML += `<p><strong>Data:</strong></p>`;
+                        resultsDiv.innerHTML += `<pre style="background: #f0f0f0; padding: 10px; max-height: 200px; overflow-y: auto;">${JSON.stringify(data, null, 2)}</pre>`;
+                        
+                        // Extract key fields
+                        if (endpoint.name.includes('Quote') && data && data[0]) {
+                            resultsDiv.innerHTML += `<p><strong>PE from quote:</strong> ${data[0].pe || 'MISSING'}</p>`;
+                        }
+                        if (endpoint.name.includes('Key Metrics') && data && data[0]) {
+                            resultsDiv.innerHTML += `<p><strong>PE TTM:</strong> ${data[0].peRatioTTM || 'MISSING'}</p>`;
+                            resultsDiv.innerHTML += `<p><strong>ROE TTM:</strong> ${data[0].returnOnEquityTTM || 'MISSING'}</p>`;
+                        }
+                        if (endpoint.name.includes('Ratios') && data && data[0]) {
+                            resultsDiv.innerHTML += `<p><strong>PE Ratio:</strong> ${data[0].peRatio || 'MISSING'}</p>`;
+                            resultsDiv.innerHTML += `<p><strong>ROE:</strong> ${data[0].returnOnEquityTTM || data[0].returnOnEquity || 'MISSING'}</p>`;
+                        }
+                        if (endpoint.name.includes('Rating') && data && data[0]) {
+                            resultsDiv.innerHTML += `<p><strong>Rating:</strong> ${data[0].rating || 'MISSING'}</p>`;
+                            resultsDiv.innerHTML += `<p><strong>Rating Recommendation:</strong> ${data[0].ratingRecommendation || 'MISSING'}</p>`;
+                        }
+                    } else {
+                        resultsDiv.innerHTML += `<p style="color: red;"><strong>Error:</strong> ${JSON.stringify(data)}</p>`;
+                    }
+                    
+                    resultsDiv.innerHTML += '<hr>';
+                    
+                } catch (error) {
+                    resultsDiv.innerHTML += `<p style="color: red;"><strong>Error:</strong> ${error.message}</p>`;
+                    resultsDiv.innerHTML += '<hr>';
+                }
+            }
+        }
+        
+        // Run the test when page loads
+        window.onload = testEndpoints;
+    </script>
+</body>
+</html>
