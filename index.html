@@ -23090,6 +23090,13 @@ Be realistic and conservative. Base confidence on data quality.`;
             if (uniqueStocks.length < uniqueCuratedStocks.length) {
               const missing = uniqueCuratedStocks.length - uniqueStocks.length;
               console.warn(`⚠️ Only ${uniqueStocks.length} of ${uniqueCuratedStocks.length} stocks loaded (${missing} failed or timed out)`);
+              
+              // Log which symbols failed to load
+              const loadedSymbols = new Set(uniqueStocks.map(s => s.symbol?.toUpperCase()));
+              const failedSymbols = uniqueCuratedStocks.filter(sym => !loadedSymbols.has(sym.toUpperCase()));
+              if (failedSymbols.length > 0) {
+                console.warn(`❌ Failed symbols (${failedSymbols.length}):`, failedSymbols.slice(0, 20).join(', '), failedSymbols.length > 20 ? `... and ${failedSymbols.length - 20} more` : '');
+              }
             }
           } else {
             console.warn('⚠️ No stocks loaded, but completedCount =', completedCount);

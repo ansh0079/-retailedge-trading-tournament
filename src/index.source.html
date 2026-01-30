@@ -13819,6 +13819,51 @@ Be realistic and conservative. Base confidence on data quality.`;
               }
             }
 
+            // SIMPLIFIED ANALYSIS TAB - Load fundamental data if missing
+            if (activeTab === 'simplified' && (!stock.pe || !stock.roe || stock.revenueGrowth === undefined || stock.debtToEquity === undefined)) {
+              try {
+                console.log(`💡 Fetching data for simplified analysis of ${stock.symbol}...`);
+
+                // Fetch ratios and growth data in parallel
+                const [ratiosRes, growthRes] = await Promise.all([
+                  fetch(`https://financialmodelingprep.com/stable/ratios?symbol=${stock.symbol}&limit=1&apikey=${FMP_API_KEY}`),
+                  fetch(`https://financialmodelingprep.com/stable/financial-growth?symbol=${stock.symbol}&limit=5&apikey=${FMP_API_KEY}`)
+                ]);
+
+                const ratiosData = ratiosRes.ok ? await ratiosRes.json() : null;
+                const growthData = growthRes.ok ? await growthRes.json() : null;
+
+                const ratios = ratiosData && ratiosData.length > 0 ? ratiosData[0] : null;
+                const growth = growthData && growthData.length > 0 ? growthData[0] : null;
+
+                // Extract growth metrics
+                const revenueGrowthRaw = growth?.revenueGrowth || growth?.revenuegrowth || growth?.revenueGrowthYoY;
+
+                // Update stock object with simplified analysis data
+                if (ratios) {
+                  stock.pe = stock.pe || ratios.priceEarningsRatio;
+                  stock.roe = stock.roe || (ratios.returnOnEquity ? ratios.returnOnEquity * 100 : null);
+                  stock.debtToEquity = stock.debtToEquity || ratios.debtEquityRatio;
+                  stock.priceToBook = stock.priceToBook || ratios.priceToBookRatio;
+                  stock.currentRatio = stock.currentRatio || ratios.currentRatio;
+                  stock.quickRatio = stock.quickRatio || ratios.quickRatio;
+                }
+
+                if (revenueGrowthRaw !== null && revenueGrowthRaw !== undefined) {
+                  stock.revenueGrowth = revenueGrowthRaw * 100;
+                }
+
+                console.log(`✅ Simplified analysis data loaded for ${stock.symbol}`, {
+                  pe: stock.pe,
+                  roe: stock.roe,
+                  revenueGrowth: stock.revenueGrowth,
+                  debtToEquity: stock.debtToEquity
+                });
+              } catch (error) {
+                console.error(`❌ Error fetching simplified analysis data for ${stock.symbol}:`, error);
+              }
+            }
+
             if (activeTab === 'fundamentals' && !fundamentalsData) {
               try {
                 console.log(`📊 Fetching fundamentals data for ${stock.symbol}...`);
@@ -14479,35 +14524,38 @@ Be realistic and conservative. Base confidence on data quality.`;
                     );
                   })()}
 
-                  {/* AI Verdict */}
-                  {stock.verdict && (
-                    <div className={`p-6 rounded-xl ${stock.verdict === 'STRONG BUY' || stock.verdict === 'BUY' ? 'verdict-bullish' : stock.verdict === 'SELL' || stock.verdict === 'REDUCE' ? 'verdict-bearish' : 'verdict-neutral'}`}>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <span className="text-2xl font-bold text-white">{stock.verdict}</span>
-                          <span className="badge bg-slate-800/50 text-slate-300">Score: {stock.aiScore || 0}/100</span>
-                          <span className="badge bg-slate-800/50 text-slate-300">Confidence: {stock.confidence || 0}%</span>
+                  {/* AI Verdict - Now uses Ultimate Analysis for consistency */}
+                  {(() => {
+                    const ultimateScore = ultimateEngine.calculateUltimateScore(stock);
+                    const tradingPlan = ultimateEngine.generateTradingPlan(stock, ultimateScore);
+                    const signal = tradingPlan.signal;
+                    
+                    return (
+                      <div className={`p-6 rounded-xl ${signal === 'STRONG BUY' || signal === 'BUY' ? 'verdict-bullish' : signal === 'SELL' || signal === 'REDUCE' ? 'verdict-bearish' : 'verdict-neutral'}`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl font-bold text-white">{signal}</span>
+                            <span className="badge bg-slate-800/50 text-slate-300">Score: {ultimateScore.score}/100</span>
+                            <span className="badge bg-slate-800/50 text-slate-300">Confidence: {ultimateScore.confidence}</span>
+                          </div>
+                        </div>
+                        <div className="text-sm text-slate-300 leading-relaxed mb-4">{tradingPlan.reasoning}</div>
+
+                      {/* Subscores - Using Ultimate Analysis factors */}
+                      <div className="grid grid-cols-3 gap-3 mb-4">
+                        <div className="glass-card p-3 rounded-lg">
+                          <div className="text-xs text-slate-500 mb-1">Technical Score</div>
+                          <div className="text-lg font-bold text-white">{ultimateScore.factors.rsi + ultimateScore.factors.trend || 0}/27</div>
+                        </div>
+                        <div className="glass-card p-3 rounded-lg">
+                          <div className="text-xs text-slate-500 mb-1">Fundamental Score</div>
+                          <div className="text-lg font-bold text-white">{ultimateScore.factors.valuation + ultimateScore.factors.profitability + ultimateScore.factors.growth || 0}/26</div>
+                        </div>
+                        <div className="glass-card p-3 rounded-lg">
+                          <div className="text-xs text-slate-500 mb-1">Risk Score</div>
+                          <div className="text-lg font-bold text-white">{ultimateScore.factors.health + ultimateScore.factors.liquidity || 0}/16</div>
                         </div>
                       </div>
-                      <div className="text-sm text-slate-300 leading-relaxed mb-4">{stock.execSummary || 'AI analysis unavailable'}</div>
-
-                      {/* Subscores */}
-                      {stock.subscores && (
-                        <div className="grid grid-cols-3 gap-3 mb-4">
-                          <div className="glass-card p-3 rounded-lg">
-                            <div className="text-xs text-slate-500 mb-1">Fundamentals</div>
-                            <div className="text-lg font-bold text-white">{Math.round(stock.subscores.fundamental)}/100</div>
-                          </div>
-                          <div className="glass-card p-3 rounded-lg">
-                            <div className="text-xs text-slate-500 mb-1">Technicals</div>
-                            <div className="text-lg font-bold text-white">{Math.round(stock.subscores.technical)}/100</div>
-                          </div>
-                          <div className="glass-card p-3 rounded-lg">
-                            <div className="text-xs text-slate-500 mb-1">Risk Level</div>
-                            <div className="text-lg font-bold text-white">{Math.round(stock.subscores.risk)}/100</div>
-                          </div>
-                        </div>
-                      )}
 
                       {/* Explainable AI (why + changes + sensitivity) */}
                       <div className="mb-4">
@@ -14708,7 +14756,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                         </div>
                       )}
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Thematic Context - REMOVED */}
 
@@ -14791,6 +14840,61 @@ Be realistic and conservative. Base confidence on data quality.`;
                           setDeepseekLoading(true);
 
                           try {
+                            // Ensure we have comprehensive data before AI analysis
+                            console.log(`🤖 Preparing comprehensive data for AI analysis of ${stock.symbol}...`);
+                            
+                            // Check if fundamental data is missing
+                            if (!stock.roe || !stock.revenueGrowth || stock.debtToEquity === undefined) {
+                              console.log('📊 Fetching missing fundamental data for AI analysis...');
+                              
+                              try {
+                                const [ratiosRes, growthRes] = await Promise.all([
+                                  fetch(`https://financialmodelingprep.com/stable/ratios?symbol=${stock.symbol}&limit=1&apikey=${FMP_API_KEY}`),
+                                  fetch(`https://financialmodelingprep.com/stable/financial-growth?symbol=${stock.symbol}&limit=5&apikey=${FMP_API_KEY}`)
+                                ]);
+
+                                const ratiosData = ratiosRes.ok ? await ratiosRes.json() : null;
+                                const growthData = growthRes.ok ? await growthRes.json() : null;
+
+                                const ratios = ratiosData && ratiosData.length > 0 ? ratiosData[0] : null;
+                                const growth = growthData && growthData.length > 0 ? growthData[0] : null;
+
+                                // Populate missing data
+                                if (ratios) {
+                                  stock.pe = stock.pe || ratios.priceEarningsRatio;
+                                  stock.roe = stock.roe || (ratios.returnOnEquity ? ratios.returnOnEquity * 100 : null);
+                                  stock.roa = stock.roa || (ratios.returnOnAssets ? ratios.returnOnAssets * 100 : null);
+                                  stock.debtToEquity = stock.debtToEquity || ratios.debtEquityRatio;
+                                  stock.currentRatio = stock.currentRatio || ratios.currentRatio;
+                                  stock.quickRatio = stock.quickRatio || ratios.quickRatio;
+                                  stock.priceToBook = stock.priceToBook || ratios.priceToBookRatio;
+                                  stock.priceToSales = stock.priceToSales || ratios.priceToSalesRatio;
+                                }
+
+                                if (growth) {
+                                  const revenueGrowthRaw = growth.revenueGrowth || growth.revenuegrowth || growth.revenueGrowthYoY;
+                                  const earningsGrowthRaw = growth.netIncomeGrowth || growth.netincomegrowth;
+                                  
+                                  if (revenueGrowthRaw !== null && revenueGrowthRaw !== undefined) {
+                                    stock.revenueGrowth = revenueGrowthRaw * 100;
+                                  }
+                                  if (earningsGrowthRaw !== null && earningsGrowthRaw !== undefined) {
+                                    stock.earningsGrowth = earningsGrowthRaw * 100;
+                                  }
+                                }
+
+                                console.log('✅ Fundamental data loaded for AI analysis:', {
+                                  pe: stock.pe,
+                                  roe: stock.roe,
+                                  revenueGrowth: stock.revenueGrowth,
+                                  debtToEquity: stock.debtToEquity
+                                });
+                              } catch (fetchError) {
+                                console.warn('⚠️ Could not fetch some fundamental data:', fetchError);
+                              }
+                            }
+
+                            // Generate AI analysis with comprehensive data
                             const analysis = await getDeepSeekAnalysis(stock);
                             setDeepseekAnalysis(analysis);
                           } catch (error) {
@@ -23090,6 +23194,13 @@ Be realistic and conservative. Base confidence on data quality.`;
             if (uniqueStocks.length < uniqueCuratedStocks.length) {
               const missing = uniqueCuratedStocks.length - uniqueStocks.length;
               console.warn(`⚠️ Only ${uniqueStocks.length} of ${uniqueCuratedStocks.length} stocks loaded (${missing} failed or timed out)`);
+              
+              // Log which symbols failed to load
+              const loadedSymbols = new Set(uniqueStocks.map(s => s.symbol?.toUpperCase()));
+              const failedSymbols = uniqueCuratedStocks.filter(sym => !loadedSymbols.has(sym.toUpperCase()));
+              if (failedSymbols.length > 0) {
+                console.warn(`❌ Failed symbols (${failedSymbols.length}):`, failedSymbols.slice(0, 20).join(', '), failedSymbols.length > 20 ? `... and ${failedSymbols.length - 20} more` : '');
+              }
             }
           } else {
             console.warn('⚠️ No stocks loaded, but completedCount =', completedCount);
