@@ -2,7 +2,6 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const TournamentManager = require('./tournament');
 const apiService = require('./api-service');
 
@@ -14,8 +13,7 @@ app.use(cors());
 app.use(express.json());
 
 // Serve static files (HTML, CSS, JS)
-app.use(express.static(path.join(__dirname)));
-app.use(express.static(path.join(__dirname, 'dist')));
+app.use(express.static(__dirname));
 
 // Initialize tournament manager
 const tournamentManager = new TournamentManager();
@@ -300,6 +298,29 @@ app.post('/api/tournament/start', async (req, res) => {
     }
 });
 
+// Get current running tournament status
+app.get('/api/tournament/status/current', (req, res) => {
+    const activeTournaments = Array.from(tournamentManager.activeTournaments.values());
+    
+    if (activeTournaments.length === 0) {
+        return res.json({ 
+            status: 'idle',
+            message: 'No active tournament running'
+        });
+    }
+    
+    // Return the first active tournament
+    const tournament = activeTournaments[0];
+    res.json({
+        experimentId: tournament.experimentId,
+        status: tournament.status,
+        current_day: tournament.currentDay,
+        total_days: tournament.config.days,
+        leaderboard: tournament.leaderboard,
+        logs: tournament.logs.slice(-20)
+    });
+});
+
 // Get tournament status by ID
 app.get('/api/tournament/status/:experimentId', (req, res) => {
     const tournament = tournamentManager.getTournament(req.params.experimentId);
@@ -312,25 +333,6 @@ app.get('/api/tournament/status/:experimentId', (req, res) => {
         total_days: tournament.config.days,
         leaderboard: tournament.leaderboard,
         logs: tournament.logs.slice(-20) // Last 20 logs
-    });
-});
-
-// Get current running tournament status
-app.get('/api/tournament/status/current', (req, res) => {
-    const currentTournament = tournamentManager.getCurrentTournament();
-    if (!currentTournament) {
-        return res.json({ 
-            status: 'idle',
-            message: 'No tournament currently running'
-        });
-    }
-    res.json({
-        status: currentTournament.status,
-        experimentId: currentTournament.experimentId,
-        current_day: currentTournament.currentDay,
-        total_days: currentTournament.config.days,
-        leaderboard: currentTournament.leaderboard,
-        logs: currentTournament.logs.slice(-20)
     });
 });
 
@@ -543,11 +545,12 @@ app.get('/health', (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SERVE FRONTEND - Catch-all route for SPA
+// SERVE FRONTEND
 // ═══════════════════════════════════════════════════════════════════════════
 
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+// Serve index.html for root path
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/index.html');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
