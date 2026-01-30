@@ -17199,9 +17199,11 @@ Be realistic and conservative. Base confidence on data quality.`;
             
             // Valuation Metrics - Improved PE calculation
             pe: (() => {
-              // Try multiple sources for PE ratio
+              // Try multiple sources for PE ratio - FMP API uses different field names
+              if (quote.priceToEarnings && quote.priceToEarnings > 0 && quote.priceToEarnings < 1000) return quote.priceToEarnings;
               if (quote.pe && quote.pe > 0 && quote.pe < 1000) return quote.pe;
               if (metrics?.peRatioTTM && metrics.peRatioTTM > 0 && metrics.peRatioTTM < 1000) return metrics.peRatioTTM;
+              if (ratios?.priceEarningsRatio && ratios.priceEarningsRatio > 0 && ratios.priceEarningsRatio < 1000) return ratios.priceEarningsRatio;
               if (ratios?.peRatio && ratios.peRatio > 0 && ratios.peRatio < 1000) return ratios.peRatio;
               if (metrics?.earningsYieldTTM && metrics.earningsYieldTTM > 0) {
                 const calculatedPE = 1 / metrics.earningsYieldTTM;

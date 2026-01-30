@@ -2,6 +2,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const TournamentManager = require('./tournament');
 const apiService = require('./api-service');
 
@@ -11,6 +12,10 @@ const PORT = process.env.PORT || 3002;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Serve static files (HTML, CSS, JS)
+app.use(express.static(path.join(__dirname)));
+app.use(express.static(path.join(__dirname, 'dist')));
 
 // Initialize tournament manager
 const tournamentManager = new TournamentManager();
@@ -516,6 +521,14 @@ app.get('/health', (req, res) => {
         service: 'AI Tournament Server',
         activeTournaments: tournamentManager.activeTournaments.size
     });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SERVE FRONTEND - Catch-all route for SPA
+// ═══════════════════════════════════════════════════════════════════════════
+
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
