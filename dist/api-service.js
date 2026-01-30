@@ -81,27 +81,50 @@ class APIService {
 
     async getBatchQuotes(symbols) {
         try {
-            // FMP tier doesn't support batch - fetch individually with BASIC data only
-            // Enriched data (PE, ROE, Rating) will be fetched on-demand per stock
+            // FMP paid tier: 300 calls/minute
+            // Fetch enriched data (quote + metrics + ratios + rating) for each stock
             const results = [];
             
             for (let i = 0; i < symbols.length; i++) {
                 try {
                     const symbol = symbols[i];
                     
-                    // Fetch ONLY basic quote data for speed (1 API call per stock)
-                    const quoteRes = await fetch(`https://financialmodelingprep.com/stable/quote?symbol=${symbol}&apikey=${this.apiKeys.FMP}`);
+                    // Fetch all data in parallel (4 API calls per stock)
+                    const [quoteRes, metricsRes, ratiosRes, ratingRes] = await Promise.all([
+                        fetch(`https://financialmodelingprep.com/stable/quote?symbol=${symbol}&apikey=${this.apiKeys.FMP}`),
+                        fetch(`https://financialmodelingprep.com/stable/key-metrics-ttm?symbol=${symbol}&apikey=${this.apiKeys.FMP}`),
+                        fetch(`https://financialmodelingprep.com/stable/ratios?symbol=${symbol}&apikey=${this.apiKeys.FMP}`),
+                        fetch(`https://financialmodelingprep.com/stable/grades-consensus?symbol=${symbol}&apikey=${this.apiKeys.FMP}`)
+                    ]);
                     
-                    if (quoteRes.ok) {
-                        const data = await quoteRes.json();
-                        if (Array.isArray(data) && data.length > 0) {
-                            results.push(data[0]);
-                        }
+                    const quote = quoteRes.ok ? (await quoteRes.json())[0] : null;
+                    const metrics = metricsRes.ok ? (await metricsRes.json())[0] : null;
+                    const ratios = ratiosRes.ok ? (await ratiosRes.json())[0] : null;
+                    const rating = ratingRes.ok ? await ratingRes.json() : null;
+                    
+                    if (quote) {
+                        // Merge enriched data
+                        const enrichedQuote = {
+                            ...quote,
+                            // PE from ratios
+                            pe: ratios?.priceEarningsRatio || ratios?.priceToEarningsRatio || quote.pe || null,
+                            // ROE from key-metrics (already percentage)
+                            roe: metrics?.roeTTM || metrics?.roe || null,
+                            roa: metrics?.roaTTM || metrics?.roa || null,
+                            debtToEquity: ratios?.debtEquityRatio || ratios?.debtToEquityRatio || null,
+                            currentRatio: ratios?.currentRatio || null,
+                            revenueGrowth: metrics?.revenuePerShareTTM || null,
+                            // Analyst rating
+                            rating: rating?.consensus || null,
+                            analystRating: rating?.consensus || null
+                        };
+                        
+                        results.push(enrichedQuote);
                     }
                     
-                    // Minimal delay to avoid rate limits (20ms = 50 requests/second max)
+                    // Delay to stay under 300 calls/minute (100ms = ~150 calls/min with 4 parallel calls)
                     if (i < symbols.length - 1) {
-                        await new Promise(resolve => setTimeout(resolve, 20));
+                        await new Promise(resolve => setTimeout(resolve, 100));
                     }
                 } catch (err) {
                     console.warn(`Failed to fetch ${symbols[i]}:`, err.message);
