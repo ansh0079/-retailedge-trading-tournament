@@ -861,7 +861,7 @@
         // Strategy 1: FMP PAID (primary - only use this, backup APIs are broken)
         {
           name: 'FMP',
-          url: `https://financialmodelingprep.com/api/v3/${endpoint}?symbol=${symbol}&apikey=${API_KEYS.FMP}`,
+          url: `https://financialmodelingprep.com/stable/${endpoint}?symbol=${symbol}&apikey=${API_KEYS.FMP}`,
           transform: (data) => data
         }
         
@@ -14154,7 +14154,7 @@ Be realistic and conservative. Base confidence on data quality.`;
     async function getPriceOnDate(symbol, date) {
       try {
         const response = await fetch(
-          `https://financialmodelingprep.com/api/v3/historical-price-full/${symbol}?from=${date}&to=${date}&apikey=${FMP_API_KEY}`
+          `https://financialmodelingprep.com/stable/historical-price-full/${symbol}?from=${date}&to=${date}&apikey=${FMP_API_KEY}`
         );
         const data = await response.json();
         return data?.historical?.[0]?.close || null;
@@ -14172,7 +14172,7 @@ Be realistic and conservative. Base confidence on data quality.`;
         startDate.setMonth(startDate.getMonth() - months);
         
         const response = await fetch(
-          `https://financialmodelingprep.com/api/v3/historical-price-full/${symbol}?from=${startDate.toISOString().split('T')[0]}&to=${endDate.toISOString().split('T')[0]}&apikey=${FMP_API_KEY}`
+          `https://financialmodelingprep.com/stable/historical-price-full/${symbol}?from=${startDate.toISOString().split('T')[0]}&to=${endDate.toISOString().split('T')[0]}&apikey=${FMP_API_KEY}`
         );
         const data = await response.json();
         return data?.historical || [];
@@ -17064,12 +17064,12 @@ Be realistic and conservative. Base confidence on data quality.`;
           await new Promise(r => setTimeout(r, 100));
           
           // Earnings
-          const earningsRes = await fetch(`https://financialmodelingprep.com/api/v3/historical/earning_calendar/${symbol}?apikey=${FMP_API_KEY}`);
+          const earningsRes = await fetch(`https://financialmodelingprep.com/stable/earning_calendar/${symbol}?apikey=${FMP_API_KEY}`);
           const earnings = earningsRes.ok ? await earningsRes.json() : [];
           await new Promise(r => setTimeout(r, 100));
           
           // Stock Peers
-          const peersRes = await fetch(`https://financialmodelingprep.com/api/v4/stock_peers?symbol=${symbol}&apikey=${FMP_API_KEY}`);
+          const peersRes = await fetch(`https://financialmodelingprep.com/stable/stock_peers?symbol=${symbol}&apikey=${FMP_API_KEY}`);
           const peersData = peersRes.ok ? await peersRes.json() : null;
           const peers = peersData && peersData.length > 0 ? peersData[0]?.peersList : [];
           await new Promise(r => setTimeout(r, 100));
@@ -17088,7 +17088,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                 image: a.image
               }));
             } else {
-              const newsRes = await fetch(`https://financialmodelingprep.com/api/v3/stock_news?tickers=${symbol}&limit=20&apikey=${FMP_API_KEY}`);
+              const newsRes = await fetch(`https://financialmodelingprep.com/stable/stock_news?tickers=${symbol}&limit=20&apikey=${FMP_API_KEY}`);
               if (newsRes.ok) {
                 let articles = await newsRes.json();
                 
