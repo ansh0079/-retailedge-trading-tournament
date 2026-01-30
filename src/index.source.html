@@ -22544,15 +22544,16 @@ Be realistic and conservative. Base confidence on data quality.`;
                     volume: quote.volume,
                     avgVolume: quote.avgVolume,
                     marketCap: quote.marketCap,
-                    pe: quote.pe,
+                    pe: cachedFull?.pe || quote.pe || null,
                     eps: quote.eps,
                     // FIX: Use cached data if available for screener fields
-                    roe: cachedFull?.roe || quote.roe || 0,
+                    roe: cachedFull?.roe || quote.roe || null,
                     revenueGrowth: cachedFull?.revenueGrowth || 0,
                     debtToEquity: cachedFull?.debtToEquity || 0,
                     beta: cachedFull?.beta || quote.beta || 1.0,
                     // FIX: Calculate RSI from price data instead of hardcoding to 50
                     rsi: cachedFull?.rsi || calculateSimpleRSI(quote),
+                    analystRating: cachedFull?.analystRating || quote.rating || null,
                     high52: quote.yearHigh,
                     low52: quote.yearLow,
                     dayHigh: quote.dayHigh,

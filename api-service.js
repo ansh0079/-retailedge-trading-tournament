@@ -81,24 +81,45 @@ class APIService {
 
     async getBatchQuotes(symbols) {
         try {
-            // FMP stable doesn't support batch queries - fetch individually with delay
+            // FMP stable doesn't support batch queries - fetch individually with enriched data
             const results = [];
             
             for (let i = 0; i < symbols.length; i++) {
                 try {
-                    const url = `https://financialmodelingprep.com/stable/quote?symbol=${symbols[i]}&apikey=${this.apiKeys.FMP}`;
-                    const response = await fetch(url);
+                    const symbol = symbols[i];
                     
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (Array.isArray(data) && data.length > 0) {
-                            results.push(data[0]);
-                        }
+                    // Fetch quote, ratios, and analyst rating in parallel
+                    const [quoteRes, ratiosRes, ratingRes] = await Promise.all([
+                        fetch(`https://financialmodelingprep.com/stable/quote?symbol=${symbol}&apikey=${this.apiKeys.FMP}`),
+                        fetch(`https://financialmodelingprep.com/stable/ratios?symbol=${symbol}&apikey=${this.apiKeys.FMP}`),
+                        fetch(`https://financialmodelingprep.com/stable/grades-consensus?symbol=${symbol}&apikey=${this.apiKeys.FMP}`)
+                    ]);
+                    
+                    const quote = quoteRes.ok ? (await quoteRes.json())[0] : null;
+                    const ratios = ratiosRes.ok ? (await ratiosRes.json())[0] : null;
+                    const rating = ratingRes.ok ? await ratingRes.json() : null;
+                    
+                    if (quote) {
+                        // Merge data from all sources
+                        const enrichedQuote = {
+                            ...quote,
+                            // Add ratios data (PE, ROE, etc.)
+                            pe: ratios?.priceEarningsRatio || quote.pe || null,
+                            roe: ratios?.returnOnEquity ? (ratios.returnOnEquity * 100) : null,
+                            roa: ratios?.returnOnAssets ? (ratios.returnOnAssets * 100) : null,
+                            debtToEquity: ratios?.debtEquityRatio || null,
+                            currentRatio: ratios?.currentRatio || null,
+                            // Add analyst rating (convert to letter grade)
+                            rating: rating?.consensus || null,
+                            analystRating: rating?.consensus || null
+                        };
+                        
+                        results.push(enrichedQuote);
                     }
                     
-                    // Small delay to avoid rate limits (20ms = 50 requests/second max)
+                    // Small delay to avoid rate limits (50ms = 20 requests/second max)
                     if (i < symbols.length - 1) {
-                        await new Promise(resolve => setTimeout(resolve, 20));
+                        await new Promise(resolve => setTimeout(resolve, 50));
                     }
                 } catch (err) {
                     console.warn(`Failed to fetch ${symbols[i]}:`, err.message);
