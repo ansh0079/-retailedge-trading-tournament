@@ -14552,17 +14552,21 @@ Be realistic and conservative. Base confidence on data quality.`;
                     );
                   })()}
 
-                  {/* AI Verdict */}
-                  {stock.verdict && (
-                    <div className={`p-6 rounded-xl ${stock.verdict === 'STRONG BUY' || stock.verdict === 'BUY' ? 'verdict-bullish' : stock.verdict === 'SELL' || stock.verdict === 'REDUCE' ? 'verdict-bearish' : 'verdict-neutral'}`}>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <span className="text-2xl font-bold text-white">{stock.verdict}</span>
-                          <span className="badge bg-slate-800/50 text-slate-300">Score: {stock.aiScore || 0}/100</span>
-                          <span className="badge bg-slate-800/50 text-slate-300">Confidence: {stock.confidence || 0}%</span>
+                  {/* AI Verdict - Synchronized with Ultimate Analysis */}
+                  {(() => {
+                    const ultimateScore = ultimateEngine.calculateUltimateScore(stock);
+                    const tradingPlan = ultimateEngine.generateTradingPlan(stock, ultimateScore);
+                    
+                    return (
+                      <div className={`p-6 rounded-xl ${tradingPlan.signal === 'STRONG BUY' || tradingPlan.signal === 'BUY' ? 'verdict-bullish' : tradingPlan.signal === 'SELL' || tradingPlan.signal === 'REDUCE' ? 'verdict-bearish' : 'verdict-neutral'}`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl font-bold text-white">{tradingPlan.signal}</span>
+                            <span className="badge bg-slate-800/50 text-slate-300">Score: {ultimateScore.score}/100</span>
+                            <span className="badge bg-slate-800/50 text-slate-300">Confidence: {ultimateScore.confidence}</span>
+                          </div>
                         </div>
-                      </div>
-                      <div className="text-sm text-slate-300 leading-relaxed mb-4">{stock.execSummary || 'AI analysis unavailable'}</div>
+                        <div className="text-sm text-slate-300 leading-relaxed mb-4">{stock.execSummary || tradingPlan.reasoning.join(' ')}</div>
 
                       {/* Subscores */}
                       {stock.subscores && (
@@ -14781,7 +14785,8 @@ Be realistic and conservative. Base confidence on data quality.`;
                         </div>
                       )}
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Thematic Context - REMOVED */}
 
@@ -25314,12 +25319,12 @@ Be realistic and conservative. Base confidence on data quality.`;
   </script>
 
   <!-- Technical Analysis Features -->
-  <script src="../technical-analysis-engine.js"></script>
-  <script src="../technical-analysis-ui.js"></script>
-  <script src="../technical-analysis-integration.js"></script>
+  <script src="./technical-analysis-engine.js"></script>
+  <script src="./technical-analysis-ui.js"></script>
+  <script src="./technical-analysis-integration.js"></script>
 
   <!-- Fix Script: Enrich Stock Data with FMP API -->
-  <script src="../fix-stock-columns.js"></script>
+  <script src="./fix-stock-columns.js"></script>
 </body>
 
 </html>
