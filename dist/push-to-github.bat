@@ -16,11 +16,29 @@ if %ERRORLEVEL% NEQ 0 (
 
 REM Add all changes
 echo Adding files...
-git add index.html OPTIMIZATION_SUMMARY.md
+git add index.html
+git add app.js
+git add tournament.js
+git add tournament-server.js
+git add api-service.js
+git add config.js
+git add package.json
+git add package-lock.json
+git add fix-stock-columns.js
+git add technical-analysis-engine.js
+git add technical-analysis-ui.js
+git add technical-analysis-integration.js
+git add sw.js
+git add .gitignore
+git add README.md
+git add OPTIMIZATION_SUMMARY.md
+git add DEPLOYMENT_CHECKLIST.md
+git add FINAL_FIXES.md
+git add vendor/
 
 REM Commit with message
 echo Committing changes...
-git commit -m "Major optimization: Fix Babel error & reduce HTML by 98%%" -m "- Moved 1.14MB inline script to external app.js" -m "- Fixed Babel 500KB deoptimization error" -m "- Removed duplicate FMP_API_KEY declaration" -m "- Added Safari CSS compatibility" -m "- Reduced index.html from 1235KB to 25KB" -m "- All features working perfectly"
+git commit -m "Deploy optimized app with working API endpoints" -m "- Fixed Babel 500KB error (moved to external app.js)" -m "- Fixed duplicate FMP_API_KEY declaration" -m "- Added tournament.js for AI tournament" -m "- Optimized HTML: 1235KB → 25KB (98% reduction)" -m "- Fixed API endpoints for stock data" -m "- Safari/iOS compatibility" -m "- Ready for 24/7 tournament on Render"
 
 REM Push to GitHub
 echo Pushing to GitHub...

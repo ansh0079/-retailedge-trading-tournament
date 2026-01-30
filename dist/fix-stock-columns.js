@@ -3,8 +3,8 @@
 
 console.log('🔧 Starting stock data enrichment...');
 
-const FMP_API_KEY = 'h43nCTpMeyiIiNquebaqktc7ChUHMxIz';
-const API_BASE_URL = 'http://localhost:3002';
+// Use API_BASE_URL from config.js (already defined globally)
+// FMP_API_KEY is handled by the backend proxy server
 
 // Function to enrich a single stock with FMP data
 async function enrichStock(stock) {
