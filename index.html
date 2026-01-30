@@ -17021,6 +17021,10 @@ Be realistic and conservative. Base confidence on data quality.`;
           const grades = gradesRes.ok ? await gradesRes.json() : [];
           await delay(100);
           
+          const gradesConsensusRes = await fetch(`https://financialmodelingprep.com/stable/grades-consensus?symbol=${symbol}&apikey=${FMP_API_KEY}`);
+          const gradesConsensusData = gradesConsensusRes.ok ? await gradesConsensusRes.json() : null;
+          await delay(100);
+          
           const ratiosRes = await fetch(`https://financialmodelingprep.com/stable/ratios?symbol=${symbol}&limit=1&apikey=${FMP_API_KEY}`);
           const ratiosData = ratiosRes.ok ? await ratiosRes.json() : null;
           await delay(100);
@@ -17040,6 +17044,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           const target = targetData && targetData.length > 0 ? targetData[0] : null;
           const profile = profileData && profileData.length > 0 ? profileData[0] : null;
           const ratios = ratiosData && ratiosData.length > 0 ? ratiosData[0] : null;
+          const gradesConsensus = gradesConsensusData && gradesConsensusData.length > 0 ? gradesConsensusData[0] : gradesConsensusData;
 
           const toFiniteNumberOrNull = (v) => {
             if (v === '' || v === undefined || v === null) return null;
@@ -17160,17 +17165,22 @@ Be realistic and conservative. Base confidence on data quality.`;
             news = [];
           }
           
-          console.log(`✅ ${symbol}: Fetched 12 endpoints (${news.length} news articles)`);
+          console.log(`✅ ${symbol}: Fetched 13 endpoints (${news.length} news articles)`);
           
           // DEBUG: Log raw API data to verify what we're getting
           console.log(`   📊 Raw API Data for ${symbol}:`);
-          console.log(`      Quote PE: ${quote.pe}`);
-          console.log(`      Metrics PE: ${metrics?.peRatioTTM}`);
-          console.log(`      Ratios PE: ${ratios?.peRatio}`);
-          console.log(`      Metrics ROE: ${metrics?.returnOnEquityTTM}`);
-          console.log(`      Ratios ROE: ${ratios?.returnOnEquityTTM}`);
-          console.log(`      Rating: ${ratings?.rating}`);
-          console.log(`      Rating Recommendation: ${ratings?.ratingRecommendation}`);
+          console.log(`      Quote priceToEarnings: ${quote.priceToEarnings}`);
+          console.log(`      Quote pe: ${quote.pe}`);
+          console.log(`      Metrics peRatioTTM: ${metrics?.peRatioTTM}`);
+          console.log(`      Ratios priceEarningsRatio: ${ratios?.priceEarningsRatio}`);
+          console.log(`      Ratios peRatio: ${ratios?.peRatio}`);
+          console.log(`      Metrics returnOnEquityTTM: ${metrics?.returnOnEquityTTM}`);
+          console.log(`      Ratios returnOnEquityTTM: ${ratios?.returnOnEquityTTM}`);
+          console.log(`      Ratios returnOnEquity: ${ratios?.returnOnEquity}`);
+          console.log(`      Ratings rating: ${ratings?.rating}`);
+          console.log(`      Ratings ratingRecommendation: ${ratings?.ratingRecommendation}`);
+          console.log(`      GradesConsensus consensus: ${gradesConsensus?.consensus}`);
+          console.log(`      GradesConsensus object:`, gradesConsensus);
           
           // DEBUG: Log price data to verify API values
           console.log(`   📊 Price Data for ${symbol}:`);
@@ -17271,6 +17281,18 @@ Be realistic and conservative. Base confidence on data quality.`;
             
             // Analyst Data - Improved rating extraction
             analystRating: (() => {
+              // Try grades-consensus first (most reliable for FMP rating)
+              if (gradesConsensus?.consensus) {
+                const consensus = String(gradesConsensus.consensus).trim().toUpperCase();
+                if (consensus.includes('STRONG BUY') || consensus === 'A+') return 'A+';
+                if (consensus.includes('BUY') || consensus === 'A') return 'A';
+                if (consensus.includes('HOLD') || consensus === 'B') return 'B';
+                if (consensus.includes('SELL') || consensus === 'C') return 'C';
+                if (consensus.includes('STRONG SELL') || consensus === 'D') return 'D';
+                return consensus;
+              }
+              
+              // Fallback to ratings endpoint
               const rating = ratings?.rating || ratings?.ratingRecommendation;
               if (!rating || rating === 'N/A') return null;
               
@@ -17331,9 +17353,9 @@ Be realistic and conservative. Base confidence on data quality.`;
           
           // DEBUG: Log final mapped values
           console.log(`   ✅ Final mapped values for ${symbol}:`);
-          console.log(`      PE: ${stockData.pe}`);
-          console.log(`      ROE: ${stockData.roe}`);
-          console.log(`      Analyst Rating: ${stockData.analystRating}`);
+          console.log(`      PE: ${stockData.pe} (from ${quote.priceToEarnings ? 'quote.priceToEarnings' : metrics?.peRatioTTM ? 'metrics.peRatioTTM' : ratios?.priceEarningsRatio ? 'ratios.priceEarningsRatio' : 'null'})`);
+          console.log(`      ROE: ${stockData.roe}% (from ${metrics?.returnOnEquityTTM ? 'metrics.returnOnEquityTTM' : ratios?.returnOnEquityTTM ? 'ratios.returnOnEquityTTM' : ratios?.returnOnEquity ? 'ratios.returnOnEquity' : 'null'})`);
+          console.log(`      Analyst Rating: ${stockData.analystRating} (from ${gradesConsensus?.consensus ? 'gradesConsensus.consensus' : ratings?.rating ? 'ratings.rating' : 'null'})`);
           
           return stockData;
         } catch (error) {
