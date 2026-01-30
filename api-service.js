@@ -88,14 +88,16 @@ class APIService {
                 try {
                     const symbol = symbols[i];
                     
-                    // Fetch quote, ratios, and analyst rating in parallel
-                    const [quoteRes, ratiosRes, ratingRes] = await Promise.all([
+                    // Fetch quote, key metrics (for ROE), ratios (for PE), and analyst rating in parallel
+                    const [quoteRes, metricsRes, ratiosRes, ratingRes] = await Promise.all([
                         fetch(`https://financialmodelingprep.com/stable/quote?symbol=${symbol}&apikey=${this.apiKeys.FMP}`),
+                        fetch(`https://financialmodelingprep.com/stable/key-metrics-ttm?symbol=${symbol}&apikey=${this.apiKeys.FMP}`),
                         fetch(`https://financialmodelingprep.com/stable/ratios?symbol=${symbol}&apikey=${this.apiKeys.FMP}`),
                         fetch(`https://financialmodelingprep.com/stable/grades-consensus?symbol=${symbol}&apikey=${this.apiKeys.FMP}`)
                     ]);
                     
                     const quote = quoteRes.ok ? (await quoteRes.json())[0] : null;
+                    const metrics = metricsRes.ok ? (await metricsRes.json())[0] : null;
                     const ratios = ratiosRes.ok ? (await ratiosRes.json())[0] : null;
                     const rating = ratingRes.ok ? await ratingRes.json() : null;
                     
@@ -103,13 +105,14 @@ class APIService {
                         // Merge data from all sources
                         const enrichedQuote = {
                             ...quote,
-                            // Add ratios data (PE, ROE, etc.)
-                            pe: ratios?.priceEarningsRatio || quote.pe || null,
-                            roe: ratios?.returnOnEquity ? (ratios.returnOnEquity * 100) : null,
-                            roa: ratios?.returnOnAssets ? (ratios.returnOnAssets * 100) : null,
-                            debtToEquity: ratios?.debtEquityRatio || null,
+                            // Add PE from ratios
+                            pe: ratios?.priceToEarningsRatio || quote.pe || null,
+                            // Add ROE from key-metrics (already in percentage format)
+                            roe: metrics?.roeTTM || metrics?.roe || null,
+                            roa: metrics?.roaTTM || metrics?.roa || null,
+                            debtToEquity: ratios?.debtToEquityRatio || null,
                             currentRatio: ratios?.currentRatio || null,
-                            // Add analyst rating (convert to letter grade)
+                            // Add analyst rating
                             rating: rating?.consensus || null,
                             analystRating: rating?.consensus || null
                         };

@@ -22264,16 +22264,18 @@ Be realistic and conservative. Base confidence on data quality.`;
             yearHigh: quote.yearHigh || 0,
             yearLow: quote.yearLow || 0,
 
-            // Valuation Metrics
-            pe: metrics?.peRatioTTM || quote.pe || ratios?.peRatio || (metrics?.earningsYieldTTM ? (1 / metrics.earningsYieldTTM) : null),
+            // Valuation Metrics - Use quote.pe first as it's most reliable
+            pe: quote.pe || metrics?.peRatioTTM || ratios?.peRatio || (metrics?.earningsYieldTTM && metrics.earningsYieldTTM !== 0 ? (1 / metrics.earningsYieldTTM) : null),
             priceToBook: ratios?.priceToBookRatio || 0,
             priceToSales: ratios?.priceToSalesRatio || 0,
             enterpriseValue: metrics?.enterpriseValueTTM || 0,
             evToEbitda: metrics?.evToEBITDATTM || 0,
 
-            // Profitability
-            roe: (metrics?.returnOnEquityTTM || ratios?.returnOnEquityTTM || ratios?.returnOnEquity) ? 
-              ((metrics?.returnOnEquityTTM || ratios?.returnOnEquityTTM || ratios?.returnOnEquity) * 100) : null,
+            // Profitability - Convert to percentage
+            roe: (() => {
+              const roeValue = metrics?.returnOnEquityTTM || ratios?.returnOnEquityTTM || ratios?.returnOnEquity;
+              return roeValue ? (roeValue * 100) : null;
+            })(),
             roa: metrics?.returnOnAssetsTTM ? (metrics.returnOnAssetsTTM * 100) : 0,
             roic: metrics?.returnOnInvestedCapitalTTM ? (metrics.returnOnInvestedCapitalTTM * 100) : 0,
             grossMargin: ratios?.grossProfitMargin ? (ratios.grossProfitMargin * 100) : 0,
