@@ -11,9 +11,9 @@ class TechnicalAnalysisEngine {
     // MAIN ANALYSIS FUNCTION
     // ═══════════════════════════════════════════════════════════════
 
-    async generateFullAnalysis(symbol) {
+    async generateFullAnalysis(symbol, timeframe = '1D') {
         try {
-            console.log(`📊 Generating technical analysis for ${symbol}...`);
+            console.log(`📊 Generating technical analysis for ${symbol} (${timeframe})...`);
 
             // Fetch historical data
             const historicalData = await this.fetchHistoricalData(symbol);
@@ -21,23 +21,30 @@ class TechnicalAnalysisEngine {
                 throw new Error('Insufficient historical data');
             }
 
+            // Detect candlestick patterns
+            const patterns = this.detectCandlestickPatterns(historicalData);
+
             // Calculate all technical indicators
             const indicators = this.calculateAllIndicators(historicalData);
 
-            // Identify key levels
+            // Identify key levels with better precision
             const levels = this.identifyKeyLevels(historicalData, indicators);
 
+            // Detect support/resistance zones
+            const zones = this.identifySupportResistanceZones(historicalData);
+
             // Generate scenario playbook
-            const scenarios = this.generateScenarioPlaybook(symbol, levels, indicators);
+            const scenarios = this.generateScenarioPlaybook(symbol, levels, indicators, patterns);
 
             // Generate narrative analysis
-            const narrative = this.generateNarrative(symbol, levels, indicators, scenarios);
+            const narrative = this.generateNarrative(symbol, levels, indicators, scenarios, patterns, zones);
 
             // Educational content
             const education = this.generateEducationalContent(levels, indicators);
 
             return {
                 symbol,
+                timeframe,
                 summary: narrative.summary,
                 bullsVsBears: narrative.bullsVsBears,
                 bearishControl: narrative.bearishControl,
@@ -47,6 +54,8 @@ class TechnicalAnalysisEngine {
                 bigPicture: narrative.bigPicture,
                 levels,
                 indicators,
+                patterns,
+                zones,
                 timestamp: new Date().toISOString()
             };
 
@@ -372,30 +381,31 @@ class TechnicalAnalysisEngine {
     // SCENARIO PLAYBOOK
     // ═══════════════════════════════════════════════════════════════
 
-    generateScenarioPlaybook(symbol, levels, indicators) {
+    generateScenarioPlaybook(symbol, levels, indicators, patterns) {
         const { current, support, resistance, ma20 } = levels;
+        const atr = indicators.atr || (current * 0.02);
 
-        // Bearish scenario
-        const bearishEntry = resistance;
-        const bearishStop = resistance * 1.02;
+        // Bearish scenario - more precise entry/stop based on ATR
+        const bearishEntry = current > ma20 ? ma20 * 1.005 : resistance;
+        const bearishStop = bearishEntry + (atr * 1.5);
         const bearishTarget1 = support;
         const bearishTarget2 = support * 0.95;
 
         const bearishRR1 = this.calculateRR(bearishEntry, bearishStop, bearishTarget1);
         const bearishRR2 = this.calculateRR(bearishEntry, bearishStop, bearishTarget2);
 
-        // Bullish scenario
-        const bullishEntry = support;
-        const bullishStop = support * 0.98;
+        // Bullish scenario - more precise entry/stop based on ATR
+        const bullishEntry = current < ma20 ? ma20 * 0.995 : support * 1.01;
+        const bullishStop = bullishEntry - (atr * 1.5);
         const bullishTarget1 = resistance;
         const bullishTarget2 = resistance * 1.05;
 
         const bullishRR1 = this.calculateRR(bullishEntry, bullishStop, bullishTarget1);
         const bullishRR2 = this.calculateRR(bullishEntry, bullishStop, bullishTarget2);
 
-        // Determine confidence based on indicators
-        const bearishConfidence = this.calculateConfidence('bearish', indicators);
-        const bullishConfidence = this.calculateConfidence('bullish', indicators);
+        // Determine confidence based on indicators and patterns
+        const bearishConfidence = this.calculateConfidence('bearish', indicators, patterns);
+        const bullishConfidence = this.calculateConfidence('bullish', indicators, patterns);
 
         return {
             bearish: {
@@ -443,23 +453,29 @@ class TechnicalAnalysisEngine {
         return reward / risk;
     }
 
-    calculateConfidence(direction, indicators) {
+    calculateConfidence(direction, indicators, patterns) {
         let score = 0;
 
         if (direction === 'bearish') {
             if (indicators.rsi > 70) score += 2;
             if (indicators.currentPrice < indicators.ma20) score += 2;
+            if (indicators.currentPrice < indicators.ma200) score += 1;
             if (indicators.superTrend?.trend === 'bearish') score += 2;
             if (indicators.volume.trend === 'declining') score += 1;
+            if (indicators.macd?.macd < 0) score += 1;
+            if (patterns?.all?.some(p => p.type === 'bearish')) score += 2;
         } else {
             if (indicators.rsi < 30) score += 2;
             if (indicators.currentPrice > indicators.ma20) score += 2;
+            if (indicators.currentPrice > indicators.ma200) score += 1;
             if (indicators.superTrend?.trend === 'bullish') score += 2;
             if (indicators.volume.trend === 'increasing') score += 1;
+            if (indicators.macd?.macd > 0) score += 1;
+            if (patterns?.all?.some(p => p.type === 'bullish')) score += 2;
         }
 
-        if (score >= 6) return 'High';
-        if (score >= 4) return 'Medium';
+        if (score >= 8) return 'High';
+        if (score >= 5) return 'Medium';
         return 'Low';
     }
 
@@ -467,28 +483,35 @@ class TechnicalAnalysisEngine {
     // NARRATIVE GENERATION
     // ═══════════════════════════════════════════════════════════════
 
-    generateNarrative(symbol, levels, indicators, scenarios) {
+    generateNarrative(symbol, levels, indicators, scenarios, patterns, zones) {
         const { current, support, resistance, ma20, ma200 } = levels;
         const bias = this.determineBias(indicators);
+        const patternName = patterns.latest !== 'none' ? patterns.latest : 'indecisive';
+        const patternType = patterns.all.length > 0 ? patterns.all[0].type : 'neutral';
 
-        // Summary
-        const summary = `${symbol} is ${bias === 'bearish' ? 'clinging to' : 'testing'} the $${current.toFixed(2)} mark on the daily chart, with a fierce tug-of-war at the $${support.toFixed(2)}–$${resistance.toFixed(2)} support zone—lose this level, and the next stop could be a sharp acceleration of the ${bias} trend. The bias remains ${bias}, but a ${this.detectCandlestickPattern()} candlestick at support hints that bulls are lurking, waiting for a spark of momentum.`;
+        // Enhanced summary with specific price action
+        const pricePosition = current > ma20 ? 'above' : 'below';
+        const ma20Distance = Math.abs((current - ma20) / ma20 * 100).toFixed(1);
+        const supportDistance = Math.abs((current - support) / support * 100).toFixed(1);
+        
+        const summary = `${symbol} (NASDAQ:${symbol}) is ${bias === 'bearish' ? 'clinging to' : 'testing'} the $${current.toFixed(2)} mark on the daily chart, with a fierce tug-of-war at the $${support.toFixed(2)}–$${resistance.toFixed(2)} support zone—lose this level, and the next stop could be a sharp acceleration of the ${bias}trend. The bias remains ${bias}, but a ${patternName} candlestick at ${pricePosition === 'below' ? 'support' : 'current levels'} hints that ${patternType === 'bullish' ? 'bulls are lurking' : patternType === 'bearish' ? 'bears are in control' : 'traders are waiting'}, waiting for a spark of momentum.`;
 
-        // Bulls vs. Bears
+        // Bulls vs. Bears - Enhanced with more detail
+        const fib618Pct = ((indicators.fibonacci.level618 / current - 1) * 100).toFixed(1);
         const bullsVsBears = {
             title: 'Bulls vs. Bears: Support on the Brink',
             keyBattleground: [
                 {
-                    level: `$${support.toFixed(2)}–$${resistance.toFixed(2)}`,
-                    significance: `This area is loaded with technical significance—combining the ${indicators.fibonacci.level618.toFixed(2)} Fibonacci retracement ($${indicators.fibonacci.level618.toFixed(2)}), VPVR Point of Control ($${indicators.vpvr.poc.toFixed(2)}), and the bottom of the Ichimoku Cloud.`
+                    level: `$${support.toFixed(2)}–$${resistance.toFixed(2)} zone`,
+                    significance: `The $${support.toFixed(2)}–$${resistance.toFixed(2)} area is loaded with technical significance—combining the 61.8% Fibonacci retracement ($${indicators.fibonacci.level618.toFixed(2)}), VPVR Point of Control ($${indicators.vpvr.poc.toFixed(2)}), and the ${indicators.ichimoku?.position === 'below' ? 'bottom of the Ichimoku Cloud' : 'key moving averages'}.`
                 },
                 {
                     level: `200-day MA ($${ma200?.toFixed(2) || 'N/A'})`,
-                    significance: `Price is now testing the 200-day moving average ($${ma200?.toFixed(2) || 'N/A'}), a classic "last stand" for long-term bulls.`
+                    significance: `Price is ${current > ma200 ? 'holding above' : 'now testing'} the 200-day moving average ($${ma200?.toFixed(2) || 'N/A'}), a classic "last stand" for long-term ${current > ma200 ? 'bulls' : 'support'}.`
                 },
                 {
-                    level: 'Candlestick Pattern',
-                    significance: `The ${this.detectCandlestickPattern()} candlestick signals buyers are defending this zone, but without follow-through, it can quickly become a bull trap.`
+                    level: `${patternName} candlestick pattern`,
+                    significance: `The ${patternName} candlestick on ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} signals ${patternType === 'bullish' ? 'buyers are defending this zone' : patternType === 'bearish' ? 'sellers are in control' : 'indecision'}, but without follow-through, it can quickly become a ${patternType === 'bullish' ? 'bull' : 'bear'} trap.`
                 }
             ]
         };
@@ -533,10 +556,128 @@ class TechnicalAnalysisEngine {
         return bearishSignals > bullishSignals ? 'bearish' : 'bullish';
     }
 
-    detectCandlestickPattern() {
-        // Simplified - in real implementation, analyze actual candle data
-        const patterns = ['hammer', 'doji', 'engulfing', 'shooting star'];
-        return patterns[Math.floor(Math.random() * patterns.length)];
+    detectCandlestickPatterns(candles) {
+        if (candles.length < 3) return { latest: 'none', all: [] };
+
+        const patterns = [];
+        const lastCandle = candles[candles.length - 1];
+        const prevCandle = candles[candles.length - 2];
+        const prev2Candle = candles[candles.length - 3];
+
+        const body = Math.abs(lastCandle.close - lastCandle.open);
+        const range = lastCandle.high - lastCandle.low;
+        const upperShadow = lastCandle.high - Math.max(lastCandle.open, lastCandle.close);
+        const lowerShadow = Math.min(lastCandle.open, lastCandle.close) - lastCandle.low;
+
+        // Hammer (bullish reversal)
+        if (lowerShadow > body * 2 && upperShadow < body * 0.3 && body < range * 0.3) {
+            patterns.push({ name: 'hammer', type: 'bullish', strength: 'medium' });
+        }
+
+        // Shooting Star (bearish reversal)
+        if (upperShadow > body * 2 && lowerShadow < body * 0.3 && body < range * 0.3) {
+            patterns.push({ name: 'shooting star', type: 'bearish', strength: 'medium' });
+        }
+
+        // Doji (indecision)
+        if (body < range * 0.1) {
+            patterns.push({ name: 'doji', type: 'neutral', strength: 'low' });
+        }
+
+        // Bullish Engulfing
+        if (prevCandle.close < prevCandle.open && // Previous red
+            lastCandle.close > lastCandle.open && // Current green
+            lastCandle.open < prevCandle.close &&
+            lastCandle.close > prevCandle.open) {
+            patterns.push({ name: 'bullish engulfing', type: 'bullish', strength: 'strong' });
+        }
+
+        // Bearish Engulfing
+        if (prevCandle.close > prevCandle.open && // Previous green
+            lastCandle.close < lastCandle.open && // Current red
+            lastCandle.open > prevCandle.close &&
+            lastCandle.close < prevCandle.open) {
+            patterns.push({ name: 'bearish engulfing', type: 'bearish', strength: 'strong' });
+        }
+
+        // Morning Star (bullish reversal)
+        if (prev2Candle.close < prev2Candle.open && // First red
+            Math.abs(prevCandle.close - prevCandle.open) < body * 0.3 && // Small middle
+            lastCandle.close > lastCandle.open && // Last green
+            lastCandle.close > (prev2Candle.open + prev2Candle.close) / 2) {
+            patterns.push({ name: 'morning star', type: 'bullish', strength: 'strong' });
+        }
+
+        // Evening Star (bearish reversal)
+        if (prev2Candle.close > prev2Candle.open && // First green
+            Math.abs(prevCandle.close - prevCandle.open) < body * 0.3 && // Small middle
+            lastCandle.close < lastCandle.open && // Last red
+            lastCandle.close < (prev2Candle.open + prev2Candle.close) / 2) {
+            patterns.push({ name: 'evening star', type: 'bearish', strength: 'strong' });
+        }
+
+        return {
+            latest: patterns.length > 0 ? patterns[0].name : 'none',
+            all: patterns,
+            hasPattern: patterns.length > 0
+        };
+    }
+
+    identifySupportResistanceZones(candles) {
+        const zones = { support: [], resistance: [] };
+        const currentPrice = candles[candles.length - 1].close;
+        const recentCandles = candles.slice(-60);
+
+        // Find pivot points
+        for (let i = 2; i < recentCandles.length - 2; i++) {
+            const candle = recentCandles[i];
+            
+            // Resistance (local high)
+            if (candle.high > recentCandles[i-1].high &&
+                candle.high > recentCandles[i-2].high &&
+                candle.high > recentCandles[i+1].high &&
+                candle.high > recentCandles[i+2].high) {
+                if (candle.high > currentPrice) {
+                    zones.resistance.push(candle.high);
+                }
+            }
+
+            // Support (local low)
+            if (candle.low < recentCandles[i-1].low &&
+                candle.low < recentCandles[i-2].low &&
+                candle.low < recentCandles[i+1].low &&
+                candle.low < recentCandles[i+2].low) {
+                if (candle.low < currentPrice) {
+                    zones.support.push(candle.low);
+                }
+            }
+        }
+
+        // Cluster nearby levels
+        const clusterZones = (levels) => {
+            if (levels.length === 0) return [];
+            levels.sort((a, b) => a - b);
+            const clustered = [];
+            let current = [levels[0]];
+
+            for (let i = 1; i < levels.length; i++) {
+                if (Math.abs(levels[i] - current[current.length - 1]) / current[0] < 0.02) {
+                    current.push(levels[i]);
+                } else {
+                    clustered.push(current.reduce((a, b) => a + b) / current.length);
+                    current = [levels[i]];
+                }
+            }
+            clustered.push(current.reduce((a, b) => a + b) / current.length);
+            return clustered;
+        };
+
+        return {
+            support: clusterZones(zones.support).slice(-3),
+            resistance: clusterZones(zones.resistance).slice(0, 3),
+            nearestSupport: zones.support.length > 0 ? Math.max(...zones.support.filter(s => s < currentPrice)) : currentPrice * 0.95,
+            nearestResistance: zones.resistance.length > 0 ? Math.min(...zones.resistance.filter(r => r > currentPrice)) : currentPrice * 1.05
+        };
     }
 
     generateBearishControl(indicators, levels) {

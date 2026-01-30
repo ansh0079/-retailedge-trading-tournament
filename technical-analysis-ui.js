@@ -11,7 +11,7 @@ class TechnicalAnalysisUI {
     // MAIN RENDER FUNCTION
     // ═══════════════════════════════════════════════════════════════
 
-    async renderAnalysis(symbol, containerId = 'technical-analysis-container') {
+    async renderAnalysis(symbol, containerId = 'technical-analysis-container', timeframe = '1D') {
         const container = document.getElementById(containerId);
         if (!container) {
             console.error(`Container ${containerId} not found`);
@@ -23,7 +23,7 @@ class TechnicalAnalysisUI {
 
         try {
             // Generate analysis
-            const analysis = await this.engine.generateFullAnalysis(symbol);
+            const analysis = await this.engine.generateFullAnalysis(symbol, timeframe);
 
             if (!analysis) {
                 container.innerHTML = this.renderErrorState(symbol);
@@ -31,9 +31,13 @@ class TechnicalAnalysisUI {
             }
 
             this.currentAnalysis = analysis;
+            this.currentSymbol = symbol;
 
             // Render full analysis
             container.innerHTML = this.renderFullAnalysis(analysis);
+
+            // Attach event listeners for timeframe selector
+            this.attachTimeframeListeners(container, symbol, containerId);
 
             console.log('✅ Technical analysis rendered for', symbol);
 
@@ -41,6 +45,16 @@ class TechnicalAnalysisUI {
             console.error('Error rendering technical analysis:', error);
             container.innerHTML = this.renderErrorState(symbol, error.message);
         }
+    }
+
+    attachTimeframeListeners(container, symbol, containerId) {
+        const timeframeButtons = container.querySelectorAll('[data-timeframe]');
+        timeframeButtons.forEach(button => {
+            button.addEventListener('click', async (e) => {
+                const timeframe = e.target.dataset.timeframe;
+                await this.renderAnalysis(symbol, containerId, timeframe);
+            });
+        });
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -100,6 +114,12 @@ class TechnicalAnalysisUI {
         
         <!-- The Big Picture -->
         ${this.renderBigPicture(analysis)}
+        
+        <!-- Support/Resistance Zones -->
+        ${this.renderSupportResistanceZones(analysis)}
+        
+        <!-- Multi-Timeframe Prompt -->
+        ${this.renderMultiTimeframePrompt(analysis)}
       </div>
     `;
     }
@@ -111,12 +131,12 @@ class TechnicalAnalysisUI {
     renderHeader(analysis) {
         return `
       <div class="glass-card p-6 border-l-4 border-cyan-500">
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between mb-4">
           <div>
             <h2 class="text-2xl font-bold text-white mb-1">
               📊 ${analysis.symbol} Technical Analysis
             </h2>
-            <p class="text-sm text-slate-400">1D Chart • ${new Date(analysis.timestamp).toLocaleString()}</p>
+            <p class="text-sm text-slate-400">${analysis.timeframe} Chart • ${new Date(analysis.timestamp).toLocaleString()}</p>
           </div>
           <div class="text-right">
             <div class="text-3xl font-bold text-cyan-400">
@@ -125,6 +145,45 @@ class TechnicalAnalysisUI {
             <div class="text-xs text-slate-400 mt-1">Current Price</div>
           </div>
         </div>
+        
+        <!-- Timeframe Selector -->
+        <div class="flex items-center gap-2 pt-4 border-t border-slate-700">
+          <span class="text-sm text-slate-400 mr-2">Timeframe:</span>
+          ${['1H', '4H', '1D', '1W'].map(tf => `
+            <button 
+              data-timeframe="${tf}"
+              class="px-3 py-1 rounded text-sm font-medium transition-all ${
+                analysis.timeframe === tf 
+                  ? 'bg-cyan-500 text-white' 
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              }"
+            >
+              ${tf}
+            </button>
+          `).join('')}
+        </div>
+        
+        <!-- Pattern Detection -->
+        ${analysis.patterns?.hasPattern ? `
+          <div class="mt-4 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+            <div class="flex items-center gap-2">
+              <span class="text-lg">🔍</span>
+              <div>
+                <span class="font-semibold text-purple-400">Pattern Detected:</span>
+                <span class="text-slate-300 ml-2">${analysis.patterns.latest}</span>
+                ${analysis.patterns.all.length > 0 ? `
+                  <span class="ml-2 px-2 py-0.5 rounded text-xs ${
+                    analysis.patterns.all[0].type === 'bullish' ? 'bg-green-500/20 text-green-400' :
+                    analysis.patterns.all[0].type === 'bearish' ? 'bg-red-500/20 text-red-400' :
+                    'bg-yellow-500/20 text-yellow-400'
+                  }">
+                    ${analysis.patterns.all[0].type} • ${analysis.patterns.all[0].strength}
+                  </span>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+        ` : ''}
       </div>
     `;
     }
@@ -385,6 +444,79 @@ class TechnicalAnalysisUI {
     `;
     }
 
+    renderSupportResistanceZones(analysis) {
+        if (!analysis.zones) return '';
+        
+        const { zones, levels } = analysis;
+        
+        return `
+      <div class="glass-card p-6">
+        <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <span>📍</span> Key Support & Resistance Zones
+        </h3>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Resistance Zones -->
+          <div class="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
+            <h4 class="text-sm font-semibold text-red-400 mb-3 flex items-center gap-2">
+              <span>⬆️</span> Resistance Levels
+            </h4>
+            <div class="space-y-2">
+              ${zones.resistance.length > 0 ? zones.resistance.map((level, i) => `
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-slate-400">R${i + 1}:</span>
+                  <span class="font-mono text-red-400">$${level.toFixed(2)}</span>
+                  <span class="text-xs text-slate-500">
+                    +${((level / levels.current - 1) * 100).toFixed(1)}%
+                  </span>
+                </div>
+              `).join('') : '<p class="text-sm text-slate-500">No strong resistance detected</p>'}
+            </div>
+          </div>
+          
+          <!-- Support Zones -->
+          <div class="bg-green-500/5 border border-green-500/20 rounded-lg p-4">
+            <h4 class="text-sm font-semibold text-green-400 mb-3 flex items-center gap-2">
+              <span>⬇️</span> Support Levels
+            </h4>
+            <div class="space-y-2">
+              ${zones.support.length > 0 ? zones.support.map((level, i) => `
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-slate-400">S${i + 1}:</span>
+                  <span class="font-mono text-green-400">$${level.toFixed(2)}</span>
+                  <span class="text-xs text-slate-500">
+                    ${((level / levels.current - 1) * 100).toFixed(1)}%
+                  </span>
+                </div>
+              `).join('') : '<p class="text-sm text-slate-500">No strong support detected</p>'}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    }
+
+    renderMultiTimeframePrompt(analysis) {
+        return `
+      <div class="glass-card p-6 bg-gradient-to-r from-cyan-500/5 to-purple-500/5 border-l-4 border-cyan-500">
+        <div class="flex items-start gap-4">
+          <span class="text-3xl">👆</span>
+          <div class="flex-1">
+            <h3 class="text-lg font-semibold text-white mb-2">
+              Want me to analyze ${analysis.symbol}'s 1-hour or weekly chart for deeper trade timing and trend context?
+            </h3>
+            <p class="text-sm text-slate-400 mb-3">
+              Use the timeframe selector above to switch between 1H, 4H, 1D, and 1W charts for comprehensive multi-timeframe analysis.
+            </p>
+            <div class="text-xs text-slate-500 italic">
+              This content is for informational purposes only and not investment advice.
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // HELPER FUNCTIONS
     // ═══════════════════════════════════════════════════════════════
@@ -434,4 +566,4 @@ Generated: ${new Date().toLocaleString()}
 window.TechnicalAnalysisUI = new TechnicalAnalysisUI();
 
 console.log('✅ Technical Analysis UI loaded');
-console.log('💡 Usage: TechnicalAnalysisUI.renderAnalysis("AAPL", "container-id")');
+console.log('💡 Usage: TechnicalAnalysisUI.renderAnalysis("AAPL", "container-id", "1D")');
