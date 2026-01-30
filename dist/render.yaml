@@ -1,9 +1,9 @@
 services:
   - type: web
-    name: retailedge-proxy
+    name: retailedge-trading-tournament
     env: node
-    buildCommand: npm install && npm run build
-    startCommand: node proxy-server.js
+    buildCommand: npm install
+    startCommand: node tournament-server.js
     envVars:
       - key: NODE_ENV
         value: production
