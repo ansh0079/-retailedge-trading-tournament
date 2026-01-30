@@ -528,6 +528,12 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Technical Analysis System -->
+  <script src="technical-analysis-engine.js"></script>
+  <script src="technical-analysis-ui.js"></script>
+  <script src="technical-analysis-integration.js"></script>
+  
   <script type="text/babel">
     const { useState, useEffect, useMemo, useCallback, useRef } = React;
 
@@ -16991,6 +16997,10 @@ Be realistic and conservative. Base confidence on data quality.`;
           const ratingsData = ratingsRes.ok ? await ratingsRes.json() : null;
           await delay(100);
           
+          const gradesConsensusRes = await fetch(`https://financialmodelingprep.com/stable/grades-consensus?symbol=${symbol}&apikey=${FMP_API_KEY}`);
+          const gradesConsensusData = gradesConsensusRes.ok ? await gradesConsensusRes.json() : null;
+          await delay(100);
+          
           const targetRes = await fetch(`https://financialmodelingprep.com/stable/price-target-consensus?symbol=${symbol}&apikey=${FMP_API_KEY}`);
           const targetData = targetRes.ok ? await targetRes.json() : null;
           await delay(100);
@@ -17019,6 +17029,7 @@ Be realistic and conservative. Base confidence on data quality.`;
           const metrics = metricsData && metricsData.length > 0 ? metricsData[0] : null;
           const scores = scoresData && scoresData.length > 0 ? scoresData[0] : null;
           const ratings = ratingsData && ratingsData.length > 0 ? ratingsData[0] : null;
+          const gradesConsensus = gradesConsensusData && gradesConsensusData.length > 0 ? gradesConsensusData[0] : (gradesConsensusData || null);
           const target = targetData && targetData.length > 0 ? targetData[0] : null;
           const profile = profileData && profileData.length > 0 ? profileData[0] : null;
           const ratios = ratiosData && ratiosData.length > 0 ? ratiosData[0] : null;
@@ -17147,12 +17158,18 @@ Be realistic and conservative. Base confidence on data quality.`;
           // DEBUG: Log raw API data to verify what we're getting
           console.log(`   📊 Raw API Data for ${symbol}:`);
           console.log(`      Quote PE: ${quote.pe}`);
+          console.log(`      Quote priceToEarnings: ${quote.priceToEarnings}`);
           console.log(`      Metrics PE: ${metrics?.peRatioTTM}`);
-          console.log(`      Ratios PE: ${ratios?.peRatio}`);
+          console.log(`      Ratios priceEarningsRatio: ${ratios?.priceEarningsRatio}`);
+          console.log(`      Ratios peRatio: ${ratios?.peRatio}`);
           console.log(`      Metrics ROE: ${metrics?.returnOnEquityTTM}`);
           console.log(`      Ratios ROE: ${ratios?.returnOnEquityTTM}`);
           console.log(`      Rating: ${ratings?.rating}`);
           console.log(`      Rating Recommendation: ${ratings?.ratingRecommendation}`);
+          console.log(`      Grades Consensus: ${gradesConsensus?.consensus}`);
+          console.log(`      Grades Consensus Buy: ${gradesConsensus?.buy}`);
+          console.log(`      Grades Consensus Hold: ${gradesConsensus?.hold}`);
+          console.log(`      Grades Consensus Sell: ${gradesConsensus?.sell}`);
           
           // DEBUG: Log price data to verify API values
           console.log(`   📊 Price Data for ${symbol}:`);
@@ -17199,9 +17216,11 @@ Be realistic and conservative. Base confidence on data quality.`;
             
             // Valuation Metrics - Improved PE calculation
             pe: (() => {
-              // Try multiple sources for PE ratio
+              // Try multiple sources for PE ratio - FMP API uses different field names
+              if (quote.priceToEarnings && quote.priceToEarnings > 0 && quote.priceToEarnings < 1000) return quote.priceToEarnings;
               if (quote.pe && quote.pe > 0 && quote.pe < 1000) return quote.pe;
               if (metrics?.peRatioTTM && metrics.peRatioTTM > 0 && metrics.peRatioTTM < 1000) return metrics.peRatioTTM;
+              if (ratios?.priceEarningsRatio && ratios.priceEarningsRatio > 0 && ratios.priceEarningsRatio < 1000) return ratios.priceEarningsRatio;
               if (ratios?.peRatio && ratios.peRatio > 0 && ratios.peRatio < 1000) return ratios.peRatio;
               if (metrics?.earningsYieldTTM && metrics.earningsYieldTTM > 0) {
                 const calculatedPE = 1 / metrics.earningsYieldTTM;
@@ -17216,8 +17235,12 @@ Be realistic and conservative. Base confidence on data quality.`;
             
             // Profitability - Improved ROE calculation
             roe: (() => {
-              // Try multiple sources for ROE
-              const roeValue = metrics?.returnOnEquityTTM || ratios?.returnOnEquityTTM || ratios?.returnOnEquity;
+              // Try multiple sources for ROE - FMP API uses different field names
+              const roeValue = metrics?.returnOnEquityTTM || 
+                               metrics?.roe || 
+                               ratios?.returnOnEquityTTM || 
+                               ratios?.returnOnEquity ||
+                               ratios?.roe;
               if (!roeValue) return null;
               
               // If already in percentage (>1), use as is
@@ -17251,6 +17274,19 @@ Be realistic and conservative. Base confidence on data quality.`;
             
             // Analyst Data - Improved rating extraction
             analystRating: (() => {
+              // Try grades-consensus first (most reliable for FMP rating)
+              if (gradesConsensus?.consensus) {
+                const consensus = String(gradesConsensus.consensus).trim().toUpperCase();
+                // Map consensus to letter grades
+                if (consensus.includes('STRONG BUY')) return 'A+';
+                if (consensus.includes('BUY')) return 'A';
+                if (consensus.includes('HOLD')) return 'B';
+                if (consensus.includes('SELL') && !consensus.includes('STRONG')) return 'C';
+                if (consensus.includes('STRONG SELL')) return 'D';
+                return consensus;
+              }
+              
+              // Fallback to rating endpoint
               const rating = ratings?.rating || ratings?.ratingRecommendation;
               if (!rating || rating === 'N/A') return null;
               
