@@ -22069,23 +22069,12 @@ Be realistic and conservative. Base confidence on data quality.`;
 
           const quote = quoteData[0];
           const quoteFetchedAt = Date.now();
-          
-          // IMMEDIATE DEBUG: Check quote.pe value
-          console.log(`🎯 ${symbol} quote.pe = ${quote.pe}, quote.eps = ${quote.eps}`);
-          
           const metrics = metricsData && metricsData.length > 0 ? metricsData[0] : null;
           const scores = scoresData && scoresData.length > 0 ? scoresData[0] : null;
           const ratings = ratingsData && ratingsData.length > 0 ? ratingsData[0] : null;
           const target = targetData && targetData.length > 0 ? targetData[0] : null;
           const profile = profileData && profileData.length > 0 ? profileData[0] : null;
           const ratios = ratiosData && ratiosData.length > 0 ? ratiosData[0] : null;
-          
-          // DEBUG: Show actual API data structure
-          if (symbol === 'NVDA') {
-            console.log('🔍 NVDA METRICS:', metrics);
-            console.log('🔍 NVDA RATIOS:', ratios);
-            console.log('🔍 NVDA RATINGS:', ratings);
-          }
 
           // DEBUG: Log what data we're getting [v2.0 - Cache Bust]
           console.log(`📊 ${symbol} Data Check:`, {
@@ -22275,20 +22264,17 @@ Be realistic and conservative. Base confidence on data quality.`;
             yearHigh: quote.yearHigh || 0,
             yearLow: quote.yearLow || 0,
 
-            // Valuation Metrics - FMP uses priceToEarningsRatio, not peRatio
-            pe: ratios?.priceToEarningsRatio || (quote.eps && quote.price ? (quote.price / quote.eps) : null),
+            // Valuation Metrics - Use quote.pe first as it's most reliable
+            pe: quote.pe || metrics?.peRatioTTM || ratios?.peRatio || (metrics?.earningsYieldTTM && metrics.earningsYieldTTM !== 0 ? (1 / metrics.earningsYieldTTM) : null),
             priceToBook: ratios?.priceToBookRatio || 0,
             priceToSales: ratios?.priceToSalesRatio || 0,
             enterpriseValue: metrics?.enterpriseValueTTM || 0,
             evToEbitda: metrics?.evToEBITDATTM || 0,
 
-            // Profitability - ROE from FMP is already a ratio (e.g., 1.59 = 159%), multiply by 100 for display
+            // Profitability - Convert to percentage
             roe: (() => {
-              const roeValue = metrics?.returnOnEquityTTM;
-              if (roeValue !== null && roeValue !== undefined) {
-                return roeValue * 100;
-              }
-              return null;
+              const roeValue = metrics?.returnOnEquityTTM || ratios?.returnOnEquityTTM || ratios?.returnOnEquity;
+              return roeValue ? (roeValue * 100) : null;
             })(),
             roa: metrics?.returnOnAssetsTTM ? (metrics.returnOnAssetsTTM * 100) : 0,
             roic: metrics?.returnOnInvestedCapitalTTM ? (metrics.returnOnInvestedCapitalTTM * 100) : 0,

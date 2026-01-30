@@ -34,15 +34,62 @@ self.addEventListener('activate', event => {
     );
 });
 
-// Fetch event - CACHING DISABLED FOR DEBUGGING
+// Fetch event
 self.addEventListener('fetch', event => {
-    // Always fetch from network, never use cache
+    const url = new URL(event.request.url);
+
+    // Only cache API calls to financial data providers
+    if (!API_CACHE_PATTERN.test(url.hostname)) {
+        return; // Let browser handle non-API requests
+    }
+
+    // Check if path is cacheable
+    const isCacheable = CACHEABLE_PATHS.some(path => url.pathname.includes(path));
+    if (!isCacheable) {
+        return; // Don't cache non-cacheable endpoints
+    }
+
     event.respondWith(
-        fetch(event.request)
-            .catch(() => {
-                // If network fails, return error
-                return new Response('Network error', { status: 503 });
-            })
+        caches.open(CACHE_NAME).then(cache => {
+            return cache.match(event.request).then(response => {
+                // Return cached version if available
+                if (response) {
+                    console.log('📦 Serving from cache:', url.pathname);
+
+                    // Refresh cache in background (stale-while-revalidate)
+                    const fetchPromise = fetch(event.request).then(networkResponse => {
+                        if (networkResponse.ok) {
+                            cache.put(event.request, networkResponse.clone());
+                            console.log('🔄 Updated cache in background:', url.pathname);
+                        }
+                        return networkResponse;
+                    }).catch(() => {
+                        console.log('⚠️ Network failed, using cached version');
+                    });
+
+                    // Return cached version immediately, but keep background refresh
+                    event.waitUntil(fetchPromise);
+
+                    return response;
+                }
+
+                // Not in cache, fetch from network
+                console.log('🌐 Fetching from network:', url.pathname);
+                return fetch(event.request).then(networkResponse => {
+                    if (networkResponse.ok) {
+                        cache.put(event.request, networkResponse.clone());
+                        console.log('💾 Cached new response:', url.pathname);
+                    }
+                    return networkResponse;
+                }).catch(error => {
+                    console.error('❌ Network error:', error);
+                    return new Response(JSON.stringify({ error: 'Network unavailable' }), {
+                        status: 503,
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                });
+            });
+        })
     );
 });
 
