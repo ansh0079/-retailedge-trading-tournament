@@ -24380,6 +24380,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                                 <th className="p-3">Volume</th>
                                 <th className="p-3">P/E</th>
                                 <th className="p-3">ROE</th>
+                                <th className="p-3">FMP Rating</th>
                                 <th className="p-3">Growth</th>
                               </tr>
                             </thead>
@@ -24398,6 +24399,15 @@ Be realistic and conservative. Base confidence on data quality.`;
                                   <td className="p-3 text-slate-300">{formatNumber(stock.volume)}</td>
                                   <td className="p-3 text-slate-300">{stock.pe?.toFixed(1) || '—'}</td>
                                   <td className="p-3 text-slate-300">{stock.roe?.toFixed(1) || '—'}%</td>
+                                  <td className="p-3">
+                                    <span className={`chip text-xs ${stock.analystRating?.startsWith('A') ? 'bg-green-500/20 text-green-400' :
+                                      stock.analystRating?.startsWith('B') ? 'bg-blue-500/20 text-blue-400' :
+                                      stock.analystRating?.startsWith('C') ? 'bg-yellow-500/20 text-yellow-400' :
+                                      'bg-red-500/20 text-red-400'
+                                    }`}>
+                                      {stock.analystRating || '—'}
+                                    </span>
+                                  </td>
                                   <td className="p-3 text-slate-300">{stock.revenueGrowth?.toFixed(1) || '—'}%</td>
                                 </tr>
                               ))}
