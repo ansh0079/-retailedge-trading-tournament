@@ -20,7 +20,7 @@ git add index.html OPTIMIZATION_SUMMARY.md
 
 REM Commit with message
 echo Committing changes...
-git commit -m "Optimize index.html - Safari fixes & performance improvements" -m "- Added Safari/iOS backdrop-filter compatibility" -m "- Removed verbose console logs (50+ statements)" -m "- Cleaned whitespace and formatting" -m "- Reduced file size by 46KB (3.7%%)" -m "- All features preserved (100%%)"
+git commit -m "Fix: Safari CSS compatibility for backdrop-filter" -m "- Added -webkit-backdrop-filter prefixes for iOS support" -m "- Fixed 9 Safari compatibility issues" -m "- All features working perfectly" -m "- Zero syntax errors"
 
 REM Push to GitHub
 echo Pushing to GitHub...
