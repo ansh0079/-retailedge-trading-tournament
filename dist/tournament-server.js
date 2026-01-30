@@ -12,6 +12,9 @@ const PORT = process.env.PORT || 3002;
 app.use(cors());
 app.use(express.json());
 
+// Serve static files (HTML, CSS, JS)
+app.use(express.static(__dirname));
+
 // Initialize tournament manager
 const tournamentManager = new TournamentManager();
 
@@ -539,6 +542,15 @@ app.get('/health', (req, res) => {
         service: 'AI Tournament Server',
         activeTournaments: tournamentManager.activeTournaments.size
     });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SERVE FRONTEND
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Serve index.html for root path
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/index.html');
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
