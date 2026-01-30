@@ -4,7 +4,13 @@
 class TechnicalAnalysisEngine {
     constructor() {
         this.FMP_API_KEY = 'h43nCTpMeyiIiNquebaqktc7ChUHMxIz';
-        this.API_BASE_URL = 'http://localhost:3002';
+        // Auto-detect API base URL
+        this.API_BASE_URL = (() => {
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                return 'http://localhost:3002';
+            }
+            return window.location.origin;
+        })();
     }
 
     // ═══════════════════════════════════════════════════════════════

@@ -694,6 +694,18 @@
       CLAUDE: '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' // Claude AI
     };
     
+    // API Base URL - Auto-detect environment
+    const API_BASE_URL = (() => {
+      // Check if running on localhost
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        return 'http://localhost:3002';
+      }
+      // Production - use same origin (Render will handle this)
+      return window.location.origin;
+    })();
+    
+    console.log('🌐 API Base URL:', API_BASE_URL);
+    
     // Track API usage and health
     const API_STATS = {
       FMP: { calls: 0, failures: 0, lastSuccess: null },
@@ -3834,7 +3846,7 @@ Please provide a clear, structured analysis in markdown format.`;
       async fetchStockTwits(symbol) {
         try {
           // Use proxy server to avoid CORS
-          const response = await fetchWithRetry(`http://localhost:3002/api/stocktwits/${symbol}`, { timeoutMs: 12000, retries: 1 });
+          const response = await fetchWithRetry(`${API_BASE_URL}/api/stocktwits/${symbol}`, { timeoutMs: 12000, retries: 1 });
           
           if (!response.ok) {
             console.log(`⚠️ StockTwits API returned ${response.status}`);
@@ -3895,7 +3907,7 @@ Please provide a clear, structured analysis in markdown format.`;
           for (const subreddit of subreddits) {
             try {
               // Use proxy server to avoid CORS
-              const searchUrl = `http://localhost:3002/api/reddit/${subreddit}/search?q=${symbol}`;
+              const searchUrl = `${API_BASE_URL}/api/reddit/${subreddit}/search?q=${symbol}`;
               const response = await fetchWithRetry(searchUrl, { timeoutMs: 12000, retries: 1 });
 
               if (response.ok) {
@@ -4654,7 +4666,7 @@ Please provide a clear, structured analysis in markdown format.`;
         console.log('📡 Making API request to Claude via backend...');
         
         // Call local backend server that securely handles Claude API
-        const response = await fetchWithRetry("http://localhost:3002/api/claude", {
+        const response = await fetchWithRetry(`${API_BASE_URL}/api/claude`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
