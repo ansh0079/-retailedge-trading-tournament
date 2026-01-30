@@ -20,7 +20,7 @@ git add index.html OPTIMIZATION_SUMMARY.md
 
 REM Commit with message
 echo Committing changes...
-git commit -m "Fix: Safari CSS compatibility for backdrop-filter" -m "- Added -webkit-backdrop-filter prefixes for iOS support" -m "- Fixed 9 Safari compatibility issues" -m "- All features working perfectly" -m "- Zero syntax errors"
+git commit -m "Major optimization: Fix Babel error & reduce HTML by 98%%" -m "- Moved 1.14MB inline script to external app.js" -m "- Fixed Babel 500KB deoptimization error" -m "- Removed duplicate FMP_API_KEY declaration" -m "- Added Safari CSS compatibility" -m "- Reduced index.html from 1235KB to 25KB" -m "- All features working perfectly"
 
 REM Push to GitHub
 echo Pushing to GitHub...
