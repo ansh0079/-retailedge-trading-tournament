@@ -295,6 +295,29 @@ app.post('/api/tournament/start', async (req, res) => {
     }
 });
 
+// Get current running tournament status
+app.get('/api/tournament/status/current', (req, res) => {
+    const activeTournaments = Array.from(tournamentManager.activeTournaments.values());
+    
+    if (activeTournaments.length === 0) {
+        return res.json({ 
+            status: 'idle',
+            message: 'No active tournament running'
+        });
+    }
+    
+    // Return the first active tournament
+    const tournament = activeTournaments[0];
+    res.json({
+        experimentId: tournament.experimentId,
+        status: tournament.status,
+        current_day: tournament.currentDay,
+        total_days: tournament.config.days,
+        leaderboard: tournament.leaderboard,
+        logs: tournament.logs.slice(-20)
+    });
+});
+
 // Get tournament status by ID
 app.get('/api/tournament/status/:experimentId', (req, res) => {
     const tournament = tournamentManager.getTournament(req.params.experimentId);
