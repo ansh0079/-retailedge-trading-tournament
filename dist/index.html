@@ -15335,7 +15335,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                     </h4>
                     <div className="space-y-4">
                       {/* P/E Ratio */}
-                      {stock.pe && (() => {
+                      {(stock.pe != null && stock.pe > 0) && (() => {
                         const color = getTrafficLight('pe', stock.pe);
                         const summary = getPlainEnglishSummary('pe', stock.pe);
                         const dotColor = color === 'green' ? '#22c55e' : color === 'yellow' ? '#eab308' : '#ef4444';
@@ -15418,7 +15418,7 @@ Be realistic and conservative. Base confidence on data quality.`;
                       })()}
 
                       {/* ROE */}
-                      {stock.roe != null && (() => {
+                      {(stock.roe != null) && (() => {
                         const color = getTrafficLight('roe', stock.roe);
                         const summary = getPlainEnglishSummary('roe', stock.roe);
                         const dotColor = color === 'green' ? '#22c55e' : color === 'yellow' ? '#eab308' : '#ef4444';
@@ -21954,6 +21954,8 @@ Be realistic and conservative. Base confidence on data quality.`;
       };
 
       const fetchSingleStockData = async (symbol) => {
+        console.log(`🔥🔥🔥 NEW CODE v2.0 - Fetching ${symbol} 🔥🔥🔥`);
+        console.log(`📡 Fetching comprehensive data for ${symbol}...`);
         // Clean symbol to remove exchange suffixes (.O, .K, etc.)
         symbol = cleanSymbol(symbol);
 
@@ -22073,6 +22075,29 @@ Be realistic and conservative. Base confidence on data quality.`;
           const target = targetData && targetData.length > 0 ? targetData[0] : null;
           const profile = profileData && profileData.length > 0 ? profileData[0] : null;
           const ratios = ratiosData && ratiosData.length > 0 ? ratiosData[0] : null;
+
+          // DEBUG: Log what data we're getting [v2.0 - Cache Bust]
+          console.log(`📊 ${symbol} Data Check:`, {
+            hasMetrics: !!metrics,
+            hasRatings: !!ratings,
+            hasRatios: !!ratios,
+            quote: { pe: quote.pe, eps: quote.eps },
+            metrics: metrics ? {
+              earningsYieldTTM: metrics.earningsYieldTTM,
+              returnOnEquityTTM: metrics.returnOnEquityTTM,
+              peRatioTTM: metrics.peRatioTTM
+            } : null,
+            ratios: ratios ? {
+              peRatio: ratios.peRatio,
+              returnOnEquityTTM: ratios.returnOnEquityTTM,
+              returnOnEquity: ratios.returnOnEquity
+            } : null,
+            ratings: ratings ? {
+              rating: ratings.rating,
+              ratingScore: ratings.ratingScore,
+              ratingRecommendation: ratings.ratingRecommendation
+            } : null
+          });
 
           const toFiniteNumberOrNull = (v) => {
             if (v === '' || v === undefined || v === null) return null;
@@ -22240,14 +22265,15 @@ Be realistic and conservative. Base confidence on data quality.`;
             yearLow: quote.yearLow || 0,
 
             // Valuation Metrics
-            pe: metrics?.earningsYieldTTM ? (1 / metrics.earningsYieldTTM) : (quote.pe || 0),
+            pe: metrics?.peRatioTTM || quote.pe || ratios?.peRatio || (metrics?.earningsYieldTTM ? (1 / metrics.earningsYieldTTM) : null),
             priceToBook: ratios?.priceToBookRatio || 0,
             priceToSales: ratios?.priceToSalesRatio || 0,
             enterpriseValue: metrics?.enterpriseValueTTM || 0,
             evToEbitda: metrics?.evToEBITDATTM || 0,
 
             // Profitability
-            roe: metrics?.returnOnEquityTTM ? (metrics.returnOnEquityTTM * 100) : 0,
+            roe: (metrics?.returnOnEquityTTM || ratios?.returnOnEquityTTM || ratios?.returnOnEquity) ? 
+              ((metrics?.returnOnEquityTTM || ratios?.returnOnEquityTTM || ratios?.returnOnEquity) * 100) : null,
             roa: metrics?.returnOnAssetsTTM ? (metrics.returnOnAssetsTTM * 100) : 0,
             roic: metrics?.returnOnInvestedCapitalTTM ? (metrics.returnOnInvestedCapitalTTM * 100) : 0,
             grossMargin: ratios?.grossProfitMargin ? (ratios.grossProfitMargin * 100) : 0,
@@ -22271,7 +22297,7 @@ Be realistic and conservative. Base confidence on data quality.`;
             altmanZScore: scores?.altmanZScore || 0,
 
             // Analyst Data
-            analystRating: ratings?.rating || 'N/A',
+            analystRating: ratings?.rating || ratings?.ratingRecommendation || 'N/A',
             overallScore: ratings?.overallScore || 0,
             priceTarget: target?.lastQuarterAvgPriceTarget || 0,
             priceTargetLow: target?.lastMonthAvgPriceTarget || 0,
@@ -22312,7 +22338,14 @@ Be realistic and conservative. Base confidence on data quality.`;
             // ignore localStorage issues
           }
 
-          // CACHE THE DATA for faster subsequent loads
+          // Log final values for debugging
+          console.log(`✅ ${symbol} FINAL VALUES:`, {
+            pe: stockData.pe,
+            roe: stockData.roe,
+            analystRating: stockData.analystRating
+          });
+
+          // Cache the result
           Cache.set(symbol, stockData, 'stock');
 
           return stockData;

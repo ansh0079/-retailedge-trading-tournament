@@ -2,7 +2,7 @@
 // SERVICE WORKER - Offline-First Caching Strategy
 // ═══════════════════════════════════════════════════════════════════════════
 
-const CACHE_NAME = 'retailedge-v2-debug-pro-v4';
+const CACHE_NAME = 'retailedge-pro-v4';
 const API_CACHE_PATTERN = /financialmodelingprep\.com|finnhub\.io/;
 const CACHEABLE_PATHS = [
     '/stable/quote',
