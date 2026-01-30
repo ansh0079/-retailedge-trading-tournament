@@ -705,6 +705,82 @@
       TIINGO: { calls: 0, failures: 0, lastSuccess: null }
     };
 
+    // Thematic Portfolios - Pre-built stock baskets for major investment themes
+    const THEMATIC_PORTFOLIOS = {
+      AI: {
+        id: 'ai',
+        name: 'AI & Machine Learning',
+        description: 'Leading companies in artificial intelligence and machine learning',
+        stocks: ['NVDA', 'MSFT', 'GOOGL', 'META', 'AMZN', 'AMD', 'PLTR', 'SNOW', 'CRM', 'ORCL']
+      },
+      CLOUD: {
+        id: 'cloud',
+        name: 'Cloud Computing',
+        description: 'Cloud infrastructure and software-as-a-service leaders',
+        stocks: ['MSFT', 'AMZN', 'GOOGL', 'CRM', 'ORCL', 'IBM', 'SNOW', 'NET', 'DDOG', 'MDB']
+      },
+      FINTECH: {
+        id: 'fintech',
+        name: 'Financial Technology',
+        description: 'Digital payments, blockchain, and financial innovation',
+        stocks: ['V', 'MA', 'PYPL', 'SQ', 'COIN', 'SOFI', 'AFRM', 'HOOD', 'NU', 'UPST']
+      },
+      EV: {
+        id: 'ev',
+        name: 'Electric Vehicles',
+        description: 'Electric vehicle manufacturers and battery technology',
+        stocks: ['TSLA', 'RIVN', 'LCID', 'NIO', 'XPEV', 'LI', 'F', 'GM', 'CHPT', 'BLNK']
+      },
+      CLEAN_ENERGY: {
+        id: 'clean-energy',
+        name: 'Clean Energy',
+        description: 'Solar, wind, and renewable energy companies',
+        stocks: ['ENPH', 'SEDG', 'RUN', 'NEE', 'FSLR', 'PLUG', 'BE', 'ICLN', 'TAN', 'CSIQ']
+      },
+      GENOMICS: {
+        id: 'genomics',
+        name: 'Genomics & Biotech',
+        description: 'Gene editing, biotech, and pharmaceutical innovation',
+        stocks: ['CRSP', 'EDIT', 'NTLA', 'BEAM', 'MRNA', 'BNTX', 'ILMN', 'PACB', 'REGN', 'VRTX']
+      },
+      CYBERSECURITY: {
+        id: 'cybersecurity',
+        name: 'Cybersecurity',
+        description: 'Network security and data protection leaders',
+        stocks: ['CRWD', 'ZS', 'PANW', 'FTNT', 'S', 'OKTA', 'NET', 'TENB', 'CYBR', 'CHKP']
+      },
+      ECOMMERCE: {
+        id: 'ecommerce',
+        name: 'E-Commerce',
+        description: 'Online retail and digital marketplace platforms',
+        stocks: ['AMZN', 'SHOP', 'MELI', 'ETSY', 'EBAY', 'W', 'CHWY', 'BABA', 'JD', 'PDD']
+      },
+      GAMING: {
+        id: 'gaming',
+        name: 'Gaming & Esports',
+        description: 'Video game publishers and gaming platforms',
+        stocks: ['MSFT', 'EA', 'TTWO', 'ATVI', 'RBLX', 'U', 'DKNG', 'PENN', 'SONY', 'NTDOY']
+      },
+      STREAMING: {
+        id: 'streaming',
+        name: 'Streaming & Entertainment',
+        description: 'Video streaming and digital content platforms',
+        stocks: ['NFLX', 'DIS', 'PARA', 'WBD', 'SPOT', 'ROKU', 'FUBO', 'PTON', 'PINS', 'SNAP']
+      },
+      SEMICONDUCTOR: {
+        id: 'semiconductor',
+        name: 'Semiconductors',
+        description: 'Chip manufacturers and semiconductor equipment',
+        stocks: ['NVDA', 'AMD', 'INTC', 'TSM', 'AVGO', 'QCOM', 'TXN', 'AMAT', 'LRCX', 'KLAC']
+      },
+      SPACE: {
+        id: 'space',
+        name: 'Space & Aerospace',
+        description: 'Space exploration and aerospace technology',
+        stocks: ['BA', 'LMT', 'NOC', 'GD', 'RTX', 'SPCE', 'RKLB', 'ASTS', 'LUNR', 'ACHR']
+      }
+    };
+
     function sleep(ms) {
       return new Promise(resolve => setTimeout(resolve, ms));
     }
